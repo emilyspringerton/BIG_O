@@ -69,6 +69,17 @@ is that people *saw it* and can no longer deny it, and admitting they saw it get
 - **PARENA** for rules modules (deterministic decision logic, testable headless), the same pattern as DEADWEIGHT.
 - **IDUNA** for accounts, registries and match/session tracking; **NOCK** for level and texture authoring.
 
+## Build
+
+```bash
+scripts/gen_rules.sh          # regenerate core/witness_rules.c + parity vectors from PARENA/stdlib/big_o/witness_rules.prn
+scripts/build.sh              # ASan+UBSan rules tests (oracle + property + parity vectors), crew sim + scenarios
+scripts/build.sh --windows    # + mingw cross-build
+```
+
+CI (`.github/workflows/ci.yml`) builds and tests every push; every green push to `main` publishes a GitHub Release.
+The rules module is scalar-only PARENA (no FFI), emitted to C (and Java-clean). See [`docs/B1_WITNESS_RULES.md`](docs/B1_WITNESS_RULES.md).
+
 ## Naming
 
 "BIG_O" is Big-O notation (an infection that scales out of control), the *Origin of replication* in genomics, and the

@@ -1,0 +1,106 @@
+name: BIG_O CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: write
+
+# Every push builds + tests. Every green push to main auto-bumps the MINOR version and cuts a non-prerelease GitHub
+# Release. Runs are serialized per ref so concurrent pushes don't race on the next tag (DEADWEIGHT run 2, 2026-09-18);
+# the tag is created server-side via `gh release create --target` because a plain `git push` of a tag from the runner is
+# rejected by GITHUB_TOKEN when workflow files are in history.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Compute version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+            if [ -z "$latest" ]; then major=0; minor=0; else
+              ver="${latest#v}"; major="$(echo "$ver" | cut -d. -f1)"; minor="$(echo "$ver" | cut -d. -f2)"; fi
+            tag="v${major}.$((minor + 1)).0"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+  core:
+    name: C core (ASan+UBSan tests, sim)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + test
+        run: BIGO_VERSION=${{ needs.version.outputs.version }} scripts/build.sh
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -czf dist/bigo_rules_c.tar.gz core/witness_rules.c core/witness_rules.h core/runtime/parena_runtime.h tests/parity_vectors.txt docs/B1_WITNESS_RULES.md
+          [ -f build/bigo_sim ] && cp build/bigo_sim dist/bigo_sim_linux_x86_64 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    name: Windows cross-build (mingw)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y mingw-w64 file
+      - name: Build
+        run: BIGO_VERSION=${{ needs.version.outputs.version }} scripts/build.sh --windows
+      - name: Collect
+        run: |
+          mkdir -p dist
+          [ -f build/bigo_sim.exe ] && cp build/bigo_sim.exe dist/ || cp build/witness_rules_win.o dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Tag & Release
+    needs: [version, core, windows]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir out
+          cp artifacts/linux-*/* out/
+          [ -f artifacts/windows-*/bigo_sim.exe ] && cp artifacts/windows-*/bigo_sim.exe out/ || true
+          gh release create "$TAG" out/* --target "$GITHUB_SHA" --title "$TAG" --generate-notes
