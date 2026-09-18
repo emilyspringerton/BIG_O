@@ -134,3 +134,6 @@ variants — later it can be a mode with **no onboarding** (or faked), and V0 fo
 - **Bots from day one:** society NPCs (humanness layer) always; a bot can fill an empty crew slot for testing.
 - **Deferred, named:** adversarial corporations (multiple onboardings), PvP shadow war between crews (DEADWEIGHT-style async sim),
   persistent-world/season lineage integration.
+- **Onboarding (founder refinement, 2026-09-18):** skipped entirely for adversarial modes; optional for co-op. Build an onboarding
+  that works for co-op, but do **not** over-design it until more game systems materialize — until then it is a thin, skippable
+  stub (no dedicated tutorial content, no per-role variants), and no system may *depend* on having gone through it.
