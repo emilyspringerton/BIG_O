@@ -57,7 +57,10 @@ is that people *saw it* and can no longer deny it, and admitting they saw it get
 |---|---|
 | [`NORTHSTAR.md`](NORTHSTAR.md) | Scoping pass: capability audit against SHANKPIT, the V0 cut, phased plan, open decisions |
 | [`docs/DESIGN_DIGEST.md`](docs/DESIGN_DIGEST.md) | Structured digest of the founding design conversation (world, systems, factions) |
-| [`docs/transcript/`](docs/transcript/) | The full founding conversation, reformatted into readable Markdown (3 parts) |
+| [`docs/transcript/`](docs/transcript/) | The design conversations, reformatted into readable Markdown (4 parts: research, concept/systems, lore/title, espionage/cleanup crew/TYLER crossover) |
+| [`docs/a1m1.md`](docs/a1m1.md) | Act I, Mission 1 technical brief |
+| [`docs/B1_WITNESS_RULES.md`](docs/B1_WITNESS_RULES.md) | Spec for the implemented witness/decorum/terrain rules |
+| [`docs/reviews/`](docs/reviews/) | Reviews of external feedback (e.g. GitHub issue #1) |
 | [`docs/source/`](docs/source/) | The untouched raw paste, for the record |
 | [`CLAUDE.md`](CLAUDE.md) | Working agreement for AI-assisted development in this repo |
 
