@@ -116,3 +116,21 @@ is far more specific, and it changes several things — corrected here rather th
 - **Science is flavor, not a lab manual.** Terms used (gRNA off-target, cryptic splice sites, nonsense-mediated decay,
   retrotransposons, HGT, epigenetic silencing) are game vocabulary; a few claims (e.g. stress hormones "methylating" a
   population's junk DNA) are narrative licence, and should stay that way. No real protocols belong in the game.
+
+## 7. Decision: multiplayer (founder, 2026-09-18) — co-op, up to 3, one shared world
+
+Founder: build multiplayer from day 1, up to 3 players, "totally fine having multiplayers running around causing mayhem";
+adversarial play (each player working for a different corporation) is deferred because it needs up to three onboarding
+variants — later it can be a mode with **no onboarding** (or faked), and V0 focuses on co-op. Adopted design:
+
+- **One crew, one onboarding.** 1-3 players are one lab crew (same corporation, same basement). Solo play is simply a crew of 1
+  (the game must be fully playable that way — BIG_O is *built for* one player, multiplayer is additive).
+- **Shared world, server-authoritative** (SHANKPIT UDP server; 3 slots + NPCs/bots). Per-player state: costume, decorum, inventory.
+  Crew state: the lab, samples, clones, unlocks, the crew's witness ledger.
+- **Witness rule with a crew (B1 spec decision):** an *event* (a zombie released, a body seen) is attributed to one player or,
+  if the crew is seen acting together, to the crew. The 5-witness threshold counts witnesses of that event; "aggressive
+  silencing" targets the attributed player(s). Denial/compromise state is per-witness-NPC, shared across the crew — one
+  player compromising a witness helps everyone. Decorum stays per-player, so one player's blown cover doesn't blow the crew's.
+- **Bots from day one:** society NPCs (humanness layer) always; a bot can fill an empty crew slot for testing.
+- **Deferred, named:** adversarial corporations (multiple onboardings), PvP shadow war between crews (DEADWEIGHT-style async sim),
+  persistent-world/season lineage integration.
