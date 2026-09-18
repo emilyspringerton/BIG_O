@@ -1,0 +1,21 @@
+# A wipe only reaches its zone, and a compromised accomplice is never changed by it.
+seed 1
+crew 1
+player 0 zone lab costume smock
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+force 5 0
+expect npc 5 state COMPROMISED
+release 0 1
+expect npc 0 state SILENCING
+expect npc 5 state COMPROMISED
+wipe exec
+expect npc 0 state SILENCING
+wipe lab
+expect npc 0 state DENIAL
+expect npc 4 state DENIAL
+expect npc 5 state COMPROMISED

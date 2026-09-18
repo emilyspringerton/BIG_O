@@ -1,0 +1,14 @@
+# If the attributed target is gone (killed, respawned as a clean clone) the hunters simply forget: UNAWARE, hunt cleared.
+seed 1
+crew 2
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+release 0 1
+expect hunted 0 1
+eliminate 0
+expect npc 0 state UNAWARE
+expect npc 4 state UNAWARE
+expect hunted 0 0

@@ -17,7 +17,7 @@ int breach_dps_super();
 int effective_witnesses(int, int);
 int witness_state(int, int, int, int);
 int escalation_rank(int);
-int npc_next_state(int, int, int, int, int);
+int npc_next_state(int, int, int, int, int, int);
 int is_legal_transition(int, int);
 int engage_outcome(int, int);
 int silence_target_mask(int, int, int);
@@ -114,15 +114,23 @@ int escalation_rank(int s __attribute__((unused))) {
     }
 }
 
-int npc_next_state(int prev __attribute__((unused)), int count __attribute__((unused)), int arrogance __attribute__((unused)), int compromised __attribute__((unused)), int zombie_event __attribute__((unused))) {
+int npc_next_state(int prev __attribute__((unused)), int count __attribute__((unused)), int arrogance __attribute__((unused)), int compromised __attribute__((unused)), int zombie_event __attribute__((unused)), int resolved __attribute__((unused))) {
     if ((prev == 2)) {
     return 2;
     } else {
     if ((compromised == 1)) {
     return 2;
     } else {
-    if ((((prev == 3) || (prev == 5)) && (count > 0))) {
+    if (((prev == 3) || (prev == 5))) {
+    if ((resolved == 1)) {
+    return 1;
+    } else {
+    if ((resolved == 2)) {
+    return 0;
+    } else {
     return prev;
+    }
+    }
     } else {
     return witness_state(count, arrogance, 0, zombie_event);
     }
@@ -135,7 +143,7 @@ int is_legal_transition(int from __attribute__((unused)), int to __attribute__((
     return (to == 2);
     } else {
     if (((from == 3) || (from == 5))) {
-    return ((to == from) || ((to == 0) || (to == 2)));
+    return ((to == from) || ((to == 0) || ((to == 1) || (to == 2))));
     } else {
     return 1;
     }

@@ -27,12 +27,19 @@ every target. Scalar-only so it emits to C and Java unchanged (Java bonus verifi
 | ENGAGE | 5 | count ≥ 5, event is a zombie, arrogance ≥ 70: attacks the *zombie* instead [T: over-confident snobs] |
 
 Precedence: COMPROMISED > (count 0 → UNAWARE) > PANIC > (count < 5 → DENIAL) > ENGAGE/SILENCING.
-`npc-next-state(prev, …)` adds stickiness: COMPROMISED is absorbing; SILENCING/ENGAGE never step down while `count > 0`.
+`npc-next-state(prev, count, arrogance, compromised, zombie-event, resolved)` (revised 2026-09-18 after BIG_O#1):
+COMPROMISED is absorbing. **SILENCING/ENGAGE persist while `resolved = 0` even if `count` reaches 0** — losing line of sight
+does not end a hunt. They release only on host-reported resolution: **`resolved = 1` cleanup-crew memory wipe → DENIAL**
+(The Men's Regulators spray the Memory Methylation Compound; `docs/source/continuation-raw.txt`), **`resolved = 2` attributed
+target eliminated/gone → UNAWARE**. A forced compromise still wins (→ COMPROMISED). `resolved` is ignored for non-hunting states.
 `is-legal-transition(from, to)` is the checked contract: from COMPROMISED only to COMPROMISED; from SILENCING/ENGAGE only to
-itself, UNAWARE (witness list cleared) or COMPROMISED; everything else is free.
+itself, UNAWARE, DENIAL or COMPROMISED (never PANIC, never SILENCING↔ENGAGE); everything else is free.
+The sim host drives it with `loslost`, `wipe [zone]`, `eliminate P` events (accomplices are never wiped).
 `escalation-rank`: UNAWARE/COMPROMISED 0, DENIAL/PANIC 1, SILENCING/ENGAGE 3 — **monotone in count** (tested).
 `engage-outcome(arrogance, tier)`: arrogance < 70 → 0 no effect; tier ≥ 1 zombie → 1 citizen annihilated [T]; tier 0 → 2
-zombie destroyed [M].
+zombie destroyed **[M — deliberately mine, not the transcript]**: an over-confident citizen kills a tier-0 clone. The
+alternative (BIG_O#1 claim C) is that arrogant citizens *always* lose to any zombie ("they get annihilated", as the
+transcript has it) so tier 0 → also 1. **Open founder question**; left unchanged until decided.
 
 ## 2. Crew attribution (co-op, 1-3 players — NORTHSTAR §7)
 
@@ -89,6 +96,13 @@ Up to 3 players, N ≤ 16 NPCs, xorshift32, discrete ticks. Events: `enter`, `co
 <tier>`, `force <npc>` (private forced witness → accomplice), `tick`. Visibility rule (host, not rules): a loud event
 (`release`) is witnessed by every non-accomplice NPC in the same zone; quiet events are noticed per NPC via `noticed()`.
 Scenarios (`scenarios/*.txt`) carry `expect` lines and run as tests; logs are byte-deterministic for a given seed+script.
+
+## 7a. Review notes (BIG_O#1, Gemini code review, verified 2026-09-18)
+
+A — partly valid, implemented differently (see §1: persistence + two resolutions). B — invalid: `zone-access` checks the vault/token
+first, so SUIT in VAULT without a token already returns 0; no code change, but the oracle now spells out every costume × VAULT × token.
+C — design disagreement, not a bug (see `engage-outcome` above). The issue's proposed constant/header names differ from ours; we
+already export the same enums in `core/witness_rules.h`, so no change.
 
 ## 8. Deliberately not here
 

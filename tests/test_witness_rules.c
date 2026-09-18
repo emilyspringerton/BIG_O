@@ -37,18 +37,29 @@ static void oracle(void) {
     EQ(effective_witnesses(5, 1), 4); EQ(effective_witnesses(2, 3), 0); EQ(effective_witnesses(0, 0), 0);
     EQ(escalation_rank(WS_UNAWARE), 0); EQ(escalation_rank(WS_COMPROMISED), 0); EQ(escalation_rank(WS_DENIAL), 1);
     EQ(escalation_rank(WS_PANIC), 1); EQ(escalation_rank(WS_SILENCING), 3); EQ(escalation_rank(WS_ENGAGE), 3);
-    /* next-state stickiness */
-    EQ(npc_next_state(WS_COMPROMISED, 9, 50, 0, 1), WS_COMPROMISED);  /* absorbing */
-    EQ(npc_next_state(WS_DENIAL, 2, 50, 1, 0), WS_COMPROMISED);       /* forced witness */
-    EQ(npc_next_state(WS_SILENCING, 2, 50, 0, 0), WS_SILENCING);      /* no step-down while witnesses remain */
-    EQ(npc_next_state(WS_ENGAGE, 1, 50, 0, 0), WS_ENGAGE);
-    EQ(npc_next_state(WS_SILENCING, 0, 50, 0, 0), WS_UNAWARE);        /* list cleared */
-    EQ(npc_next_state(WS_UNAWARE, 5, 50, 0, 1), WS_SILENCING);
-    EQ(npc_next_state(WS_DENIAL, 5, 50, 0, 1), WS_SILENCING);         /* escalation allowed */
+    /* next-state (prev, count, arrogance, compromised, zombie-event, resolved) */
+    EQ(npc_next_state(WS_COMPROMISED, 9, 50, 0, 1, 0), WS_COMPROMISED);  /* absorbing, even when resolved */
+    EQ(npc_next_state(WS_COMPROMISED, 0, 50, 0, 0, 2), WS_COMPROMISED);
+    EQ(npc_next_state(WS_DENIAL, 2, 50, 1, 0, 0), WS_COMPROMISED);       /* forced witness */
+    EQ(npc_next_state(WS_SILENCING, 2, 50, 0, 0, 0), WS_SILENCING);
+    EQ(npc_next_state(WS_ENGAGE, 1, 50, 0, 0, 0), WS_ENGAGE);
+    EQ(npc_next_state(WS_SILENCING, 0, 50, 0, 0, 0), WS_SILENCING);      /* line of sight lost: hunt persists */
+    EQ(npc_next_state(WS_ENGAGE, 0, 90, 0, 1, 0), WS_ENGAGE);
+    EQ(npc_next_state(WS_SILENCING, 0, 50, 0, 0, 1), WS_DENIAL);         /* cleanup crew memory wipe */
+    EQ(npc_next_state(WS_ENGAGE, 3, 90, 0, 1, 1), WS_DENIAL);
+    EQ(npc_next_state(WS_SILENCING, 4, 50, 0, 0, 2), WS_UNAWARE);        /* target eliminated */
+    EQ(npc_next_state(WS_ENGAGE, 0, 90, 0, 1, 2), WS_UNAWARE);
+    EQ(npc_next_state(WS_SILENCING, 2, 50, 1, 0, 1), WS_COMPROMISED);    /* compromise still wins */
+    EQ(npc_next_state(WS_UNAWARE, 5, 50, 0, 1, 0), WS_SILENCING);
+    EQ(npc_next_state(WS_DENIAL, 5, 50, 0, 1, 0), WS_SILENCING);         /* escalation allowed */
+    EQ(npc_next_state(WS_DENIAL, 0, 50, 0, 1, 0), WS_UNAWARE);           /* non-hunting states do fall with count */
+    EQ(npc_next_state(WS_DENIAL, 3, 50, 0, 0, 1), WS_DENIAL);            /* resolved is ignored unless hunting */
     /* legality */
     OK(is_legal_transition(WS_COMPROMISED, WS_COMPROMISED)); OK(!is_legal_transition(WS_COMPROMISED, WS_DENIAL));
     OK(!is_legal_transition(WS_COMPROMISED, WS_UNAWARE)); OK(is_legal_transition(WS_SILENCING, WS_SILENCING));
-    OK(is_legal_transition(WS_SILENCING, WS_UNAWARE)); OK(!is_legal_transition(WS_SILENCING, WS_DENIAL));
+    OK(is_legal_transition(WS_SILENCING, WS_UNAWARE)); OK(is_legal_transition(WS_SILENCING, WS_DENIAL));
+    OK(is_legal_transition(WS_ENGAGE, WS_DENIAL)); OK(is_legal_transition(WS_SILENCING, WS_COMPROMISED));
+    OK(!is_legal_transition(WS_SILENCING, WS_PANIC)); OK(!is_legal_transition(WS_ENGAGE, WS_PANIC));
     OK(!is_legal_transition(WS_ENGAGE, WS_SILENCING)); OK(is_legal_transition(WS_DENIAL, WS_SILENCING));
     OK(is_legal_transition(WS_UNAWARE, WS_PANIC));
     /* engage outcome */
@@ -66,8 +77,11 @@ static void oracle(void) {
     /* costume x zone (rows SUIT, SMOCK, JANITOR, STREET; cols PUBLIC LAB EXEC GEN; vault separate) */
     static const int M[4][4] = {{1,0,1,0},{1,1,0,0},{1,0,0,1},{0,0,0,0}};
     for (int c = 0; c < 4; c++) for (int z = 0; z < 4; z++) { EQ(zone_access(c, z, 0), M[c][z]); EQ(zone_access(c, z, 1), M[c][z]); }
-    EQ(zone_access(COS_SUIT, ZONE_VAULT, 0), 0); EQ(zone_access(COS_SUIT, ZONE_VAULT, 1), 1);
-    EQ(zone_access(COS_JANITOR, ZONE_VAULT, 1), 1); EQ(zone_access(COS_STREET, ZONE_VAULT, 1), 0);
+    /* vault: every costume x token in {0,1}, hand-typed (BIG_O#1 claim B): needs token AND a non-street costume */
+    EQ(zone_access(COS_SUIT, ZONE_VAULT, 0), 0);      EQ(zone_access(COS_SUIT, ZONE_VAULT, 1), 1);
+    EQ(zone_access(COS_LAB_SMOCK, ZONE_VAULT, 0), 0); EQ(zone_access(COS_LAB_SMOCK, ZONE_VAULT, 1), 1);
+    EQ(zone_access(COS_JANITOR, ZONE_VAULT, 0), 0);   EQ(zone_access(COS_JANITOR, ZONE_VAULT, 1), 1);
+    EQ(zone_access(COS_STREET, ZONE_VAULT, 0), 0);    EQ(zone_access(COS_STREET, ZONE_VAULT, 1), 0);
     /* noticing */
     EQ(conspicuousness(1, 0), 0); EQ(conspicuousness(0, 0), 40); EQ(conspicuousness(1, 1), 20); EQ(conspicuousness(0, 1), 60);
     OK(noticed(50, 0, 49)); OK(!noticed(50, 0, 50)); OK(noticed(50, 40, 89)); OK(!noticed(50, 40, 90));
@@ -94,12 +108,16 @@ static void properties(void) {
         /* escalation never decreases as witnesses grow (uncompromised) */
         OK(escalation_rank(witness_state(c + 1, arr, 0, z)) >= escalation_rank(witness_state(c, arr, 0, z)));
         /* next-state is always a legal transition */
-        int nx = npc_next_state(prev, c, arr, k, z);
+        int rz = rr(0, 2);
+        int nx = npc_next_state(prev, c, arr, k, z, rz);
         OK(nx >= 0 && nx <= 5); OK(is_legal_transition(prev, nx));
         /* compromised is absorbing */
         if (prev == WS_COMPROMISED) OK(nx == WS_COMPROMISED);
-        /* sticky escalation */
-        if ((prev == WS_SILENCING || prev == WS_ENGAGE) && c > 0 && !k) OK(nx == prev);
+        /* no silencing/engage state ever drops while resolved=0, whatever the witness count (only forced compromise exits) */
+        if ((prev == WS_SILENCING || prev == WS_ENGAGE) && rz == 0 && !k) OK(nx == prev);
+        /* resolution is the only way out: 1 -> DENIAL, 2 -> UNAWARE */
+        if ((prev == WS_SILENCING || prev == WS_ENGAGE) && rz == 1 && !k) OK(nx == WS_DENIAL);
+        if ((prev == WS_SILENCING || prev == WS_ENGAGE) && rz == 2 && !k) OK(nx == WS_UNAWARE);
         /* decorum stays in [0, cap] and band is consistent */
         int d = rr(-50, 150), act = rr(0, 5);
         int a2 = decorum_after(clamp_decorum(d), act);
@@ -137,12 +155,13 @@ static void properties(void) {
 
 typedef int (*F0)(void); typedef int (*F1)(int); typedef int (*F2)(int, int); typedef int (*F3)(int, int, int);
 typedef int (*F4)(int, int, int, int); typedef int (*F5)(int, int, int, int, int); typedef int (*F6)(int, int, int, int, int, int);
+typedef int (*F7)(int, int, int, int, int, int, int);
 static const struct { const char *n; int arity; void *f; } TAB[] = {
     {"silence_threshold", 0, silence_threshold}, {"panic_arrogance_max", 0, panic_arrogance_max},
     {"engage_arrogance_min", 0, engage_arrogance_min}, {"decorum_start", 0, decorum_start}, {"decorum_cap", 0, decorum_cap},
     {"suspicion_below", 0, suspicion_below}, {"hysteric_below", 0, hysteric_below}, {"wall_hp_concrete", 0, wall_hp_concrete},
     {"breach_dps_super", 0, breach_dps_super}, {"effective_witnesses", 2, effective_witnesses}, {"witness_state", 4, witness_state},
-    {"escalation_rank", 1, escalation_rank}, {"npc_next_state", 5, npc_next_state}, {"is_legal_transition", 2, is_legal_transition},
+    {"escalation_rank", 1, escalation_rank}, {"npc_next_state", 6, npc_next_state}, {"is_legal_transition", 2, is_legal_transition},
     {"engage_outcome", 2, engage_outcome}, {"silence_target_mask", 3, silence_target_mask}, {"clamp_decorum", 1, clamp_decorum},
     {"decorum_delta", 1, decorum_delta}, {"decorum_after", 2, decorum_after}, {"decorum_band", 1, decorum_band},
     {"zone_access", 3, zone_access}, {"conspicuousness", 2, conspicuousness}, {"noticed", 3, noticed},

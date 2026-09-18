@@ -4,6 +4,7 @@
  *   bigo_sim --version
  * Script format (see the scenarios directory):
  *   seed N | crew N | npc <zone> <vig> <arr> | player <p> [zone Z] [costume C] [token 0|1] [gear 0|1]
+ *   loslost | wipe [zone] | eliminate P
  *   enter P Z | costume P C | gear P 0|1 | token P 0|1 | observe P | say P | talk P | release P TIER | force NPC P | tick N | state
  *   expect npc N state <NAME> | expect npc N accomplice 0|1 | expect player P band <NAME>
  *   expect decorum P <==|>=|<=|<|>> V | expect hunted P 0|1 | expect cancelled P 0|1                                        */
@@ -89,6 +90,9 @@ static int run_line(Ctx *c, char *line, int lineno, int echo_state) {
     } else if (ieq(cmd, "release") && nt >= 3) {
         if (sim_release(s, atoi(tok[1]), atoi(tok[2])) < 0) return script_fail(c, lineno, "release: rejected");
     } else if (ieq(cmd, "force") && nt >= 3) { sim_force_witness(s, atoi(tok[1]), atoi(tok[2]));
+    } else if (ieq(cmd, "loslost")) { sim_los_lost(s);
+    } else if (ieq(cmd, "wipe")) { sim_memory_wipe(s, nt >= 2 ? zone_of(tok[1]) : -1);
+    } else if (ieq(cmd, "eliminate") && nt >= 2) { if (sim_eliminate(s, atoi(tok[1])) < 0) return script_fail(c, lineno, "eliminate: rejected");
     } else if (ieq(cmd, "tick") && nt >= 2) { sim_tick(s, atoi(tok[1]));
     } else if (ieq(cmd, "state")) { sim_print_state(s, stdout);
     } else if (ieq(cmd, "expect") && nt >= 4) {

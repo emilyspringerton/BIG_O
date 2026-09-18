@@ -21,7 +21,7 @@ int breach_dps_super(void);
 int effective_witnesses(int, int);
 int witness_state(int, int, int, int);
 int escalation_rank(int);
-int npc_next_state(int, int, int, int, int);
+int npc_next_state(int, int, int, int, int, int);
 int is_legal_transition(int, int);
 int engage_outcome(int, int);
 int silence_target_mask(int, int, int);

@@ -116,7 +116,7 @@ int sim_release(Sim *s, int pl, int tier) {
     for (int i = 0; i < s->nnpcs; i++) {
         SimNpc *n = &s->n[i];
         if (n->zone != z || n->accomplice) continue;
-        int prev = n->state, nx = npc_next_state(prev, count, n->arrogance, 0, 1);
+        int prev = n->state, nx = npc_next_state(prev, count, n->arrogance, 0, 1, 0);
         if (!is_legal_transition(prev, nx)) { fprintf(s->out, "  BUG illegal transition npc %d %d->%d\n", i, prev, nx); return -2; }
         n->state = nx; n->witnessed_event = s->event_id;
         fprintf(s->out, "  npc%d %s -> %s\n", i, sim_ws_name(prev), sim_ws_name(nx));
@@ -138,11 +138,50 @@ int sim_force_witness(Sim *s, int npc, int pl) {
     if (!valid_player(s, pl) || npc < 0 || npc >= s->nnpcs) return -1;
     SimNpc *n = &s->n[npc];
     if (n->zone != s->p[pl].zone) { fprintf(s->out, "  force npc%d refused: different zone\n", npc); return -1; }
-    int prev = n->state, nx = npc_next_state(prev, 1, n->arrogance, 1, 1);
+    int prev = n->state, nx = npc_next_state(prev, 1, n->arrogance, 1, 1, 0);
     if (!is_legal_transition(prev, nx)) return -2;
     n->state = nx; n->accomplice = (nx == WS_COMPROMISED);
     fprintf(s->out, "EVENT tick=%d force-witness npc%d by p%d: %s -> %s (accomplice=%d)\n", s->tick, npc, pl, sim_ws_name(prev), sim_ws_name(nx), n->accomplice);
     return 0;
+}
+
+static int resolve_hunters(Sim *s, int zone, int resolved, const char *why) {
+    int changed = 0;
+    for (int i = 0; i < s->nnpcs; i++) {
+        SimNpc *n = &s->n[i];
+        if (zone >= 0 && n->zone != zone) continue;
+        int prev = n->state;
+        if (prev != WS_SILENCING && prev != WS_ENGAGE) continue;
+        int nx = npc_next_state(prev, 0, n->arrogance, 0, 1, resolved);
+        if (!is_legal_transition(prev, nx)) { fprintf(s->out, "  BUG illegal transition npc %d %d->%d\n", i, prev, nx); return -2; }
+        n->state = nx; changed++;
+        fprintf(s->out, "  npc%d %s -> %s (%s)\n", i, sim_ws_name(prev), sim_ws_name(nx), why);
+    }
+    return changed;
+}
+
+int sim_los_lost(Sim *s) {
+    fprintf(s->out, "EVENT tick=%d los-lost\n", s->tick);
+    for (int i = 0; i < s->nnpcs; i++) {
+        SimNpc *n = &s->n[i];
+        if (n->accomplice) continue;
+        int prev = n->state, nx = npc_next_state(prev, 0, n->arrogance, 0, 1, 0);
+        if (nx != prev) { n->state = nx; fprintf(s->out, "  npc%d %s -> %s (no witnesses in sight)\n", i, sim_ws_name(prev), sim_ws_name(nx)); }
+        else if (prev == WS_SILENCING || prev == WS_ENGAGE) fprintf(s->out, "  npc%d stays %s (hunt persists)\n", i, sim_ws_name(prev));
+    }
+    return 0;
+}
+
+int sim_memory_wipe(Sim *s, int zone) {
+    fprintf(s->out, "EVENT tick=%d memory-wipe zone=%s\n", s->tick, zone < 0 ? "all" : sim_zone_name(zone));
+    return resolve_hunters(s, zone, 1, "memory methylation wipe");
+}
+
+int sim_eliminate(Sim *s, int pl) {
+    if (pl < 0 || pl >= s->nplayers) return -1;
+    fprintf(s->out, "EVENT tick=%d target-eliminated p%d\n", s->tick, pl);
+    s->p[pl].hunted = 0;
+    return resolve_hunters(s, -1, 2, "target eliminated");
 }
 
 void sim_tick(Sim *s, int n) {

@@ -1,0 +1,14 @@
+# Losing line of sight does not end a hunt: the pack keeps SILENCING with no witnesses in view (BIG_O#1 claim A).
+seed 1
+crew 1
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+release 0 1
+expect npc 0 state SILENCING
+loslost
+expect npc 0 state SILENCING
+expect npc 4 state SILENCING
+expect hunted 0 1

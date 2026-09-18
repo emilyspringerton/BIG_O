@@ -13,8 +13,8 @@ int main(void) {
     for (int c = 0; c <= 8; c++) for (int i = 0; i < 8; i++) for (int k = 0; k <= 1; k++) for (int z = 0; z <= 1; z++)
         printf("witness_state %d %d %d %d = %d\n", c, ARR[i], k, z, witness_state(c, ARR[i], k, z));
     for (int s = 0; s <= 5; s++) printf("escalation_rank %d = %d\n", s, escalation_rank(s));
-    for (int p = 0; p <= 5; p++) for (int c = 0; c <= 7; c++) for (int i = 0; i < 8; i += 2) for (int k = 0; k <= 1; k++) for (int z = 0; z <= 1; z++)
-        printf("npc_next_state %d %d %d %d %d = %d\n", p, c, ARR[i], k, z, npc_next_state(p, c, ARR[i], k, z));
+    for (int p = 0; p <= 5; p++) for (int c = 0; c <= 7; c++) for (int i = 0; i < 8; i += 2) for (int k = 0; k <= 1; k++) for (int z = 0; z <= 1; z++) for (int rz = 0; rz <= 2; rz++)
+        printf("npc_next_state %d %d %d %d %d %d = %d\n", p, c, ARR[i], k, z, rz, npc_next_state(p, c, ARR[i], k, z, rz));
     for (int f = 0; f <= 5; f++) for (int t = 0; t <= 5; t++) printf("is_legal_transition %d %d = %d\n", f, t, is_legal_transition(f, t));
     for (int i = 0; i < 8; i++) for (int t = 0; t <= 2; t++) printf("engage_outcome %d %d = %d\n", ARR[i], t, engage_outcome(ARR[i], t));
     for (int a = 0; a <= 2; a++) for (int s = 0; s <= 1; s++) for (int m = 1; m <= 7; m++) printf("silence_target_mask %d %d %d = %d\n", a, s, m, silence_target_mask(a, s, m));

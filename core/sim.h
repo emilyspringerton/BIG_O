@@ -30,7 +30,10 @@ int sim_observe(Sim *s, int pl);                                       /* notici
 int sim_say_apocalypse(Sim *s, int pl);
 int sim_talk(Sim *s, int pl);
 int sim_release(Sim *s, int pl, int tier);                             /* loud zombie event, attributed to pl or the crew */
-int sim_force_witness(Sim *s, int npc, int pl);                        /* private forced witness -> accomplice */
+int sim_force_witness(Sim *s, int npc, int pl);
+int sim_los_lost(Sim *s);                                              /* re-evaluate every NPC with no witnesses left in sight */
+int sim_memory_wipe(Sim *s, int zone);                                 /* cleanup crew (The Men) spray: hunting NPCs in zone -> DENIAL */
+int sim_eliminate(Sim *s, int pl);                                     /* attributed target gone: hunting NPCs -> UNAWARE, hunt cleared */                        /* private forced witness -> accomplice */
 void sim_tick(Sim *s, int n);
 void sim_print_state(const Sim *s, FILE *out);
 
