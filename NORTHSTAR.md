@@ -89,3 +89,30 @@ basement base-building, story chapters via the level-chain engine, mobile lab cl
 
 Open questions for the founder (only the ones that change the plan): (a) shared-world multiplayer per §3.1 —
 yes? (b) desktop-first per §3.4 — yes? (c) new repo `BIG_O` upstream — you create it (I cannot; token is read-only).
+
+## 6. Reconciliation with the founding design conversation (added 2026-09-18, after ingesting `docs/transcript/`)
+
+Sections 1-5 above were written from the one-paragraph pitch alone. The founding Gemini conversation (now in `docs/`)
+is far more specific, and it changes several things — corrected here rather than left to drift:
+
+- **"Vectors" are zombies, and the Attention/Heat system already has a concrete spec.** Two coupled meters: a **Decorum**
+  meter (blend-in / "heresy" for talking about the apocalypse, carrying field gear) and the **Witness rule** — 1 witness =
+  catatonic denial, **5+ witnesses = aggressive silencing** (they try to kill you to clean the witness list); compromised
+  witnesses become accomplices. B1 (the rules module) should implement exactly this, not an abstract "Heat".
+- **The engine-shaped V0 the conversation itself proposes:** a GTA3-scale small city on existing SHANKPIT primitives, one
+  *corporate office block with the park across the street*, a basement lab, dirt-vs-concrete **terrain affordance flags**
+  (`MAT_DIRT` fast/hidden, `MAT_CONCRETE` breachable, `MAT_REINFORCED` blocked), zombie states
+  (passive-heel / subterranean-swim / wall-breach / surface-surge) driven by **pheromone balls**. That replaces §4's generic
+  day/night/lab slice as the concrete B2-B3 target.
+- **Costumes and social engineering are first-class** (Hitman/Codename-47 pacing): uniform matrix (lab smock, janitor
+  overalls), shoulder-surfing, tailgating, vigilance profiles per NPC. This maps onto the planned humanness NPC layer.
+- **Lab UI = a UNIX-style bioinformatics terminal** (isolate / align / splice with contamination %, off-target and
+  nonsense-mediated-decay risk). Cheap to build, on-brand, and the same idiom as PITVIPER/JEWEL terminals.
+- **Story spine (spoilers, in `docs/DESIGN_DIGEST.md`):** three-faction war (feral / underground symbionts / polite society),
+  the "evil corporation was the good guy" reveal, a hyper-intelligent avian faction as the Act II escalation, and a
+  final binary choice. This is campaign content: **not V0**, chain it later with the level-chain engine.
+- **The conversation never addresses multiplayer.** It designs a single-player sandbox. The house rule and §3.1's shared-world
+  recommendation still stand and remain the open decision for the founder.
+- **Science is flavor, not a lab manual.** Terms used (gRNA off-target, cryptic splice sites, nonsense-mediated decay,
+  retrotransposons, HGT, epigenetic silencing) are game vocabulary; a few claims (e.g. stress hormones "methylating" a
+  population's junk DNA) are narrative licence, and should stay that way. No real protocols belong in the game.
