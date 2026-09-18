@@ -1,0 +1,12 @@
+# The threshold is exactly five: four witnesses all still deny.
+seed 1
+crew 1
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+release 0 1
+expect npc 0 state DENIAL
+expect npc 3 state DENIAL
+expect hunted 0 0
+expect decorum 0 == 80

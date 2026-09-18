@@ -1,0 +1,19 @@
+# One player talks about the apocalypse until they are cancelled; their crewmate's standing is untouched.
+seed 1
+crew 2
+npc public 100 50
+say 0
+expect decorum 0 == 55
+expect player 0 band SUSPICION
+say 0
+expect decorum 0 == 30
+say 0
+expect decorum 0 == 5
+expect player 0 band HYSTERIC
+say 0
+expect decorum 0 == 0
+expect player 0 band CANCELLED
+expect cancelled 0 1
+expect decorum 1 == 80
+expect player 1 band OK
+expect cancelled 1 0

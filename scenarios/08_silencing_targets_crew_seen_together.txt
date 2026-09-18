@@ -1,0 +1,16 @@
+# Two crew members in the room are hunted together; the third, elsewhere, is not.
+seed 1
+crew 3
+player 2 zone lab
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+release 1 1
+expect hunted 0 1
+expect hunted 1 1
+expect hunted 2 0
+expect decorum 0 == 40
+expect decorum 1 == 40
+expect decorum 2 == 80

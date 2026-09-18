@@ -1,0 +1,9 @@
+# One witness cannot acknowledge what they saw: catatonic denial, no consequence for the crew.
+seed 1
+crew 1
+npc public 0 50
+release 0 0
+expect npc 0 state DENIAL
+expect hunted 0 0
+expect decorum 0 == 80
+expect player 0 band OK

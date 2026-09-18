@@ -1,0 +1,17 @@
+# Control for scenario 03: the same five-NPC room without an accomplice does silence, and the pack hunts BOTH crew
+# members because they were seen acting together.
+seed 1
+crew 2
+player 0 zone lab costume smock
+player 1 zone lab costume smock
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+release 1 0
+expect npc 0 state SILENCING
+expect hunted 0 1
+expect hunted 1 1
+expect decorum 0 == 40
+expect decorum 1 == 40

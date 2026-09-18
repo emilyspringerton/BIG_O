@@ -1,0 +1,14 @@
+# Five witnesses can no longer deny it: they turn to aggressive silencing and hunt the attributed player.
+seed 1
+crew 1
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+npc public 0 50
+release 0 1
+expect npc 0 state SILENCING
+expect npc 4 state SILENCING
+expect hunted 0 1
+expect decorum 0 == 40
+expect player 0 band SUSPICION

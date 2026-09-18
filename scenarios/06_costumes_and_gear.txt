@@ -1,0 +1,17 @@
+# Janitor overalls open the generator room but not the executive suites; carrying field gear is noticed anywhere.
+seed 1
+crew 1
+npc generator 100 50
+npc exec 100 50
+npc public 100 50
+player 0 costume janitor
+enter 0 generator
+expect decorum 0 == 80
+enter 0 exec
+expect decorum 0 == 60
+enter 0 public
+expect decorum 0 == 60
+gear 0 1
+observe 0
+expect decorum 0 == 45
+expect player 0 band SUSPICION

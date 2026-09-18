@@ -1,0 +1,24 @@
+# One player forces a lone witness to see it: an accomplice. Later a crewmate releases in front of five NPCs in
+# the same room; the accomplice does not count, so only four hostile witnesses remain and nobody is hunted.
+seed 1
+crew 2
+player 0 zone lab costume smock
+player 1 zone lab costume smock
+npc lab 0 50
+release 0 0
+expect npc 0 state DENIAL
+expect hunted 0 0
+force 0 0
+expect npc 0 state COMPROMISED
+expect npc 0 accomplice 1
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+npc lab 0 50
+release 1 0
+expect npc 1 state DENIAL
+expect npc 4 state DENIAL
+expect npc 0 state COMPROMISED
+expect hunted 0 0
+expect hunted 1 0
+expect decorum 1 == 80

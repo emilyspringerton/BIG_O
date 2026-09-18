@@ -1,0 +1,16 @@
+# A lab smock in the vault with no token is trespass and gets noticed; a suit with a stolen token walks in unremarked.
+seed 1
+crew 2
+npc vault 100 50
+player 0 costume smock
+player 1 costume suit token 1
+enter 0 vault
+expect decorum 0 == 60
+observe 0
+expect decorum 0 == 40
+expect player 0 band SUSPICION
+enter 1 vault
+expect decorum 1 == 80
+token 0 1
+observe 0
+expect decorum 0 == 40

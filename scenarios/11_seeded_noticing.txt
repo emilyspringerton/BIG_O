@@ -1,0 +1,21 @@
+# Noticing is rolled from the seeded RNG (rolls are drawn by the host, passed into the pure rules): identical for
+# the same seed, different across seeds (asserted by tests/test_scenarios.sh).
+seed 1
+crew 1
+npc public 40 50
+npc public 40 50
+npc public 40 50
+npc public 40 50
+npc public 40 50
+npc public 40 50
+npc public 40 50
+npc public 40 50
+gear 0 1
+observe 0
+observe 0
+observe 0
+observe 0
+observe 0
+observe 0
+state
+expect decorum 0 >= 0

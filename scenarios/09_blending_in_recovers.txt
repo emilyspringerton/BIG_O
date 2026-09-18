@@ -1,0 +1,12 @@
+# Small talk and quiet time restore standing, capped at 100.
+seed 1
+crew 1
+npc public 0 50
+talk 0
+expect decorum 0 == 85
+talk 0
+talk 0
+expect decorum 0 == 95
+tick 10
+expect decorum 0 == 100
+expect player 0 band OK
