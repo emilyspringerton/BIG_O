@@ -94,3 +94,32 @@ Boot-screen idea: a monochrome SHANKPIT core boot log ending in "BIG_O INITIALIZ
 
 Multiplayer (it designs a single-player sandbox); platform; art direction beyond primitives; economy numbers (all figures
 above are illustrative); the actual level layout; how the day/night clock maps onto persistent-world play.
+
+## 11. Additions from the continuation chats (2026-09-18 evening) — see `transcript/04-*.md`
+
+- **Tactical Espionage tech tree** *(proposed, alongside the biology tree)*: the **Lavalier Acoustic-Detonator** (a swapped
+  lapel mic that "masquerades as a sniper's bullet": the room hears a rifle crack from across the street, guards take cover
+  from the window while you steal the vault token); the **Anubis/Stargate Osiris-Pattern Resuscitator** (single-use revive
+  for 120 s; the revived target bleeds lore and door codes before liquefying); **Law & Order forensic sabotage** (luminol-
+  masking binder, a "biometric identity patch" false flag that frames an innocent manager and resets your heat). Principle:
+  gadgets hack the *social narrative* of a crime scene, not just kill.
+- **The Men — the Blue-Collar Cleanup Crew** (plumbers, electricians, engineers, regulators): the muscle that keeps the illusion
+  physically true. They scrub scenes back to pristine within ~45 game-minutes (the world gaslights you), keep the
+  underground sealed, and at maximum heat replace "police" with a **Corporate Service Call**: silent, John-Wick-lethal
+  Regulators who "cap the line". Their memory-wipe spray is what resets witnesses (drives the `resolved` patch to
+  `npc-next-state`).
+- **TYLER crossover.** The BIG_O world *leaks* into the TYLER documentary universe: a "THE_LEAK" pilot cold open (Detroit kitchen,
+  Tyler tipping his hat in 1901 footage, a coin whose date mutates, "if you keep filming, you become part of it"; end log
+  "BIRD CORRECTION PENDING"). Witnessing-as-infection is the shared rule. **Tyler dies → wakes at his 08:00 desk** via a
+  somatic-clone germline restore-point (Regulators/Plumbers clean the scene, the basement prints a new body, costs Bio-Slurry).
+  Cross-repo canon exists: `TYLER/` already has Hana, "Bird Correction", Layer 4 / custody; reconcile before hardening.
+- **HANA — the stochastic wildcard.** Appears randomly and never predictably: a host pre-rolled 0–99 picks helpful (0–33: opens a
+  vault, drops a jammer), hostile (34–66: says the forbidden thing loudly to wreck your Decorum) or neutral VALIS static
+  (67–99: glitches the zone). Signature scare: she is already in the locker the frame the door swings, hands you the suit
+  lanyard, and the Plumbers at the bathroom door then read you as a clean employee. Fits our rule that RNG stays in the host.
+- **Act I, Mission 1** (`a1m1.md`): Dr. Thorne's reprimand-and-heist brief: get a Level-2 lab smock, keep decorum under a
+  Senior Peer's "carding", shoulder-surf a shift supervisor's PIN, physically swap in `FA_REPRESSOR_LOOPS_WGS.fa`, exit via a
+  janitor mop and the service elevator.
+- **Engineering caveat:** the chats' code snippets are C++ pseudo-code against an invented API (`Spawn_Camera_Rig`,
+  `Set_Global_Time_Clock`, ...); SHANKPIT is C, so treat them as intent, not implementation. Numbers (75/40 dps, 45 min, 120 s, 150
+  slurry) are illustrative.
