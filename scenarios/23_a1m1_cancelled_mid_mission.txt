@@ -1,0 +1,14 @@
+# Fail path: blowing your cover (saying the quiet part in Sector-2 until decorum collapses) cancels the run.
+seed 1
+crew 1
+npc lab 100 50
+player 0 costume janitor zone generator
+mission start
+m smock 0
+m sector2 0
+say 0
+say 0
+say 0
+say 0
+mtick 1
+expect mission state FAILED

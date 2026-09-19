@@ -1,0 +1,30 @@
+# Act I Mission 1 -- the clean run: smock from the laundry chute, blend into Sector-2, shoulder-surf the PIN, wait for the
+# supervisor's break, copy the file, swap, mop + service elevator out, upload in the basement.
+seed 1
+crew 1
+npc lab 60 50
+npc generator 30 50
+player 0 costume janitor zone generator
+mission start
+expect mission phase 1
+m! surf 0
+m smock 0
+m sector2 0
+expect mission phase 2
+expect decorum 0 >= 80
+m surf 0
+expect mission pin 1
+m! insert 0
+m break
+m insert 0
+mtick 5
+expect mission pct 50
+m! swap 0
+mtick 5
+expect mission pct 100
+m swap 0
+expect mission phase 3
+m mop 0
+m exit 0
+m upload 0
+expect mission state COMPLETE

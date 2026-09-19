@@ -12,13 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "sim.h"
+#include "mission.h"
 #include "witness_rules.h"
 
 #ifndef BIGO_VERSION
 #define BIGO_VERSION "0.0.0-dev"
 #endif
 
-typedef struct { Sim sim; int have; uint32_t seed; int nfail, nexpect; } Ctx;
+typedef struct { Sim sim; Mission mis; int have; uint32_t seed; int nfail, nexpect; } Ctx;
 
 static int ieq(const char *a, const char *b) {
     for (; *a && *b; a++, b++) if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return 0;
@@ -93,11 +94,36 @@ static int run_line(Ctx *c, char *line, int lineno, int echo_state) {
     } else if (ieq(cmd, "loslost")) { sim_los_lost(s);
     } else if (ieq(cmd, "wipe")) { sim_memory_wipe(s, nt >= 2 ? zone_of(tok[1]) : -1);
     } else if (ieq(cmd, "eliminate") && nt >= 2) { if (sim_eliminate(s, atoi(tok[1])) < 0) return script_fail(c, lineno, "eliminate: rejected");
+    } else if (ieq(cmd, "mission") && nt >= 2 && ieq(tok[1], "start")) { mission_start(&c->mis); fprintf(stdout, "MISSION A1M1 started (23:00)\n");
+    } else if (ieq(cmd, "mtick") && nt >= 2) { mission_tick(&c->mis, s, atoi(tok[1]));
+    } else if ((ieq(cmd, "m") || ieq(cmd, "m!")) && nt >= 2) {
+        Mission *m = &c->mis; int pl = nt >= 3 ? atoi(tok[2]) : 0, r = -2;
+        if (ieq(tok[1], "smock")) r = mission_acquire_smock(m, s, pl);
+        else if (ieq(tok[1], "sector2")) r = mission_enter_sector2(m, s, pl);
+        else if (ieq(tok[1], "login")) r = mission_supervisor(m, s, 1);
+        else if (ieq(tok[1], "break")) r = mission_supervisor(m, s, 0);
+        else if (ieq(tok[1], "surf")) r = mission_surf(m, s, pl);
+        else if (ieq(tok[1], "insert")) r = mission_insert_drive(m, s, pl);
+        else if (ieq(tok[1], "swap")) r = mission_swap_drive(m, s, pl);
+        else if (ieq(tok[1], "mop")) r = mission_grab_mop(m, s, pl);
+        else if (ieq(tok[1], "exit")) r = mission_exit(m, s, pl);
+        else if (ieq(tok[1], "upload")) r = mission_upload(m, s, pl);
+        if (r == -2) return script_fail(c, lineno, "m: unknown mission action");
+        if (ieq(cmd, "m") && r < 0) return script_fail(c, lineno, "m: action rejected");
+        if (ieq(cmd, "m!") && r >= 0) return script_fail(c, lineno, "m!: action was accepted but should have been rejected");
     } else if (ieq(cmd, "tick") && nt >= 2) { sim_tick(s, atoi(tok[1]));
     } else if (ieq(cmd, "state")) { sim_print_state(s, stdout);
     } else if (ieq(cmd, "expect") && nt >= 4) {
         c->nexpect++;
-        if (ieq(tok[1], "npc") && nt >= 5) {
+        if (ieq(tok[1], "mission") && nt >= 4) {
+            Mission *m = &c->mis; int got = -1, want = atoi(tok[3]);
+            if (ieq(tok[2], "state")) { static const char *N[] = { "INACTIVE", "ACTIVE", "COMPLETE", "FAILED" }; int w = lookup(tok[3], N, 4); got = (int)m->state; want = w; }
+            else if (ieq(tok[2], "phase")) got = mission_phase(m);
+            else if (ieq(tok[2], "pct")) got = m->transfer_pct;
+            else if (ieq(tok[2], "pin")) got = m->pin_known;
+            else return script_fail(c, lineno, "expect mission: unknown field");
+            if (got != want) { snprintf(msg, sizeof msg, "mission %s is %d, wanted %s", tok[2], got, tok[3]); return script_fail(c, lineno, msg); }
+        } else if (ieq(tok[1], "npc") && nt >= 5) {
             int n = atoi(tok[2]);
             if (n < 0 || n >= s->nnpcs) return script_fail(c, lineno, "expect npc: no such npc");
             if (ieq(tok[3], "state")) {

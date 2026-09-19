@@ -1,0 +1,12 @@
+# Fail path: dawdling past 03:00 in the building (never escaping) closes the window.
+seed 1
+crew 1
+npc lab 60 50
+player 0 costume janitor zone generator
+mission start
+m smock 0
+m sector2 0
+mtick 239
+expect mission state ACTIVE
+mtick 1
+expect mission state FAILED

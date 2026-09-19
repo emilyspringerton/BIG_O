@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-19
+- feat(mission): Act I Mission 1 tracker (`core/mission.{h,c}`), 4 scenarios (clean run + 3 fail paths), `docs/A1M1_PLAN.md` (S504-12)
+- feat(day): in-game phone (all menus), zombie clips, Bazel, client+SDL2 bundling (S504-10)
+
 ## 2026-09-18
 - Ingested the continuation chats (`docs/source/continuation-raw.txt` -> `docs/transcript/04-*.md`), cleaned the Act I Mission 1 brief, reviewed GitHub issue #1 (`docs/reviews/ISSUE_1_REVIEW.md`; one real finding fixed via a `resolved` input on `npc-next-state`), extended the design digest. (S504-09)
 - BIG_O#1: hunts (SILENCING/ENGAGE) persist until resolved: memory wipe -> DENIAL, target eliminated -> UNAWARE; vault oracle; 4 scenarios (v0.7.0) (sess-20260918-1725-497f394f)

@@ -10,8 +10,12 @@ where acknowledging the apocalypse gets you canceled by the thought police. Buil
 your basement lab, weaponize the local fauna, and use tactical pheromone arrays to command a subterranean army of
 custom-spliced vectors to wage an algorithmic shadow war.
 
-> **Status: design only.** No game code yet. Scoping and the source design conversation are in [`docs/`](docs/);
-> the plan is [`NORTHSTAR.md`](NORTHSTAR.md).
+> **Status: early code, not yet a playable game.** Working and tested: the witness/decorum rules core (PARENA -> C),
+> a headless co-op crew sim with scenario tests, and the Act I Mission 1 rulebook (`core/mission.c`, scenarios 20-23).
+> A `day/` fork of PAPERCRAFT's SDL2 client + server builds (Linux/Windows, CI-bundled) with an in-game phone holding every
+> menu, but it is still the PAPERCRAFT city, not BIG_O's levels; zombie clips for the mannequin exist but are not wired
+> into any character. Nothing here has been played end to end against a live server.
+> Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page
 

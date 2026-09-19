@@ -1,0 +1,16 @@
+# Fail path: the supervisor comes back before the copy finishes -- a foreign drive in the terminal ends the mission.
+seed 1
+crew 1
+npc lab 60 50
+player 0 costume janitor zone generator
+mission start
+m smock 0
+m sector2 0
+m surf 0
+m break
+m insert 0
+mtick 3
+m login
+mtick 1
+expect mission state FAILED
+m! swap 0
