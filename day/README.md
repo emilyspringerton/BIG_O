@@ -32,9 +32,15 @@ rendering is `draw_bigo_phone` in the client; `day/tools/phone_preview.c` render
 
 | App | State |
 |---|---|
-| Messages, Notes | real (message log fed by server phone packets; notes read-only) |
+| Messages, Notes | real: message log (server phone packets + world alerts + Dr. Thorne's A1M1 brief 8 s after connecting; Enter opens a message in full); notes read-only |
 | Cargo, Skills, Loadout | real: wired to the server's inventory, talent allocation, and weapon switch |
-| Contacts, Map, Camera, Wardrobe | local UI only: replies/pins/photos/costume are client-side, no server effect yet; camera takes no screenshot |
+| Map | shows live zombie count per area (`Z12`) from the world feed |
+| Contacts, Camera, Wardrobe | local UI only (Thorne unlocks in Contacts when his brief arrives): replies/pins/photos/costume are client-side, no server effect yet; camera takes no screenshot |
 | Lab | UI + splice logic work; sample counts are 0 until harvesting exists, so SPLICE is inert in a real session |
-| Status | shows level/XP/position; decorum/witness readouts NOT wired (rules core isn't linked into the client) |
+| Status | level/XP/position + world clock/weather/outdoor sight; decorum/witness readouts NOT wired |
 Verified: unit test passes; client builds Linux+Windows; all 12 screens rendered and inspected. Not verified: live play against a server.
+
+**World feed (interim):** the client links `core/world.c` (PARENA rules + REFLUX, see `docs/B2_WORLD.md`) and runs it LOCALLY
+(1 real second = 1 game minute), pushing clock, weather, zombie counts and alert messages into the phone. It is not
+server-authoritative and not shared between players; it exists so the phone shows real world data until the server owns the world.
+Header, Map and Status read it; nothing in the 3D scene reacts to it yet (no sky, weather, or zombies rendered).

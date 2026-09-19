@@ -56,6 +56,7 @@
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/hud_text.h"
 #include "../../../packages/common/bigo_phone.h"
+#include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
 #include "../../../packages/common/bigo_phone.h"
 
 static unsigned int now_ms(void) { return SDL_GetTicks(); }
@@ -813,6 +814,11 @@ typedef struct { const char *handle; const char *text; } PcPhoneMessage;
 static const PcPhoneMessage PC_PHONE_MESSAGE_TABLE[] = {
     { "", "" },                                    /* 0: unused */
     { "SUIT", "you felt that one, didn't you?" },  /* 1: PC_PHONE_MESSAGE_OBJECT_DESTROYED */
+    { "EMILY OS", "nightfall. the day shift is over. dress for the floor." },           /* 2: world alert */
+    { "EMILY OS", "daybreak. the wasteland is open." },                                 /* 3: world alert */
+    { "EMILY OS", "storm front. they see less of you, and you of them." },              /* 4: world alert */
+    { "SCANNER", "brute-class vector sighted." },                                       /* 5: world alert */
+    { "DR THORNE", "Geneticist. I have reviewed your alignment logs and I am profoundly disappointed. There is no anomaly. Your data is sloppy. The data you need is locked in Sector-2. You will retrieve it tonight. Clean up your math. The world is perfectly safe." }, /* 6: BP_MSG_THORNE_BRIEF */
 };
 #define PC_PHONE_MESSAGE_TABLE_COUNT (sizeof(PC_PHONE_MESSAGE_TABLE) / sizeof(PC_PHONE_MESSAGE_TABLE[0]))
 
@@ -890,6 +896,31 @@ static void draw_entity_marker(float x, float y, float z, unsigned char item_id)
    discipline every other real HUD element in this file uses -- input is separately, fully
    suppressed elsewhere while this is open (see the main loop's own "menu pauses movement" real
    comment), so there's no real ambiguity about whether WASD is walking or scrolling. */
+
+/* ---- Interim world feed: the client runs BIG_O's world sim (core/world.c: PARENA rules + REFLUX) LOCALLY and pushes it
+   into the phone. NOT server-authoritative -- a stand-in until the server owns the world. 1 real second = 1 game minute. ---- */
+static Sim g_wsim; static World g_world; static FILE *g_wlog; static unsigned int g_wacc_ms, g_wlast_ms;
+static void bigo_world_init(void) {
+    g_wlog = fopen(
+#ifdef _WIN32
+        "NUL"
+#else
+        "/dev/null"
+#endif
+        , "w");
+    sim_init(&g_wsim, 1, 1, g_wlog ? g_wlog : stdout);
+    world_init(&g_world, &g_wsim, 1, 7);
+}
+static void bigo_world_step(BigoPhone *ph, unsigned int now) {
+    if (g_wlast_ms == 0) g_wlast_ms = now;
+    g_wacc_ms += now - g_wlast_ms; g_wlast_ms = now;
+    while (g_wacc_ms >= 1000) { g_wacc_ms -= 1000; world_tick(&g_world, &g_wsim, 1); }
+    int z[BP_ZONES];
+    for (int i = 0; i < BP_ZONES; i++) z[i] = world_zombies_in(&g_world, i);
+    bigo_phone_set_world(ph, world_minute_of_day(&g_world), world_day(&g_world), (int)world_phase(&g_world), (int)g_world.weather, z, g_wsim.public_sight_pct);
+    int m; while ((m = world_pop_alert(&g_world)) != 0) bigo_phone_notify(ph, m, now);
+}
+
 /* ---- BIG_O phone (bigo_phone.h): every menu lives here. Overlay panel, same GL discipline as the HUD above. ---- */
 static void bp_quad(float x, float y, float w, float h, float r, float g, float b) {
     glColor3f(r, g, b);
@@ -920,9 +951,13 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
 
     if (p->app < 0) {
         glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string("PHONE", px + 14, top - 28, 8);
+        if (p->wf_valid) {
+            snprintf(line, sizeof(line), "DAY %d  %02d:%02d  %s  %s", p->wf_day, p->wf_minute / 60, p->wf_minute % 60, BP_PHASE_NAMES[p->wf_phase], BP_WEATHER_NAMES[p->wf_weather]);
+            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string(line, px + 14, top - 50, 5);
+        }
         if (p->unread > 0) { snprintf(line, sizeof(line), "%d NEW", p->unread); glColor3f(0.95f, 0.3f, 0.3f); pc_draw_string(line, px + pw - 90, top - 28, 6); }
         for (int i = 0; i < BP_APP_COUNT; i++) {
-            float cx = px + 14 + (float)(i % 3) * 94.0f, cy = top - 110 - (float)(i / 3) * 78.0f;
+            float cx = px + 14 + (float)(i % 3) * 94.0f, cy = top - 120 - (float)(i / 3) * 78.0f;
             int sel = (i == p->home_cursor);
             bp_quad(cx, cy, 84, 64, sel ? 0.25f : 0.12f, sel ? 0.22f : 0.14f, sel ? 0.1f : 0.2f);
             if (sel) glColor3f(0.95f, 0.85f, 0.3f); else glColor3f(0.75f, 0.8f, 0.85f);
@@ -937,6 +972,22 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
     float y = top - 62; const float step = 24.0f, x = px + 14;
     switch (p->app) {
     case BP_APP_MESSAGES:
+        if (p->detail && p->message_count > 0) {
+            int id = p->messages[p->message_count - 1 - p->cursor];
+            const PcPhoneMessage *m = (id > 0 && (size_t)id < PC_PHONE_MESSAGE_TABLE_COUNT) ? &PC_PHONE_MESSAGE_TABLE[id] : &PC_PHONE_MESSAGE_TABLE[0];
+            glColor3f(0.95f, 0.85f, 0.3f); pc_draw_string(m->handle, x, y, 6);
+            /* word-wrap the body at 34 columns */
+            const char *t = m->text; int row = 1;
+            while (*t && row < 14) {
+                int n = 0, last = -1;
+                while (t[n] && n < 34) { if (t[n] == ' ') last = n; n++; }
+                if (t[n] && last > 0) n = last;
+                snprintf(line, sizeof(line), "%.*s", n, t);
+                glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y - step * (float)row, 5);
+                t += n; while (*t == ' ') t++; row++;
+            }
+            break;
+        }
         if (p->message_count == 0) bp_line(x, y, "no messages", 0, 0.5f);
         for (int i = 0; i < p->message_count && i < 12; i++) {
             int id = p->messages[p->message_count - 1 - i];
@@ -956,7 +1007,8 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         break;
     case BP_APP_MAP:
         for (int i = 0; i < BP_ZONES; i++) {
-            snprintf(line, sizeof(line), "%s%s%s%s", BP_ZONE_NAMES[i], i == p->zone_current ? "  (you)" : "", i == p->zone_pinned ? "  (pin)" : "", i == p->zone_alert ? "  !!" : "");
+            char zc[16] = ""; if (p->wf_valid) snprintf(zc, sizeof(zc), "  Z%d", p->wf_zombies[i]);
+            snprintf(line, sizeof(line), "%s%s%s%s%s", BP_ZONE_NAMES[i], zc, i == p->zone_current ? "  (you)" : "", i == p->zone_pinned ? "  (pin)" : "", i == p->zone_alert ? "  !!" : "");
             bp_line(x, y - step * (float)i, bp_trunc(line, tmp, sizeof(tmp), 40), i == p->cursor, 1.0f);
         }
         glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("a faction document, not a GPS", x, y - step * 6, 5);
@@ -1009,10 +1061,15 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
     case BP_APP_STATUS:
         snprintf(line, sizeof(line), "LVL %d  XP %d/%d", own->level, own->xp, own->xp_to_next); glColor3f(0.95f, 0.95f, 0.6f); pc_draw_string(line, x, y, 6);
         snprintf(line, sizeof(line), "pos %.0f %.0f %.0f", own->x, own->y, own->z); glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y - step, 6);
+        if (p->wf_valid) {
+            snprintf(line, sizeof(line), "DAY %d %02d:%02d %s", p->wf_day, p->wf_minute / 60, p->wf_minute % 60, BP_PHASE_NAMES[p->wf_phase]); glColor3f(0.75f, 0.85f, 0.95f); pc_draw_string(line, x, y - step * 2, 6);
+            snprintf(line, sizeof(line), "%s  sight %d%%", BP_WEATHER_NAMES[p->wf_weather], p->wf_sight); pc_draw_string(line, x, y - step * 3, 6);
+            glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("world: local sim, not server", x, y - step * 4, 4);
+        }
         glColor3f(0.9f, 0.6f, 0.4f);
-        pc_draw_string("decorum / witnesses: not yet", x, y - step * 3, 5);
-        pc_draw_string("fed by the server (rules core", x, y - step * 3.7f, 5);
-        pc_draw_string("is not linked to this client)", x, y - step * 4.4f, 5);
+        pc_draw_string("decorum / witnesses: not yet", x, y - step * 5.5f, 5);
+        pc_draw_string("fed by the server (rules core", x, y - step * 6.2f, 5);
+        pc_draw_string("is not linked to this client)", x, y - step * 6.9f, 5);
         break;
     default: break;
     }
@@ -1306,7 +1363,7 @@ int main(int argc, char **argv) {
             rq.hdr.type = PC_PACKET_WEAPON_SWITCH; rq.hdr.sequence = ++allocate_seq; rq.requested_slot = (unsigned char)fx_.arg; \
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
     } while (0)
-    BigoPhone phone; bigo_phone_init(&phone); /* every menu is reached through this (bigo_phone.h) */
+    BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */
 
     /* Real "arsenal" ownership (2026-09-07, founder real-time: "aresnal (weapon switching)...
        not all characters get all aresenals you have to find a [shotgun] etc"). Real, whole-
@@ -1929,6 +1986,8 @@ int main(int argc, char **argv) {
         if (welcomed && now - last_snapshot_ms > PC_CLIENT_WEAK_MS) {
             draw_weak_connection_indicator(win_w, win_h, now - last_snapshot_ms);
         }
+        bigo_world_step(&phone, now);
+        if (!thorne_sent && ever_welcomed && now > 8000) { bigo_phone_notify(&phone, BP_MSG_THORNE_BRIEF, now); thorne_sent = 1; }
         bigo_phone_tick(&phone, now);
         phone.weapons_owned = (int)g_weapons_owned; phone.current_weapon = g_current_weapon;
         if (phone.banner_id != 0 && !phone.open) {

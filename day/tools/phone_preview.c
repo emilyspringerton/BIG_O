@@ -9,11 +9,13 @@ int main(void) {
     BigoPhone p; bigo_phone_init(&p);
     PcPlayerState own; memset(&own, 0, sizeof(own)); own.level = 3; own.xp = 40; own.xp_to_next = 120; own.unspent_points = 2; own.ability[1] = 1;
     PcInventorySlot inv[PC_INVENTORY_SLOTS]; memset(inv, 0, sizeof(inv)); inv[0].item_id = PC_ITEM_SCRAP; inv[0].count = 7;
-    bigo_phone_notify(&p, 1, 100); bigo_phone_notify(&p, 1, 200);
+    bigo_world_init();
+    for (unsigned int t = 1000; t <= 620u * 1000u; t += 1000) bigo_world_step(&p, t);   /* ~17:20 on day 1, real world sim */
+    bigo_phone_notify(&p, BP_MSG_THORNE_BRIEF, 620000);
     p.samples[0] = 2; p.samples[1] = 1; p.clone_count = 1; p.clones[0] = 1; p.clone_traits[0] = 2; p.trust[0] = 2; p.contacts_met = 3; p.zone_alert = 4; p.zone_current = 1;
     p.weapons_owned = 3; p.current_weapon = 1; p.photos = 4;
     for (int a = -1; a < BP_APP_COUNT; a++) {
-        p.open = 1; p.app = a; p.cursor = 1; p.home_cursor = 4;
+        p.open = 1; p.app = a; p.cursor = 0; p.home_cursor = 4; p.detail = (a == BP_APP_MESSAGES);
         glViewport(0, 0, 900, 560); glClearColor(0.25f, 0.35f, 0.3f, 1); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         draw_bigo_phone(900, 560, &p, &own, inv, 1000);
         static unsigned char px[900*560*3]; glReadPixels(0, 0, 900, 560, GL_RGB, GL_UNSIGNED_BYTE, px);

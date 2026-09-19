@@ -45,6 +45,16 @@ int main(void) {
     p.app = BP_APP_LAB; p.cursor = 0; bigo_phone_input(&p, BP_RIGHT, 0); CHECK(p.cursor2 == 1);
     p.cursor = 1; bigo_phone_input(&p, BP_RIGHT, 0); CHECK(p.lab_trait == 1);
     p.samples[1] = 1; p.cursor = 2; bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 2 && p.clones[1] == 1 && p.clone_traits[1] == 1);
+    /* world feed + Thorne unlock + message detail */
+    bigo_phone_init(&p); CHECK(!p.wf_valid && p.contacts_met == 1);
+    int zc[BP_ZONES] = { 12, 4, 0, 2, 0 }; bigo_phone_set_world(&p, 450, 1, 1, 2, zc, 75);
+    CHECK(p.wf_valid && p.wf_minute == 450 && p.wf_zombies[0] == 12 && p.wf_weather == 2 && p.wf_sight == 75);
+    bigo_phone_notify(&p, BP_MSG_THORNE_BRIEF, 5000); CHECK(p.contacts_met == 2 && p.unread == 1);
+    go(&p, BP_APP_MESSAGES); CHECK(!p.detail);
+    bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.detail);
+    bigo_phone_input(&p, BP_BACK, 0); CHECK(!p.detail && p.app == BP_APP_MESSAGES);   /* first back closes the detail */
+    bigo_phone_input(&p, BP_BACK, 0); CHECK(p.app == -1);
+    go(&p, BP_APP_CONTACTS); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.trust[1] == 1);   /* Thorne replies work */
     printf(fails ? "PHONE TEST FAILED\n" : "PHONE TEST OK\n");
     return fails != 0;
 }

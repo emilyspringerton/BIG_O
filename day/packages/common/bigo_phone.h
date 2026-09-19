@@ -32,7 +32,7 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_MAX_MESSAGES 16
 #define BP_MAX_QUEUED 8
 #define BP_NOTE_LINES 6
-#define BP_CONTACTS 4
+#define BP_CONTACTS 5
 #define BP_CLONES 8
 #define BP_INV_SLOTS 8
 #define BP_ZONES 5
@@ -41,13 +41,17 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_SPAM_WINDOW_MS 30000
 #define BP_SPAM_MAX 2
 
+static const char *const BP_PHASE_NAMES[4] = { "DAWN", "DAY", "DUSK", "NIGHT" };
+static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "STORM" };
+#define BP_MSG_THORNE_BRIEF 6   /* client message table id: Dr. Thorne's A1M1 reprimand; unlocks him in Contacts */
+
 static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
     "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS"
 };
 
 /* Contacts: trust ladder observer -> witness -> bound -> documented (spec). Preset replies advance it. */
 static const char *const BP_TRUST_NAMES[4] = { "observer", "witness", "bound", "documented" };
-static const char *const BP_CONTACT_HANDLES[BP_CONTACTS] = { "CAMERA OP", "THE PRODUCER", "EASTWIND OWL", "EMILY OS" };
+static const char *const BP_CONTACT_HANDLES[BP_CONTACTS] = { "CAMERA OP", "DR THORNE", "THE PRODUCER", "EASTWIND OWL", "EMILY OS" };
 static const char *const BP_REPLIES[3] = { "who is this?", "i saw nothing.", "send me the file." };
 
 /* Map zones: a faction document, deliberately imprecise (spec), not a GPS. */
@@ -71,6 +75,9 @@ typedef struct {
     int trust[BP_CONTACTS]; int replied[BP_CONTACTS]; int contacts_met;
     int zone_current, zone_pinned, zone_alert;   /* zone_alert = zone highlighted by a server event, -1 none */
     int photos;
+    int detail;              /* messages: 1 = showing the selected message in full */
+    /* world feed (host-fed: clock/weather/zombies). wf_valid 0 = no world source, screens say so. */
+    int wf_valid, wf_minute, wf_day, wf_phase, wf_weather, wf_zombies[BP_ZONES], wf_sight;
     char notes[BP_NOTE_LINES][48];
     int samples[3];          /* harvested sample counts per type (fed by the host; 0 until harvesting exists) */
     int clones[BP_CLONES]; int clone_count; int clone_traits[BP_CLONES];
@@ -97,6 +104,7 @@ static inline void bigo_phone_init(BigoPhone *p) {
 static inline int bp_wrap(int v, int n) { return n <= 0 ? 0 : ((v % n) + n) % n; }
 
 static inline void bp_enter_app(BigoPhone *p, int app) {
+    p->detail = 0;
     p->app = app; p->cursor = 0; p->cursor2 = 0; p->lab_trait = 0;
     if (app == BP_APP_MESSAGES) p->unread = 0;
 }
@@ -127,6 +135,7 @@ static inline void bp_prune(BigoPhone *p, unsigned int now) {
 
 static inline void bigo_phone_notify(BigoPhone *p, int msg_id, unsigned int now) {
     if (msg_id <= 0) return;
+    if (msg_id == BP_MSG_THORNE_BRIEF && p->contacts_met < 2) p->contacts_met = 2;
     if (p->message_count < BP_MAX_MESSAGES) p->messages[p->message_count++] = msg_id;
     else { memmove(p->messages, p->messages + 1, sizeof(int) * (BP_MAX_MESSAGES - 1)); p->messages[BP_MAX_MESSAGES - 1] = msg_id; }
     if (!(p->open && p->app == BP_APP_MESSAGES)) p->unread++;
@@ -152,6 +161,11 @@ static inline void bigo_phone_tick(BigoPhone *p, unsigned int now) {
     }
 }
 
+static inline void bigo_phone_set_world(BigoPhone *p, int minute_of_day, int day, int phase, int weather, const int *zombies, int sight_pct) {
+    p->wf_valid = 1; p->wf_minute = minute_of_day; p->wf_day = day; p->wf_phase = phase; p->wf_weather = weather; p->wf_sight = sight_pct;
+    for (int i = 0; i < BP_ZONES; i++) p->wf_zombies[i] = zombies ? zombies[i] : 0;
+}
+
 static inline void bigo_phone_toggle(BigoPhone *p) {
     p->open = !p->open;
     if (p->open) p->app = -1;
@@ -174,12 +188,15 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         return fx;
     }
 
-    if (a == BP_BACK) { p->app = -1; return fx; }
+    if (a == BP_BACK) { if (p->app == BP_APP_MESSAGES && p->detail) p->detail = 0; else p->app = -1; return fx; }
     int n = bp_rows(p);
     if (a == BP_UP) { p->cursor = bp_wrap(p->cursor - 1, n); return fx; }
     if (a == BP_DOWN) { p->cursor = bp_wrap(p->cursor + 1, n); return fx; }
 
     switch (p->app) {
+    case BP_APP_MESSAGES:
+        if (a == BP_SELECT && p->message_count > 0) p->detail = !p->detail;
+        break;
     case BP_APP_CONTACTS:
         if (a == BP_LEFT || a == BP_RIGHT) p->cursor2 = bp_wrap(p->cursor2 + (a == BP_RIGHT ? 1 : -1), 3);
         else if (a == BP_SELECT && p->cursor < p->contacts_met) {   /* preset reply: the phone's primary agency mechanic */
