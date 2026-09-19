@@ -55,3 +55,11 @@ weather's profile. Restyle by editing a text file: copy `day/assets/skybox_defau
 number. `assets/skybox_toxic.cfg` is a worked example (green wasteland sky). Verified: config parser/sanitizer unit test
 (`bigo_skycfg_test`), and `day/tools/sky_preview.c` renders 13 time/weather shots under Xvfb (inspected). The client integration
 builds on Linux and Windows but has not been run in a live session (needs a server). Sky only: world geometry is not lit by the sun.
+
+## Launching (why "it opens then closes")
+The client is still PAPERCRAFT's: at startup it fetches the city from a worldapi, logs in via IDUNA, and connects to a game server.
+With no host flags it looks on the player's own machine (`localhost:7070`), so a bare launch dies instantly with `FATAL ... worldapi
+localhost:7070 ... WSA error 10061 (refused)`. `PLAY.bat` / `PLAY.sh` now pass the public hosts (okemily.com: worldapi 7070, IDUNA 8080,
+game UDP 7799 -- the live PAPERCRAFT servers), and the Windows launcher keeps its window open (`pause`) so errors stay readable.
+`PLAY_LOCAL.*` is the bare launch for a self-hosted stack. BIG_O has no server of its own yet, so online play means being in
+PAPERCRAFT's world with BIG_O's phone/sky on top. A true offline mode (no servers) is not built.
