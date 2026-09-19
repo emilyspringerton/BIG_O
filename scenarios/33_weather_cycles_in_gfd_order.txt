@@ -1,0 +1,14 @@
+# Weather advances Clear -> Overcast -> Rain -> Storm -> Clear on its own (GFD's fixed phaseOrder). Durations are seeded, so
+# the checkpoints below are pinned to seed 1's timeline (changes at world minute 190, 346, 426, 460).
+seed 1
+crew 1
+world start 7
+weather clear
+wtick 200
+expect world weather OVERCAST
+wtick 200
+expect world weather RAIN
+wtick 40
+expect world weather STORM
+wtick 40
+expect world weather CLEAR

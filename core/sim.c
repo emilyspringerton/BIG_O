@@ -55,7 +55,9 @@ static int anyone_notices(Sim *s, int zone, int conspicuous) {
     for (int i = 0; i < s->nnpcs; i++) {
         if (s->n[i].zone != zone || s->n[i].accomplice) continue;
         int roll = roll100(s);
-        if (noticed(s->n[i].vigilance, conspicuous, roll)) seen++;
+        int vig = s->n[i].vigilance;
+        if (zone == 0 && s->public_sight_pct > 0) vig = vig * s->public_sight_pct / 100;
+        if (noticed(vig, conspicuous, roll)) seen++;
     }
     return seen;
 }

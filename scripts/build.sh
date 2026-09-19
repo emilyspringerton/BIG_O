@@ -13,15 +13,15 @@ BUILD_SIM=0; [ -f core/sim.c ] && BUILD_SIM=1
 if [ "$BUILD_SIM" = 1 ]; then
   echo "== C: crew sim + scenarios (ASan+UBSan) =="
   gcc $CFLAGS_BASE -g -fsanitize=address,undefined -fno-sanitize-recover=all \
-      apps/bigo_sim/main.c core/sim.c core/mission.c core/witness_rules.c -o build/bigo_sim_asan
-  gcc $CFLAGS_BASE -O2 apps/bigo_sim/main.c core/sim.c core/mission.c core/witness_rules.c -o build/bigo_sim
+      apps/bigo_sim/main.c core/sim.c core/mission.c core/world.c core/world_rules.c core/world_alerts.c core/reflux_runtime.c core/witness_rules.c -o build/bigo_sim_asan
+  gcc $CFLAGS_BASE -O2 apps/bigo_sim/main.c core/sim.c core/mission.c core/world.c core/world_rules.c core/world_alerts.c core/reflux_runtime.c core/witness_rules.c -o build/bigo_sim
   ./build/bigo_sim --version
   bash tests/test_scenarios.sh build/bigo_sim_asan
 fi
 if [[ " $* " == *" --windows "* ]]; then
   echo "== Windows cross-build (mingw) =="
   if [ "$BUILD_SIM" = 1 ]; then
-    x86_64-w64-mingw32-gcc $CFLAGS_BASE -O2 apps/bigo_sim/main.c core/sim.c core/mission.c core/witness_rules.c -o build/bigo_sim.exe
+    x86_64-w64-mingw32-gcc $CFLAGS_BASE -O2 apps/bigo_sim/main.c core/sim.c core/mission.c core/world.c core/world_rules.c core/world_alerts.c core/reflux_runtime.c core/witness_rules.c -o build/bigo_sim.exe
     file build/bigo_sim.exe | grep -q PE32
   else
     x86_64-w64-mingw32-gcc $CFLAGS_BASE -O2 -c core/witness_rules.c -o build/witness_rules_win.o

@@ -1,0 +1,17 @@
+# GFD's four weather phases: zombie density up and outdoor sight down as it worsens (day caps for the wasteland: 12/13/15/18).
+seed 1
+crew 1
+world start 12
+weather clear
+expect world cap wasteland 12
+expect world sight 100
+weather overcast
+expect world cap wasteland 13
+expect world sight 90
+weather rain
+expect world cap wasteland 15
+expect world sight 75
+weather storm
+expect world cap wasteland 18
+expect world sight 50
+expect world weather STORM

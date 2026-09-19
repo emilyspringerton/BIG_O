@@ -1,0 +1,23 @@
+# Caps come from PARENA world_rules: full in daylight, a third at dawn/dusk, only the wasteland at night; offices never.
+seed 1
+crew 1
+world start 7
+weather clear
+expect world cap wasteland 12
+expect world cap nextown 4
+expect world cap park 2
+expect world cap office 0
+expect world cap basement 0
+wtick 60
+expect world zombies office 0
+expect world zombies basement 0
+expect world zombies nextown 4
+expect world zombies park 2
+# nightfall: populated areas empty out ("if they don't see it, it isn't real"), the wasteland keeps its residents
+weather clear
+wtick 780
+expect world phase NIGHT
+expect world cap wasteland 3
+expect world zombies nextown 0
+expect world zombies park 0
+expect world zombies office 0

@@ -13,13 +13,14 @@
 #include <string.h>
 #include "sim.h"
 #include "mission.h"
+#include "world.h"
 #include "witness_rules.h"
 
 #ifndef BIGO_VERSION
 #define BIGO_VERSION "0.0.0-dev"
 #endif
 
-typedef struct { Sim sim; Mission mis; int have; uint32_t seed; int nfail, nexpect; } Ctx;
+typedef struct { Sim sim; Mission mis; World world; int have; uint32_t seed; int nfail, nexpect; } Ctx;
 
 static int ieq(const char *a, const char *b) {
     for (; *a && *b; a++, b++) if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return 0;
@@ -94,6 +95,17 @@ static int run_line(Ctx *c, char *line, int lineno, int echo_state) {
     } else if (ieq(cmd, "loslost")) { sim_los_lost(s);
     } else if (ieq(cmd, "wipe")) { sim_memory_wipe(s, nt >= 2 ? zone_of(tok[1]) : -1);
     } else if (ieq(cmd, "eliminate") && nt >= 2) { if (sim_eliminate(s, atoi(tok[1])) < 0) return script_fail(c, lineno, "eliminate: rejected");
+    } else if (ieq(cmd, "world") && nt >= 2 && ieq(tok[1], "start")) { world_init(&c->world, s, c->seed ? c->seed : 1, nt >= 3 ? atoi(tok[2]) : 7);
+    } else if (ieq(cmd, "weather") && nt >= 2) {
+        static const char *WN[] = { "clear", "overcast", "rain", "storm" };
+        int x = lookup(tok[1], WN, 4); if (x < 0) return script_fail(c, lineno, "weather: unknown");
+        world_force_weather(&c->world, s, (Weather)x);
+    } else if (ieq(cmd, "wtick") && nt >= 2) { world_tick(&c->world, s, atoi(tok[1]));
+    } else if (ieq(cmd, "area") && nt >= 3) {
+        static const char *AN[] = { "wasteland", "nextown", "office", "park", "basement" };
+        int a = lookup(tok[2], AN, AREA_COUNT);
+        if (a < 0 || world_set_area(&c->world, s, atoi(tok[1]), a) < 0) return script_fail(c, lineno, "area: rejected");
+    } else if (ieq(cmd, "harvest") && nt >= 2) { world_harvest(&c->world, s, atoi(tok[1]));
     } else if (ieq(cmd, "mission") && nt >= 2 && ieq(tok[1], "start")) { mission_start(&c->mis); fprintf(stdout, "MISSION A1M1 started (23:00)\n");
     } else if (ieq(cmd, "mtick") && nt >= 2) { mission_tick(&c->mis, s, atoi(tok[1]));
     } else if ((ieq(cmd, "m") || ieq(cmd, "m!")) && nt >= 2) {
@@ -115,7 +127,26 @@ static int run_line(Ctx *c, char *line, int lineno, int echo_state) {
     } else if (ieq(cmd, "state")) { sim_print_state(s, stdout);
     } else if (ieq(cmd, "expect") && nt >= 4) {
         c->nexpect++;
-        if (ieq(tok[1], "mission") && nt >= 4) {
+        if (ieq(tok[1], "world") && nt >= 4) {
+            World *w = &c->world; int got = -1, want = atoi(tok[nt - 1]);
+            static const char *PN[] = { "DAWN", "DAY", "DUSK", "NIGHT" };
+            static const char *WN2[] = { "CLEAR", "OVERCAST", "RAIN", "STORM" };
+            static const char *AN2[] = { "wasteland", "nextown", "office", "park", "basement" };
+            if (ieq(tok[2], "phase")) { got = (int)world_phase(w); want = lookup(tok[3], PN, 4); }
+            else if (ieq(tok[2], "weather")) { got = (int)w->weather; want = lookup(tok[3], WN2, 4); }
+            else if (ieq(tok[2], "day")) got = world_day(w);
+            else if (ieq(tok[2], "hour")) got = world_minute_of_day(w) / 60;
+            else if (ieq(tok[2], "spawned")) got = w->spawned_total;
+            else if (ieq(tok[2], "sight")) got = s->public_sight_pct;
+            else if (ieq(tok[2], "cap") && nt >= 5) { int a2 = lookup(tok[3], AN2, AREA_COUNT); if (a2 < 0) return script_fail(c, lineno, "expect world cap: bad area"); got = world_area_cap(w, a2); }
+            else if (ieq(tok[2], "zombies") && nt >= 5) { int a2 = lookup(tok[3], AN2, AREA_COUNT); if (a2 < 0) return script_fail(c, lineno, "expect world zombies: bad area"); got = world_zombies_in(w, a2); }
+            else if (ieq(tok[2], "sample") && nt >= 6) got = w->samples[atoi(tok[3])][atoi(tok[4])];
+            else if (ieq(tok[2], "gear") && nt >= 5) got = s->p[atoi(tok[3])].gear;
+            else if (ieq(tok[2], "alerts")) got = w->nalerts;
+            else if (ieq(tok[2], "reflux")) got = w->reflux.total_dispatched;
+            else return script_fail(c, lineno, "expect world: unknown field");
+            if (got != want) { snprintf(msg, sizeof msg, "world %s is %d, wanted %d", tok[2], got, want); return script_fail(c, lineno, msg); }
+        } else if (ieq(tok[1], "mission") && nt >= 4) {
             Mission *m = &c->mis; int got = -1, want = atoi(tok[3]);
             if (ieq(tok[2], "state")) { static const char *N[] = { "INACTIVE", "ACTIVE", "COMPLETE", "FAILED" }; int w = lookup(tok[3], N, 4); got = (int)m->state; want = w; }
             else if (ieq(tok[2], "phase")) got = mission_phase(m);

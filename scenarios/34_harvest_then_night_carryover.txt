@@ -1,0 +1,17 @@
+# NOTE: decorum heals +1/minute (quiet tick), so the wait to night restores it to 100 first -- see docs/B2_WORLD.md "open tuning".
+# Day: harvest in the wasteland -> a sample and field gear. Night: carrying it through a watched public street is noticed.
+seed 1
+crew 1
+npc public 100 50
+world start 8
+weather clear
+area 0 wasteland
+wtick 30
+harvest 0
+expect world gear 0 1
+expect decorum 0 >= 80
+area 0 nextown
+wtick 780
+expect world phase NIGHT
+observe 0
+expect decorum 0 == 85

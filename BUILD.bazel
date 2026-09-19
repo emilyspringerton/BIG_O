@@ -22,7 +22,7 @@ cc_test(
 
 cc_binary(
     name = "bigo_sim",
-    srcs = ["apps/bigo_sim/main.c", "core/sim.c", "core/sim.h", "core/mission.c", "core/mission.h"],
+    srcs = ["apps/bigo_sim/main.c", "core/sim.c", "core/sim.h", "core/mission.c", "core/mission.h", "core/world.c", "core/world.h", "core/world_rules.c", "core/world_rules.h", "core/world_alerts.c", "core/reflux_runtime.c", "core/reflux_runtime.h"],
     deps = [":witness_rules"],
     copts = COPTS + ["-DBIGO_VERSION=\\\"bazel\\\""],
 )

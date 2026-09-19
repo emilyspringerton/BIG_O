@@ -17,6 +17,7 @@ typedef struct {
     int tick, event_id, nplayers, nnpcs;
     SimPlayer p[SIM_MAX_PLAYERS];
     SimNpc n[SIM_MAX_NPCS];
+    int public_sight_pct; /* weather: how well NPCs in the open (ZONE_PUBLIC) see; 100 = clear day */
     FILE *out; /* deterministic event log sink */
 } Sim;
 

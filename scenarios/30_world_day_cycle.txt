@@ -1,0 +1,19 @@
+# The clock: DAWN 05-07, DAY 07-19, DUSK 19-21, NIGHT 21-05, then day 2.
+seed 1
+crew 1
+world start 5
+expect world phase DAWN
+expect world day 1
+wtick 120
+expect world hour 7
+expect world phase DAY
+wtick 720
+expect world hour 19
+expect world phase DUSK
+wtick 120
+expect world hour 21
+expect world phase NIGHT
+wtick 480
+expect world hour 5
+expect world phase DAWN
+expect world day 2

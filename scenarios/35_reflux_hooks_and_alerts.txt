@@ -1,0 +1,11 @@
+# World events are announced on the REFLUX log; the separate PARENA alerts mod polls it and raises phone messages
+# (storm -> 4, nightfall -> 2, daybreak -> 3). The world code never calls the alerts mod's logic directly.
+seed 1
+crew 1
+world start 7
+weather clear
+expect world alerts 0
+weather storm
+expect world alerts 1
+wtick 720
+expect world phase DUSK
