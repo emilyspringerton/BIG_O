@@ -6,6 +6,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 cc_library(
     name = "common_headers",
     hdrs = [
+        "bigo_phone.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",
@@ -60,4 +61,9 @@ cc_test(
     name = "papercraft_falling_test",
     srcs = ["papercraft_falling_test.c"],
     deps = [":common_headers"],
+)
+
+cc_test(
+    name = "bigo_phone_test",
+    srcs = ["bigo_phone_test.c", "bigo_phone.h"],
 )

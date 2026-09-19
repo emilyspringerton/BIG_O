@@ -55,6 +55,8 @@
 #include "../../../packages/common/papercraft_world.h"
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/hud_text.h"
+#include "../../../packages/common/bigo_phone.h"
+#include "../../../packages/common/bigo_phone.h"
 
 static unsigned int now_ms(void) { return SDL_GetTicks(); }
 
@@ -839,6 +841,7 @@ static void draw_phone_notification(int win_w, int win_h, unsigned char msg_id) 
     pc_draw_string(line, (float)win_w / 2.0f - 150.0f, 40.0f, 8);
 }
 
+
 /* PC_ITEM_TABLE -- real, hardcoded item-id -> display-name lookup, must match
    packages/common/papercraft_protocol.h's own PC_ITEM_* values byte-for-byte (same real
    "shared, hardcoded table keyed by a wire id" convention PC_PHONE_MESSAGE_TABLE already uses).
@@ -887,41 +890,135 @@ static void draw_entity_marker(float x, float y, float z, unsigned char item_id)
    discipline every other real HUD element in this file uses -- input is separately, fully
    suppressed elsewhere while this is open (see the main loop's own "menu pauses movement" real
    comment), so there's no real ambiguity about whether WASD is walking or scrolling. */
-static void draw_inventory_list(int win_w, int win_h, const PcInventorySlot *slots, int cursor) {
-    glDisable(GL_DEPTH_TEST);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, win_w, 0, win_h, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    float panel_w = 340.0f, panel_h = 40.0f + 26.0f * (float)PC_INVENTORY_SLOTS;
-    float px = (float)win_w / 2.0f - panel_w / 2.0f;
-    float py = (float)win_h / 2.0f - panel_h / 2.0f;
-
-    glColor3f(0.08f, 0.08f, 0.11f);
+/* ---- BIG_O phone (bigo_phone.h): every menu lives here. Overlay panel, same GL discipline as the HUD above. ---- */
+static void bp_quad(float x, float y, float w, float h, float r, float g, float b) {
+    glColor3f(r, g, b);
     glBegin(GL_QUADS);
-    glVertex2f(px, py); glVertex2f(px + panel_w, py);
-    glVertex2f(px + panel_w, py + panel_h); glVertex2f(px, py + panel_h);
+    glVertex2f(x, y); glVertex2f(x + w, y); glVertex2f(x + w, y + h); glVertex2f(x, y + h);
     glEnd();
-
-    glColor3f(0.9f, 0.85f, 0.6f);
-    pc_draw_string("INVENTORY", px + 16.0f, py + panel_h - 30.0f, 8);
-
-    for (int i = 0; i < PC_INVENTORY_SLOTS; i++) {
-        float row_y = py + panel_h - 60.0f - 26.0f * (float)i;
-        char line[80];
-        if (slots[i].item_id == PC_ITEM_NONE) {
-            snprintf(line, sizeof(line), "%s  %s", (i == cursor) ? ">" : " ", pc_item_name(slots[i].item_id));
-        } else {
-            snprintf(line, sizeof(line), "%s  %-16s x%d", (i == cursor) ? ">" : " ", pc_item_name(slots[i].item_id), slots[i].count);
-        }
-        if (i == cursor) glColor3f(0.95f, 0.85f, 0.3f);
-        else if (slots[i].item_id == PC_ITEM_NONE) glColor3f(0.4f, 0.4f, 0.42f);
-        else glColor3f(0.85f, 0.85f, 0.85f);
-        pc_draw_string(line, px + 16.0f, row_y, 7);
-    }
 }
+static void bp_line(float x, float y, const char *txt, int selected, float dim) {
+    if (selected) glColor3f(0.95f, 0.85f, 0.3f); else glColor3f(0.85f * dim, 0.85f * dim, 0.85f * dim);
+    char buf[64]; snprintf(buf, sizeof(buf), "%s%s", selected ? "* " : "  ", txt);
+    pc_draw_string(buf, x, y, 6);
+}
+static const char *bp_trunc(const char *s, char *out, size_t n, size_t maxc) {
+    snprintf(out, n, "%.*s", (int)maxc, s); return out;
+}
+static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPlayerState *own,
+                            const PcInventorySlot *inv, unsigned int now_ms_v) {
+    (void)now_ms_v;
+    glDisable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, win_w, 0, win_h, -1, 1);
+    glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+    float pw = 300.0f, ph = 460.0f;
+    float px = (float)win_w - pw - 30.0f, py = ((float)win_h - ph) / 2.0f;
+    bp_quad(px - 6, py - 6, pw + 12, ph + 12, 0.02f, 0.02f, 0.03f);   /* bezel */
+    bp_quad(px, py, pw, ph, 0.07f, 0.08f, 0.12f);                     /* screen */
+    float top = py + ph;
+    char line[96], tmp[64];
+
+    if (p->app < 0) {
+        glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string("PHONE", px + 14, top - 28, 8);
+        if (p->unread > 0) { snprintf(line, sizeof(line), "%d NEW", p->unread); glColor3f(0.95f, 0.3f, 0.3f); pc_draw_string(line, px + pw - 90, top - 28, 6); }
+        for (int i = 0; i < BP_APP_COUNT; i++) {
+            float cx = px + 14 + (float)(i % 3) * 94.0f, cy = top - 110 - (float)(i / 3) * 78.0f;
+            int sel = (i == p->home_cursor);
+            bp_quad(cx, cy, 84, 64, sel ? 0.25f : 0.12f, sel ? 0.22f : 0.14f, sel ? 0.1f : 0.2f);
+            if (sel) glColor3f(0.95f, 0.85f, 0.3f); else glColor3f(0.75f, 0.8f, 0.85f);
+            pc_draw_string(bp_trunc(BP_APP_NAMES[i], tmp, sizeof(tmp), 10), cx + 4, cy + 26, 5);
+            if (i == BP_APP_MESSAGES && p->unread > 0) bp_quad(cx + 70, cy + 50, 10, 10, 0.9f, 0.2f, 0.2f);
+        }
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("arrows/wasd move  enter open  esc close", px + 10, py + 12, 4);
+        return;
+    }
+
+    glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string(BP_APP_NAMES[p->app], px + 14, top - 28, 8);
+    float y = top - 62; const float step = 24.0f, x = px + 14;
+    switch (p->app) {
+    case BP_APP_MESSAGES:
+        if (p->message_count == 0) bp_line(x, y, "no messages", 0, 0.5f);
+        for (int i = 0; i < p->message_count && i < 12; i++) {
+            int id = p->messages[p->message_count - 1 - i];
+            const PcPhoneMessage *m = (id > 0 && (size_t)id < PC_PHONE_MESSAGE_TABLE_COUNT) ? &PC_PHONE_MESSAGE_TABLE[id] : &PC_PHONE_MESSAGE_TABLE[0];
+            snprintf(line, sizeof(line), "%s: %s", m->handle, m->text);
+            bp_line(x, y - step * (float)i, bp_trunc(line, tmp, sizeof(tmp), 40), i == p->cursor, 1.0f);
+        }
+        break;
+    case BP_APP_CONTACTS:
+        for (int i = 0; i < p->contacts_met; i++) {
+            snprintf(line, sizeof(line), "%s (%s)", BP_CONTACT_HANDLES[i], BP_TRUST_NAMES[p->trust[i]]);
+            bp_line(x, y - step * (float)i, bp_trunc(line, tmp, sizeof(tmp), 40), i == p->cursor, 1.0f);
+        }
+        glColor3f(0.6f, 0.9f, 0.7f); pc_draw_string("reply (left/right, enter):", x, y - step * 5, 5);
+        for (int r = 0; r < 3; r++) bp_line(x, y - step * (float)(6 + r), BP_REPLIES[r], r == p->cursor2, 1.0f);
+        if (p->replied[p->cursor]) { glColor3f(0.6f, 0.7f, 0.9f); snprintf(line, sizeof(line), "sent: %s", BP_REPLIES[p->replied[p->cursor] - 1]); pc_draw_string(line, x, y - step * 9.5f, 5); }
+        break;
+    case BP_APP_MAP:
+        for (int i = 0; i < BP_ZONES; i++) {
+            snprintf(line, sizeof(line), "%s%s%s%s", BP_ZONE_NAMES[i], i == p->zone_current ? "  (you)" : "", i == p->zone_pinned ? "  (pin)" : "", i == p->zone_alert ? "  !!" : "");
+            bp_line(x, y - step * (float)i, bp_trunc(line, tmp, sizeof(tmp), 40), i == p->cursor, 1.0f);
+        }
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("a faction document, not a GPS", x, y - step * 6, 5);
+        break;
+    case BP_APP_CAMERA:
+        snprintf(line, sizeof(line), "photos this session: %d", p->photos); glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y, 6);
+        bp_line(x, y - step * 2, "( TAKE PHOTO )", 1, 1.0f);
+        glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("being seen documenting draws attention", x, y - step * 4, 4);
+        break;
+    case BP_APP_NOTES:
+        for (int i = 0; i < BP_NOTE_LINES; i++) bp_line(x, y - step * (float)i, p->notes[i][0] ? p->notes[i] : "-", i == p->cursor, 1.0f);
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("read-only for now (no text entry)", x, y - step * 7, 4);
+        break;
+    case BP_APP_LAB:
+        snprintf(line, sizeof(line), "samples S%d H%d B%d", p->samples[0], p->samples[1], p->samples[2]); glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y, 6);
+        snprintf(line, sizeof(line), "base  - %s +", BP_BASES[p->cursor2]); bp_line(x, y - step * 1.5f, line, p->cursor == 0, 1.0f);
+        snprintf(line, sizeof(line), "trait - %s +", BP_TRAITS[p->lab_trait]); bp_line(x, y - step * 2.5f, line, p->cursor == 1, 1.0f);
+        bp_line(x, y - step * 3.5f, "( SPLICE )", p->cursor == 2, p->samples[p->cursor2] > 0 ? 1.0f : 0.4f);
+        snprintf(line, sizeof(line), "clones: %d", p->clone_count); bp_line(x, y - step * 5, line, p->cursor == 3, 1.0f);
+        for (int i = 0; i < p->clone_count && i < 5; i++) { snprintf(line, sizeof(line), "%s / %s", BP_BASES[p->clones[i]], BP_TRAITS[p->clone_traits[i]]); glColor3f(0.6f, 0.9f, 0.7f); pc_draw_string(line, x + 12, y - step * (float)(6 + i), 5); }
+        if (p->samples[0] + p->samples[1] + p->samples[2] == 0) { glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("no samples: harvest by day", x, py + 30, 5); }
+        break;
+    case BP_APP_CARGO:
+        for (int i = 0; i < BP_INV_SLOTS && i < PC_INVENTORY_SLOTS; i++) {
+            if (inv[i].item_id == PC_ITEM_NONE) snprintf(line, sizeof(line), "%s", pc_item_name(inv[i].item_id));
+            else snprintf(line, sizeof(line), "%-14s x%d", pc_item_name(inv[i].item_id), inv[i].count);
+            bp_line(x, y - step * (float)i, line, i == p->cursor, inv[i].item_id == PC_ITEM_NONE ? 0.5f : 1.0f);
+        }
+        break;
+    case BP_APP_SKILLS: {
+        static const char *const nm[5] = { "MOVE", "VITALITY", "HANDLING", "SHIELD", "STORM" };
+        snprintf(line, sizeof(line), "points to spend: %d", own->unspent_points); glColor3f(0.95f, 0.95f, 0.6f); pc_draw_string(line, x, y, 6);
+        for (int i = 0; i < 5; i++) { snprintf(line, sizeof(line), "%-9s %d", nm[i], own->ability[i]); bp_line(x, y - step * (float)(i + 1.5f), line, i == p->cursor, 1.0f); }
+        break; }
+    case BP_APP_LOADOUT: {
+        static const char *const nm[6] = { "KNIFE", "MAGNUM", "AR", "SHOTGUN", "SNIPER", "KATANA" };
+        for (int i = 0; i < 6; i++) {
+            int owned = (i == 0) || (p->weapons_owned & (1 << i));
+            snprintf(line, sizeof(line), "%s%s%s", nm[i], i == p->current_weapon ? "  (held)" : "", owned ? "" : "  -");
+            bp_line(x, y - step * (float)i, line, i == p->cursor, owned ? 1.0f : 0.4f);
+        }
+        break; }
+    case BP_APP_WARDROBE:
+        for (int i = 0; i < BP_COSTUMES; i++) {
+            snprintf(line, sizeof(line), "%s%s", BP_COSTUME_NAMES[i], i == p->costume ? "  (worn)" : "");
+            bp_line(x, y - step * (float)i, line, i == p->cursor, 1.0f);
+        }
+        glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("wrong costume in a zone = decorum loss", x, y - step * 5, 4);
+        break;
+    case BP_APP_STATUS:
+        snprintf(line, sizeof(line), "LVL %d  XP %d/%d", own->level, own->xp, own->xp_to_next); glColor3f(0.95f, 0.95f, 0.6f); pc_draw_string(line, x, y, 6);
+        snprintf(line, sizeof(line), "pos %.0f %.0f %.0f", own->x, own->y, own->z); glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y - step, 6);
+        glColor3f(0.9f, 0.6f, 0.4f);
+        pc_draw_string("decorum / witnesses: not yet", x, y - step * 3, 5);
+        pc_draw_string("fed by the server (rules core", x, y - step * 3.7f, 5);
+        pc_draw_string("is not linked to this client)", x, y - step * 4.4f, 5);
+        break;
+    default: break;
+    }
+    glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("esc: back", px + 10, py + 12, 4);
+}
+
 
 static void draw_player_marker(float x, float y, float z, float yaw, int is_own) {
     glPushMatrix();
@@ -1189,8 +1286,6 @@ int main(int argc, char **argv) {
        non-zero PC_PACKET_PHONE_MESSAGE arrival sets both fields, and draw_phone_notification below
        clears phone_msg_id back to 0 once PC_PHONE_BANNER_MS has elapsed -- same timed-banner shape
        as draw_weak_connection_indicator's own real gap readout, just latched instead of live. */
-    unsigned char phone_msg_id = 0;
-    unsigned int phone_msg_shown_ms = 0;
 
     /* Real, "simple but trackable" GTA3-style dropped-item entities + FFXI-style list inventory
        (founder real-time, 2026-08-30). Local entity list is built ENTIRELY from real
@@ -1203,8 +1298,15 @@ int main(int argc, char **argv) {
     static ClientEntity g_client_entities[PC_ENTITY_MAX];
     PcInventorySlot g_inventory[PC_INVENTORY_SLOTS];
     memset(g_inventory, 0, sizeof(g_inventory));
-    int inventory_open = 0;
-    int inventory_cursor = 0;
+#define PHONE_APPLY(FX) do { BpEffect fx_ = (FX); \
+        if (fx_.kind == BP_FX_ALLOCATE_TALENT) { PcAllocateTalentPacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_ALLOCATE_TALENT; rq.hdr.sequence = ++allocate_seq; rq.ability_index = (unsigned char)fx_.arg; \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
+        else if (fx_.kind == BP_FX_WEAPON_SWITCH) { PcWeaponSwitchPacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_WEAPON_SWITCH; rq.hdr.sequence = ++allocate_seq; rq.requested_slot = (unsigned char)fx_.arg; \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
+    } while (0)
+    BigoPhone phone; bigo_phone_init(&phone); /* every menu is reached through this (bigo_phone.h) */
 
     /* Real "arsenal" ownership (2026-09-07, founder real-time: "aresnal (weapon switching)...
        not all characters get all aresenals you have to find a [shotgun] etc"). Real, whole-
@@ -1347,7 +1449,7 @@ int main(int argc, char **argv) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
-            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) running = 0;
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && !phone.open) running = 0;
             if (e.type == SDL_MOUSEMOTION) {
                 cam_yaw -= (float)e.motion.xrel * PC_MOUSE_SENSITIVITY;
                 cam_pitch -= (float)e.motion.yrel * PC_MOUSE_SENSITIVITY;
@@ -1413,12 +1515,20 @@ int main(int argc, char **argv) {
                    real menu list scrolls, not how movement works) -- WASD/arrow movement is
                    separately zeroed out below while the menu is open, same real "menu pauses
                    movement" convention this genre already uses. */
-                if (e.key.keysym.sym == SDLK_i) {
-                    inventory_open = !inventory_open;
-                } else if (inventory_open && (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_w)) {
-                    inventory_cursor = (inventory_cursor - 1 + PC_INVENTORY_SLOTS) % PC_INVENTORY_SLOTS;
-                } else if (inventory_open && (e.key.keysym.sym == SDLK_DOWN || e.key.keysym.sym == SDLK_s)) {
-                    inventory_cursor = (inventory_cursor + 1) % PC_INVENTORY_SLOTS;
+                {
+                    BpAction act = BP_UP; int have = 0;
+                    SDL_Keycode k = e.key.keysym.sym;
+                    if (k == SDLK_f) { bigo_phone_toggle(&phone); }
+                    else if (k == SDLK_i) { if (phone.open && phone.app == BP_APP_CARGO) phone.open = 0; else bigo_phone_open_app(&phone, BP_APP_CARGO); }
+                    else if (phone.open) {
+                        if (k == SDLK_UP || k == SDLK_w) { act = BP_UP; have = 1; }
+                        else if (k == SDLK_DOWN || k == SDLK_s) { act = BP_DOWN; have = 1; }
+                        else if (k == SDLK_LEFT || k == SDLK_a) { act = BP_LEFT; have = 1; }
+                        else if (k == SDLK_RIGHT || k == SDLK_d) { act = BP_RIGHT; have = 1; }
+                        else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) { act = BP_SELECT; have = 1; }
+                        else if (k == SDLK_ESCAPE || k == SDLK_BACKSPACE) { act = BP_BACK; have = 1; }
+                    }
+                    if (have) PHONE_APPLY(bigo_phone_input(&phone, act, latest_snap.players[my_slot].unspent_points));
                 }
             }
             /* Real, discrete controller-button events (SDL_CONTROLLERBUTTONDOWN, not a held-state
@@ -1431,11 +1541,17 @@ int main(int argc, char **argv) {
                     req.hdr.sequence = ++allocate_seq;
                     sendto(sock, (const char *)&req, sizeof(req), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
                 } else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_Y) {
-                    inventory_open = !inventory_open;
-                } else if (inventory_open && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-                    inventory_cursor = (inventory_cursor - 1 + PC_INVENTORY_SLOTS) % PC_INVENTORY_SLOTS;
-                } else if (inventory_open && e.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-                    inventory_cursor = (inventory_cursor + 1) % PC_INVENTORY_SLOTS;
+                    bigo_phone_toggle(&phone);
+                } else if (phone.open) {
+                    int c = e.cbutton.button; BpAction act = BP_UP; int have = 1;
+                    if (c == SDL_CONTROLLER_BUTTON_DPAD_UP) act = BP_UP;
+                    else if (c == SDL_CONTROLLER_BUTTON_DPAD_DOWN) act = BP_DOWN;
+                    else if (c == SDL_CONTROLLER_BUTTON_DPAD_LEFT) act = BP_LEFT;
+                    else if (c == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) act = BP_RIGHT;
+                    else if (c == SDL_CONTROLLER_BUTTON_A) act = BP_SELECT;
+                    else if (c == SDL_CONTROLLER_BUTTON_B) act = BP_BACK;
+                    else have = 0;
+                    if (have) PHONE_APPLY(bigo_phone_input(&phone, act, latest_snap.players[my_slot].unspent_points));
                 }
             }
         }
@@ -1516,8 +1632,7 @@ int main(int argc, char **argv) {
                 last_snapshot_ms = now_ms();
             } else if (hdr.type == PC_PACKET_PHONE_MESSAGE && (size_t)n >= sizeof(PcPhoneMessagePacket)) {
                 PcPhoneMessagePacket pm; memcpy(&pm, buf, sizeof(pm));
-                phone_msg_id = pm.message_id;
-                phone_msg_shown_ms = now_ms();
+                bigo_phone_notify(&phone, pm.message_id, now_ms());
                 printf("Phone notification received -- message_id %u.\n", pm.message_id);
             } else if (hdr.type == PC_PACKET_ENTITY_SPAWN && (size_t)n >= sizeof(PcEntitySpawnPacket)) {
                 PcEntitySpawnPacket sp; memcpy(&sp, buf, sizeof(sp));
@@ -1628,7 +1743,7 @@ int main(int argc, char **argv) {
            list doesn't also walk the character around or trigger a jump. A real, empty UserCmd
            still gets sent below (keeps last_usercmd_ms fresh server-side), just with no real
            movement in it. */
-        if (inventory_open) {
+        if (phone.open) {
             move_x = 0.0f;
             move_z = 0.0f;
             buttons = 0;
@@ -1814,15 +1929,17 @@ int main(int argc, char **argv) {
         if (welcomed && now - last_snapshot_ms > PC_CLIENT_WEAK_MS) {
             draw_weak_connection_indicator(win_w, win_h, now - last_snapshot_ms);
         }
-        if (phone_msg_id != 0) {
-            if (now - phone_msg_shown_ms > PC_PHONE_BANNER_MS) {
-                phone_msg_id = 0; /* real, timed clear -- see draw_phone_notification's own doc comment */
-            } else {
-                draw_phone_notification(win_w, win_h, phone_msg_id);
+        bigo_phone_tick(&phone, now);
+        phone.weapons_owned = (int)g_weapons_owned; phone.current_weapon = g_current_weapon;
+        if (phone.banner_id != 0 && !phone.open) {
+            draw_phone_notification(win_w, win_h, (unsigned char)phone.banner_id);
+            if (phone.banner_batched > 1) {
+                char more[40]; snprintf(more, sizeof(more), "+%d more messages", phone.banner_batched - 1);
+                glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string(more, (float)win_w / 2.0f - 150.0f, 22.0f, 6);
             }
         }
-        if (inventory_open) {
-            draw_inventory_list(win_w, win_h, g_inventory, inventory_cursor);
+        if (phone.open) {
+            draw_bigo_phone(win_w, win_h, &phone, &own, g_inventory, now);
         }
 
         SDL_GL_SwapWindow(win);

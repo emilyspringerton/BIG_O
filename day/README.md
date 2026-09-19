@@ -22,3 +22,19 @@ NPC kit loader (`gband_skel_npc_load_kit` only has idle/walk/greet/dance slots â
 bundles `BIG_O_Linux/` (client + PLAY.sh) and `BIG_O_Windows/` (client + `SDL2.dll` + PLAY.bat) and attaches
 `bigo-linux-x86_64.tar.gz` / `bigo-windows-x86_64.zip` to each release. Both compile locally; the CI jobs are untested until pushed.
 The client is still the PAPERCRAFT client (city/worldapi + IDUNA login); `bigo_sim.exe` is only the headless rules text-sim.
+
+## The phone: every menu goes through it (S504-10)
+Source spec found at `TYLER/engine/tyler_phone_mechanics.md` (Messages, Contacts, Map, Camera, Notes; banner anti-spam
+"max 2 per 30s, extras batched"). PAPERCRAFT had only the banner; BIG_O has the browsable phone. `F` toggles it, `I` jumps to
+Cargo, arrows/WASD navigate, Enter selects, Esc backs out (Esc quits only when the phone is closed); controller: Y toggle, D-pad, A/B.
+Movement is suppressed while it is open. Logic is `day/packages/common/bigo_phone.h` (pure, unit-tested: `bigo_phone_test`, Bazel);
+rendering is `draw_bigo_phone` in the client; `day/tools/phone_preview.c` renders every screen under Xvfb for visual checks.
+
+| App | State |
+|---|---|
+| Messages, Notes | real (message log fed by server phone packets; notes read-only) |
+| Cargo, Skills, Loadout | real: wired to the server's inventory, talent allocation, and weapon switch |
+| Contacts, Map, Camera, Wardrobe | local UI only: replies/pins/photos/costume are client-side, no server effect yet; camera takes no screenshot |
+| Lab | UI + splice logic work; sample counts are 0 until harvesting exists, so SPLICE is inert in a real session |
+| Status | shows level/XP/position; decorum/witness readouts NOT wired (rules core isn't linked into the client) |
+Verified: unit test passes; client builds Linux+Windows; all 12 screens rendered and inspected. Not verified: live play against a server.
