@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## 2026-09-19
+- feat(sky): configurable procedural skybox + weather rendering (config file, per-weather profiles, F9 reload), client integration, preview tool, unit test (S504-15)
 - feat(phone): world feed (clock/weather/zombie counts in header, Map, Status), alert + Thorne A1M1 messages with full-text detail view, Thorne contact; client runs the world sim locally as an interim feed (S504-14)
 - feat(world): day/night clock, GFD-derived weather, day-time zombie spawner + harvest, all decided by PARENA (`world_rules.prn`), announced on a REFLUX log with a subscriber-mod example (`world_alerts_mod.prn`); scenarios 30-35; `docs/B2_WORLD.md` (S504-13)
 - feat(mission): Act I Mission 1 tracker (`core/mission.{h,c}`), 4 scenarios (clean run + 3 fail paths), `docs/A1M1_PLAN.md` (S504-12)

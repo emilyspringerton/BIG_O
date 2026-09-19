@@ -44,3 +44,14 @@ Verified: unit test passes; client builds Linux+Windows; all 12 screens rendered
 (1 real second = 1 game minute), pushing clock, weather, zombie counts and alert messages into the phone. It is not
 server-authoritative and not shared between players; it exists so the phone shows real world data until the server owns the world.
 Header, Map and Status read it; nothing in the 3D scene reacts to it yet (no sky, weather, or zombies rendered).
+
+## Sky and weather (configurable skybox)
+`day/packages/common/bigo_sky.h` renders a procedural sky from the world clock + weather: time-of-day gradient with sunrise/sunset
+glow, sun and moon with halos, twinkling stars, drifting cloud puffs, fog, rain streaks, storm gloom and lightning. It needs no
+assets. Everything visual is data: `bigo_skycfg.h` holds palettes (day/golden/dawn/twilight/night), sun/moon/star/cloud settings and
+**one profile per weather** (cover, rain, storm, darkness, grey, fog, cloud tint, grey tone); the sky eases toward the current
+weather's profile. Restyle by editing a text file: copy `day/assets/skybox_default.cfg` (every key, with defaults) to
+`assets/skybox.cfg` next to the client (or set `BIGO_SKYBOX=path`); **F9 reloads it live**. A bad file is rejected whole with its line
+number. `assets/skybox_toxic.cfg` is a worked example (green wasteland sky). Verified: config parser/sanitizer unit test
+(`bigo_skycfg_test`), and `day/tools/sky_preview.c` renders 13 time/weather shots under Xvfb (inspected). The client integration
+builds on Linux and Windows but has not been run in a live session (needs a server). Sky only: world geometry is not lit by the sun.

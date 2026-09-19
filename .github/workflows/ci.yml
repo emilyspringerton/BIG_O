@@ -93,6 +93,7 @@ jobs:
           set -euo pipefail
           mkdir -p BIG_O_Linux
           cp build/bigo_client_linux build/mapeditor_linux BIG_O_Linux/
+          mkdir -p BIG_O_Linux/assets && cp day/assets/skybox_*.cfg BIG_O_Linux/assets/
           printf '%s\n' '#!/usr/bin/env bash' 'exec "$(dirname "$0")/bigo_client_linux" "$@"' > BIG_O_Linux/PLAY.sh
           chmod +x BIG_O_Linux/*
       - uses: actions/upload-artifact@v4
@@ -120,6 +121,7 @@ jobs:
           set -euo pipefail
           mkdir -p BIG_O_Windows
           cp build/bigo_client.exe build/mapeditor.exe sdl2_mingw/bin/SDL2.dll BIG_O_Windows/
+          mkdir -p BIG_O_Windows/assets && cp day/assets/skybox_*.cfg BIG_O_Windows/assets/
           printf '%s\r\n' 'start bigo_client.exe' > BIG_O_Windows/PLAY.bat
           printf '%s\r\n' 'start mapeditor.exe' > BIG_O_Windows/EDIT_MAP.bat
       - uses: actions/upload-artifact@v4

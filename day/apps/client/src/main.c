@@ -56,6 +56,7 @@
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/hud_text.h"
 #include "../../../packages/common/bigo_phone.h"
+#include "../../../packages/common/bigo_sky.h"
 #include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
 #include "../../../packages/common/bigo_phone.h"
 
@@ -897,6 +898,15 @@ static void draw_entity_marker(float x, float y, float z, unsigned char item_id)
    suppressed elsewhere while this is open (see the main loop's own "menu pauses movement" real
    comment), so there's no real ambiguity about whether WASD is walking or scrolling. */
 
+/* ---- Sky: configurable procedural skybox (bigo_sky.h), driven by the world clock + weather. ---- */
+static BigoSky g_sky;
+static void bigo_sky_load_user_config(void) {
+    const char *path = getenv("BIGO_SKYBOX"); if (!path) path = "assets/skybox.cfg";
+    char err[160]; int r = bigo_sky_load_config(&g_sky, path, err, sizeof(err));
+    if (r >= 0) fprintf(stderr, "skybox: loaded %d keys from %s\n", r, path);
+    else if (getenv("BIGO_SKYBOX") || strncmp(err, "cannot open", 11) != 0) fprintf(stderr, "skybox: %s (keeping current sky)\n", err);
+}
+
 /* ---- Interim world feed: the client runs BIG_O's world sim (core/world.c: PARENA rules + REFLUX) LOCALLY and pushes it
    into the phone. NOT server-authoritative -- a stand-in until the server owns the world. 1 real second = 1 game minute. ---- */
 static Sim g_wsim; static World g_world; static FILE *g_wlog; static unsigned int g_wacc_ms, g_wlast_ms;
@@ -1575,7 +1585,8 @@ int main(int argc, char **argv) {
                 {
                     BpAction act = BP_UP; int have = 0;
                     SDL_Keycode k = e.key.keysym.sym;
-                    if (k == SDLK_f) { bigo_phone_toggle(&phone); }
+                    if (k == SDLK_F9) { if (g_sky.ready) bigo_sky_load_user_config(); }
+                    else if (k == SDLK_f) { bigo_phone_toggle(&phone); }
                     else if (k == SDLK_i) { if (phone.open && phone.app == BP_APP_CARGO) phone.open = 0; else bigo_phone_open_app(&phone, BP_APP_CARGO); }
                     else if (phone.open) {
                         if (k == SDLK_UP || k == SDLK_w) { act = BP_UP; have = 1; }
@@ -1862,7 +1873,9 @@ int main(int argc, char **argv) {
         }
 
         glViewport(0, 0, win_w, win_h);
-        glClearColor(0.55f, 0.75f, 0.92f, 1.0f);
+        if (!g_sky.ready) { bigo_sky_init(&g_sky); bigo_sky_load_user_config(); }
+        bigo_sky_update(&g_sky, phone.wf_valid ? (float)phone.wf_minute + (float)g_wacc_ms / 1000.0f : 720.0f, phone.wf_valid ? phone.wf_weather : 0, now);
+        glClearColor(g_sky.clear[0], g_sky.clear[1], g_sky.clear[2], 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
@@ -1888,6 +1901,8 @@ int main(int argc, char **argv) {
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
         gluLookAt(eye_x, eye_y, eye_z, own.x, own.y + 1.0f, own.z, 0.0, 1.0, 0.0);
+        bigo_sky_draw(&g_sky);
+        bigo_sky_fog_on(&g_sky);
 
         /* Real, data-driven carve-out pre-pass -- applied BEFORE draw_city_world so a real
            object's own carved-out block region never renders solid for even one real frame
@@ -1966,12 +1981,16 @@ int main(int argc, char **argv) {
             draw_entity_marker(g_client_entities[ei].x, g_client_entities[ei].y, g_client_entities[ei].z,
                                 g_client_entities[ei].item_id);
         }
+        if (!have_snapshot) bigo_sky_fog_off();
         if (have_snapshot) {
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 if (!latest_snap.active[i]) continue;
                 PcPlayerState *p = &latest_snap.players[i];
                 draw_player_marker(p->x, p->y, p->z, p->yaw, i == my_slot);
             }
+            bigo_sky_fog_off();
+            bigo_sky_draw_precip(&g_sky, eye_x, eye_y, eye_z, now);
+            bigo_sky_draw_grade(&g_sky, win_w, win_h);
             draw_progression_hud(win_w, win_h, &own);
             /* Real ping display -- guarded on echo_cmd_time_ms != 0 so nothing shows before the
                real first round trip has actually completed (a real, honest "not measured yet"
