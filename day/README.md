@@ -73,3 +73,16 @@ common on mobile carriers, so it fragments, and carriers drop fragments while sm
 ~190-byte snapshots, no-capability and old clients get plain ones, all decode. **Not yet verified on a real mobile link.**
 Rip out: client `--no-lz4`, server env `PAPERCRAFT_NO_LZ4=1` (no rebuild), or delete `lz4mini.h` + the three marked blocks
 (`PC_PACKET_SNAPSHOT_LZ4` in protocol/server/client).
+
+## Network diagnosis log (mobile play) and the LZ4 decision
+1. MTU/fragmentation hypothesis -> LZ4 (above). Player reported it did not fix the problem.
+2. Server log showed a mobile player frozen at spawn for minutes, with no telemetry to say why. Reproduced on a scratch server (`natprobe`): after a
+   source-port change (normal on cellular NAT) the server keeps streaming snapshots to the OLD port and silently ignores input from the new one, so the
+   client sees no snapshots ("weak connection 170s") and cannot move until its 55s full reconnect. **Fix:** soft re-hello -- client re-sends CONNECT every
+   2s after 4s of silence; the server's existing CONNECT path reclaims the slot by player_id and updates the address. Client mints a fresh ticket in the
+   background every ~2.5 min so the ticket it re-sends is always valid.
+3. Telemetry: client prints `[net] 5s: snapshots=.. (lz4=..) avg=..B maxgap=..ms silence=..ms soft_rehellos=..`; server prints per-slot `[net] slot N ip:port lz4=..
+   usercmds_rx=.. snaps_tx=.. cmd_age_ms=..` every 10s and logs "USERCMD ignored ... NAT port change" when input arrives from an unexpected port.
+**LZ4 keep/remove:** unproven either way. It is harmless (~190 B/snapshot, negotiated, `--no-lz4` / `PAPERCRAFT_NO_LZ4=1` to disable) and removes a plausible
+fragmentation risk. Decide from a real session's `[net]` lines: if `avg` is ~190B with `lz4>0` and problems persist with soft_rehellos near zero, LZ4 was not the
+issue and can go; if `soft_rehellos` fire and recover, the NAT fix is what mattered.
