@@ -1,0 +1,577 @@
+#ifndef PAPERCRAFT_PROTOCOL_H
+#define PAPERCRAFT_PROTOCOL_H
+
+#include "papercraft_worldobjects.h"
+
+/* papercraft_protocol.h -- real Phase 0 wire protocol (PAPERCRAFT/NORTHSTAR.md's own "Real Phase
+ * 0" section: "a player can log in and spawn in the real persistent city, nothing else").
+ *
+ * Shape mirrors WEAKNIGHT_BEDROCK_RACERS' own racer_protocol.h (a small NetHeader-style framing
+ * struct, a fixed-tick server-authoritative sim, a UserCmd-in/Snapshot-out packet pair, a real
+ * HMAC connect-ticket) -- same real pattern, sized for a single, real, on-foot player standing in
+ * the real city instead of a vehicle. No vehicle_type/gear fields here -- this is on-foot
+ * movement, not racing.
+ *
+ * Unlike WEAKNIGHT_BEDROCK_RACERS, there is no matchmaking queue in this protocol at all --
+ * PAPERCRAFT is a real single-node persistent world ("papercraft shouldnt have matches"), so a
+ * client goes straight from a minted ticket to CONNECT, no queue step in between.
+ */
+
+#define PC_PACKET_CONNECT          0
+#define PC_PACKET_WELCOME          1
+#define PC_PACKET_USERCMD          2
+#define PC_PACKET_SNAPSHOT         3
+#define PC_PACKET_REJECT           4
+#define PC_PACKET_ALLOCATE_TALENT  5
+#define PC_PACKET_INTERACT         6
+#define PC_PACKET_PHONE_MESSAGE    7
+#define PC_PACKET_ENTITY_SPAWN     8
+#define PC_PACKET_ENTITY_DESPAWN   9
+#define PC_PACKET_INVENTORY_UPDATE 10
+#define PC_PACKET_WEAPON_SWITCH    11 /* client -> server: "let me switch to this weapon slot" */
+#define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
+
+/* Connect-ticket auth -- direct port of racer_protocol.h's own RC_TICKET_* wire format. Minted
+ * by IDUNA's PapercraftTicketHandler (internal/http/handlers/papercraft_ticket.go) from a real
+ * player JWT (POST /api/v1/auth/email/login). player_id(16) + expires_at(4, LE u32) +
+ * hmac_sha256(secret, player_id||expires_at) truncated to 16 bytes = 36 raw bytes, appended after
+ * PcConnectPacket's own header. Both sides must agree on PAPERCRAFT_TICKET_SECRET byte-for-byte
+ * (raw string bytes, not hex-decoded). */
+#define PC_TICKET_PAYLOAD_LEN 20 /* player_id(16) + expires_at(4) */
+#define PC_TICKET_MAC_LEN     16 /* truncated HMAC-SHA256 */
+#define PC_TICKET_TOTAL_LEN   (PC_TICKET_PAYLOAD_LEN + PC_TICKET_MAC_LEN) /* 36 */
+
+typedef struct {
+    unsigned char type;
+    unsigned char client_id;
+    unsigned int sequence;
+} PcHeader;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char ticket[PC_TICKET_TOTAL_LEN];
+} PcConnectPacket;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char client_id;
+} PcWelcomePacket;
+
+/* PcRejectPacket -- a real, visible rejection (bad/expired ticket, no
+ * PAPERCRAFT_TICKET_SECRET configured server-side) instead of a silent hang -- same real
+ * discipline racer_protocol.h's own RcRejectPacket already established. */
+#define PC_REJECT_REASON_MAX 63
+typedef struct {
+    PcHeader hdr;
+    char reason[PC_REJECT_REASON_MAX + 1];
+} PcRejectPacket;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned int cmd_sequence;
+    unsigned int cmd_time_ms;
+    /* Real, live redesign (2026-09-02, founder real-time: "make movement relative to the camera
+       with wasd and the control stick... check the way that the shankpit construct works... it
+       has an example of how 3rd person should work"). This struct's own comment used to claim
+       move_x/move_z were already "world-space-relative-to-camera-yaw" -- that was the real,
+       intended design from this file's very first commit (1d940a4), but the client never
+       actually implemented it (raw WASD went out as literal world-space north/east/south/west,
+       camera yaw was never consulted at all) until a same-session first attempt rotated the
+       vector client-side before sending. Reviewing SHANKPIT_CONSTRUCT.txt's own real
+       phys_update_player (packages/simulation/game_physics.h) found the correct, more complete
+       model that first attempt was still missing: a real 3rd-person controller sends LOCAL
+       fwd/strafe plus the camera's own yaw as its own explicit field, and the HOST sets the
+       player's facing straight from that transmitted yaw -- never derived from whichever
+       direction the player happens to be moving. PAPERCRAFT's own prior behavior (state.yaw =
+       atan2f(mx, mz), server main.c) tied facing to travel direction even after the client-side
+       rotation fix, which is exactly why it still felt wrong: strafing or backpedaling spun the
+       character to face its direction of travel instead of continuing to face the camera, and
+       PC_PACKET_INTERACT's own real reach direction (sinf/cosf(state.yaw)) inherited that same
+       wrong-facing problem -- the real, honest cause of the "combat is jacked up" symptom too,
+       even with no real combat built yet. */
+    float move_x; /* -1..1, LOCAL strafe input (right = positive), camera-yaw-relative once
+                     rotated server-side by `yaw` below -- see PC_TICK_DT's own movement block */
+    float move_z; /* -1..1, LOCAL forward input (forward = positive) */
+    float yaw;    /* radians, Forward(yaw) = (sin(yaw), cos(yaw)) -- this repo's own established
+                     convention (matches the pre-existing atan2f(mx, mz) yaw this struct's old
+                     move-derived facing used, and apps/lobby/src/main.c's own real "Camera/aim
+                     world convention (single source of truth)" comment in the construct). The
+                     client's own current camera yaw (cam_yaw), sent every tick regardless of
+                     whether the player is moving -- facing no longer depends on movement at all. */
+    unsigned int buttons; /* PC_BTN_* bitmask */
+} PcUserCmdPacket;
+
+#define PC_BTN_JUMP    1
+#define PC_BTN_CROUCH  2 /* real, minimal crouch signal -- gates the real slide-jump trick below,
+                            no real crouch collision-height change yet (this game has no capsule/
+                            height collision at all, only column-based ground snapping) */
+
+/* PcAllocateTalentPacket -- real client request to spend one unspent point on one of the real
+ * five construct stats (PC_ABILITY_* below). The real DECISION (is this legal right now?) is
+ * PARENA's own, not this struct's -- see apps/server/src/main.c's own real call into
+ * on_papercraft_can_allocate_talent (packages/simulation/talent_mod.c) for the actual gate.
+ * Sent once per keypress client-side, not every tick -- unlike PcUserCmdPacket, this isn't a
+ * continuous-input stream. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char ability_index; /* 0..PC_ABILITY_COUNT-1 */
+} PcAllocateTalentPacket;
+
+/* PC_ABILITY_*: real construct stat slots, SHANKPIT_CONSTRUCT.txt's own MatchProgression.ability[5]
+ * (progression_apply_bonuses, construct lines 819-846) -- move speed, passive health regen,
+ * attack-cooldown reduction, passive shield regen, ability-cooldown reduction. Kept in this exact
+ * real order so a future real port of progression_apply_bonuses' own per-stat effects lines up
+ * with the construct's own array indices, not a renumbering. */
+#define PC_ABILITY_MOVE     0
+#define PC_ABILITY_VITALITY 1
+#define PC_ABILITY_HANDLING 2
+#define PC_ABILITY_SHIELD   3
+#define PC_ABILITY_STORM    4
+#define PC_ABILITY_COUNT    5
+
+/* Real RPG progression fields (2026-08-28, wiring the already-tested level_mod.c/talent_mod.c
+ * into the actual live game loop for the first time -- "keep the experience gain from the
+ * construct i like the idea of papercraft having a leveling system"). Mirrors
+ * SHANKPIT_CONSTRUCT.txt's own real MatchProgression fields (level, xp, unspent_points) -- see
+ * apps/server/src/main.c's own real per-second XP tick, the same real cadence
+ * progression_tick's own construct code uses. xp_to_next is the real cumulative total (from
+ * xp_required_for_level, packages/simulation/level_mod.c) the client needs to draw a real
+ * progress readout without re-deriving the curve itself. */
+typedef struct {
+    float x, y, z;
+    float yaw; /* radians, world-space heading */
+    int level;
+    int xp;
+    int xp_to_next;
+    int unspent_points;
+    int ability[PC_ABILITY_COUNT]; /* real construct talent ranks -- see PC_ABILITY_* above */
+} PcPlayerState;
+
+/* PC_WPN_*: real weapon-slot constants -- must match PARENA/stdlib/papercraft/weapon_mod.prn's
+ * own weapon-slot-* functions byte-for-byte. Direct port of SHANKPIT's own WPN_KNIFE/MAGNUM/AR/
+ * SHOTGUN/SNIPER/KATANA roster (packages/common/protocol.h in SHANKPIT) -- WPN_MISSILE excluded
+ * from this first slice (a travelling-projectile weapon type this sandbox's combat has no
+ * hit-detection story for yet). PC_WPN_KNIFE is the real, universal baseline every character
+ * always has (on_papercraft_weapon_switch_allowed's own real rule) -- "not all characters get
+ * all arsenals" means every OTHER slot must be found in the world first. */
+#define PC_WPN_KNIFE   0
+#define PC_WPN_MAGNUM  1
+#define PC_WPN_AR      2
+#define PC_WPN_SHOTGUN 3
+#define PC_WPN_SNIPER  4
+#define PC_WPN_KATANA  5
+#define PC_WPN_COUNT   6
+
+/* PcWeaponSwitchPacket -- real client request, one per keypress/scroll (not a continuous stream
+ * like PcUserCmdPacket), to switch to a specific weapon slot. The real DECISION (does this
+ * player actually own this weapon, or is it the universal baseline Knife?) is PARENA's own --
+ * see apps/server/src/main.c's own real call into on_papercraft_weapon_switch_allowed
+ * (packages/simulation/weapon_mod.c) for the actual gate, same "mod decides, host applies"
+ * split every other real mod call site in this monorepo already uses. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char requested_slot; /* PC_WPN_* */
+} PcWeaponSwitchPacket;
+
+/* PcWeaponOwnedPacket -- real, whole-state sync to ONE specific player, same "private to the
+ * owner, never broadcast" convention PcInventoryUpdatePacket's own doc comment already
+ * establishes for inventory contents. Carries BOTH weapons_owned (which slots this player has
+ * found) and current_weapon (their own real, server-authoritative confirmation of which slot is
+ * actually equipped right now, resent after every switch attempt -- allowed or denied -- so this
+ * client's own HUD never has to guess or optimistically assume a switch landed).
+ *
+ * Real, deliberate v0 scope: current_weapon is NOT also broadcast to every OTHER player in
+ * PcSnapshotPacket, unlike position/yaw. Adding it there was tried and reverted (2026-09-07) --
+ * it pushed sizeof(PcSnapshotPacket) from 1436 to 1500 bytes, past the real 1472-byte
+ * (Ethernet MTU minus IP/UDP headers) unfragmented-UDP-packet budget this struct's own doc
+ * comment already names as a real, deliberate ceiling. Since this sandbox has no weapon
+ * rendering or combat built yet (NORTHSTAR.md's own "no combat requirement to start" --
+ * checked directly, nothing currently draws a viewmodel or reacts to what an opponent is
+ * holding), broadcasting it to everyone would have been real, premature wire cost for a value
+ * nothing on the client side does anything with yet. Real, honest, named follow-up: once real
+ * combat/weapon rendering lands, this needs a real wire-budget pass (a packed per-player byte
+ * array alongside `active[]`, not a field inside PcPlayerState itself, is the likely shape) to
+ * add it back without re-exceeding the same 1472-byte ceiling. */
+typedef struct {
+    PcHeader hdr;
+    unsigned int weapons_owned; /* bit N set = PC_WPN_* slot N has been found and is usable */
+    unsigned char current_weapon; /* PC_WPN_*, this client's own currently-equipped slot */
+} PcWeaponOwnedPacket;
+
+/* PC_MAX_PLAYERS -- real, bounded slot count for Phase 0. Not derived from any real capacity
+ * planning yet (this is a real single-node persistent world, not a fixed-size match roster the
+ * way WEAKNIGHT_BEDROCK_RACERS' own RC_MAX_VEHICLES is) -- a real, generous-enough number to
+ * develop against, revisit once real player-count data exists. */
+#define PC_MAX_PLAYERS 16
+
+/* PcInteractPacket -- real client request, one per keypress (E), to punch/interact with
+ * whatever's in reach -- the minimal real input needed to actually exercise the already-built
+ * Paper Engine (packages/common/paper_mesh.h, docs/NORTHSTAR_PAPER_ENGINE.md) in the live game,
+ * without inventing a real combat system this sandbox doesn't have yet (NORTHSTAR.md's own "no
+ * combat requirement to start"). The server derives the real hit point from the player's own
+ * current position+yaw (a real reach distance in front of them) -- this packet carries no
+ * aim/target data itself, matching Phase 0's own "smallest real proof point" bar. */
+typedef struct {
+    PcHeader hdr;
+} PcInteractPacket;
+
+/* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
+ * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:
+ * Messages app + notification banner, per that doc's own phased design). The real DECISION (does
+ * this event produce a phone notification, and which one?) is PARENA's own -- see
+ * apps/server/src/main.c's own real call into on_papercraft_phone_message_for_event
+ * (packages/simulation/phone_mod.c) for the actual gate.
+ *
+ * Deliberate departure from the source spec: tyler_phone_mechanics.md's own wire format is a
+ * JSON PacketPhoneEvent payload (`{type, handle, text, meta}`), designed for SHANKPIT's own Go
+ * server. This repo's own established convention throughout is fixed-size binary structs, not
+ * JSON-over-UDP (matching every other Pc*Packet here), and VS0 is I32-scalar-only so the mod
+ * itself can't produce a JSON string regardless -- so the real wire shape is just one
+ * message_id byte. Both apps/server and apps/client hold an identical, real, hardcoded
+ * handle+text lookup table keyed by message_id (same "client independently regenerates
+ * identical content from a shared id" convention this repo's own world-object system already
+ * uses) -- see apps/client/src/main.c's own PC_PHONE_MESSAGE_TABLE. message_id 0 is reserved
+ * for "no notification" and is never actually sent over the wire. */
+#define PC_PHONE_EVENT_OBJECT_DESTROYED 1 /* must match phone_mod.prn's own event-object-destroyed */
+
+#define PC_PHONE_MESSAGE_OBJECT_DESTROYED 1 /* must match phone_mod.prn's own message-object-destroyed */
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char message_id; /* PC_PHONE_MESSAGE_*, never 0 */
+} PcPhoneMessagePacket;
+
+/* Real, "simple but trackable" GTA3-style item drops + FFXI-style list inventory (founder
+ * real-time, 2026-08-30: "go ahead with the entity and inventory system simple but trackable
+ * gta3 style stuff drops and you can pick it up ffxi style list affordances first"). PAPERCRAFT's
+ * own first real world-entity concept, distinct from the fixed PcWorldObjectDef/PcPlayerState
+ * split -- a dropped item is neither a player nor a persistent map object, it's a real, short-
+ * lived, server-spawned thing a player walks over and it's gone.
+ *
+ * Real, deliberately event-driven wire design (same real reasoning as PcPhoneMessagePacket's own
+ * doc comment): PcSnapshotPacket already sits at 1436 of a 1472-byte UDP MTU budget, only 36
+ * bytes of real headroom -- nowhere near enough to fold a real entity array into the continuous
+ * per-tick broadcast the way world_objects/falling are. Entities spawn and despawn rarely (an
+ * object breaks, a player walks over the drop) compared to the 20Hz snapshot cadence, so a real
+ * one-packet-per-event design (GTA3-style pickups aren't a continuous stream either) fits both
+ * the wire budget and the actual real event frequency far better. The client keeps its own real,
+ * local list of currently-active entities, built entirely from these two event packets --
+ * PC_PACKET_ENTITY_SPAWN adds one, PC_PACKET_ENTITY_DESPAWN removes it -- same real
+ * "client independently regenerates state from a shared id" discipline PC_PHONE_MESSAGE_TABLE
+ * and the world-object system both already use, just event-driven instead of snapshot-driven.
+ * Broadcast to every real connected player (a dropped item is real and visible to everyone in the
+ * world, not just the player who caused it), same real broadcast-loop shape apps/server's own
+ * snapshot send already uses. */
+#define PC_ENTITY_MAX 32 /* real, small, bounded cap, same "small bounded cap" precedent
+    PC_MAX_PLAYERS/PC_WO_MAX_OBJECTS/PC_FALLING_FRAGMENTS_MAX already set -- raising it later is
+    real, separate, easy work once this real first slice earns it. */
+
+/* PC_ITEM_*: real item-id constants. 0 is reserved for "no item" (a mod returning 0 means "this
+ * event drops nothing"), never a real, spawnable item. Must match item_drop_mod.prn's own
+ * item-scrap constant byte-for-byte. */
+#define PC_ITEM_NONE  0
+#define PC_ITEM_SCRAP 1
+
+/* PC_ITEM_WPN_*: real, findable weapon entities (2026-09-07, founder real-time: "not all
+ * characters get all aresenals you have to find a [shotgun] etc"). Spawned/picked up through the
+ * exact same real GTA3-style walk-over entity system PC_ITEM_SCRAP already uses
+ * (PcEntitySpawnPacket/PcEntityDespawnPacket) -- weapons are real world entities, not a separate
+ * mechanic. Must match PARENA/stdlib/papercraft/weapon_mod.prn's own weapon-mod-item-* constants
+ * byte-for-byte. Picking one up sets the matching bit in the finder's own real, per-player
+ * weapons_owned bitmask (apps/server/src/main.c) -- a permanent unlock, not a consumable; losing
+ * the physical pickup from inventory later (this repo has no item-loss mechanic yet regardless)
+ * would not revoke access, same real "you now know how to use this" precedent a Metroidvania-
+ * style permanent weapon unlock already establishes, named explicitly here since it's a real,
+ * deliberate v0 scope choice, not an oversight. */
+#define PC_ITEM_WPN_KNIFE   2
+#define PC_ITEM_WPN_MAGNUM  3
+#define PC_ITEM_WPN_AR      4
+#define PC_ITEM_WPN_SHOTGUN 5
+#define PC_ITEM_WPN_SNIPER  6
+#define PC_ITEM_WPN_KATANA  7
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char entity_id;  /* 0..PC_ENTITY_MAX-1, this world's own real, currently-active slot index */
+    unsigned char item_id;    /* PC_ITEM_*, never PC_ITEM_NONE on the wire */
+    float x, y, z;
+} PcEntitySpawnPacket;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char entity_id;
+} PcEntityDespawnPacket;
+
+/* Real, fixed-slot inventory -- PC_INVENTORY_SLOTS bounded slots per player, same "small bounded
+ * cap" discipline as PC_ENTITY_MAX above. Sent whole (not as a per-slot delta) on every real
+ * change -- simple and small enough (PC_INVENTORY_SLOTS * 2 bytes = 16) that a real delta
+ * protocol would be premature complexity for this real first slice. */
+#define PC_INVENTORY_SLOTS 8
+
+typedef struct {
+    unsigned char item_id; /* PC_ITEM_NONE for a real, honestly-empty slot */
+    unsigned char count;
+} PcInventorySlot;
+
+typedef struct {
+    PcHeader hdr;
+    PcInventorySlot slots[PC_INVENTORY_SLOTS];
+} PcInventoryUpdatePacket;
+
+/* PC_DEFAULT_OBJECT_*: the real, original world-positioned Paper Engine destructible prop this
+ * session first proved the whole real pipeline with (subdivide+jitter generation, real
+ * PARENA-decided damage, real client rendering), now demoted from a hardcoded runtime constant to
+ * just the real seed values apps/server uses to auto-populate a fresh, empty
+ * packages/common/papercraft_worldobjects.h world-objects file the very first time it finds none
+ * on disk -- from that point on it's real, persisted, map-editor-editable data (apps/mapeditor),
+ * not a compile-time constant. Not a retrofit of the city's own real VoxelBlock geometry (a real,
+ * separate, later integration). */
+#define PC_DEFAULT_OBJECT_MATERIAL    2 /* PAPER_MATERIAL_CONCRETE -- matches the real city's own concrete blocks */
+#define PC_DEFAULT_OBJECT_SEED        20260828u
+#define PC_DEFAULT_OBJECT_HALF_EXTENT 1.5f
+/* World position (chunk-local coordinates, matching PcPlayerState's own space) -- a few units
+   from the real spawn column (8,8) so a freshly-spawned player can walk straight to it. */
+#define PC_DEFAULT_OBJECT_X 12.0f
+#define PC_DEFAULT_OBJECT_Z 8.0f
+
+/* PC_CITY_WALL_A_* / PC_CITY_WALL_B_*: real seed values for the two real ~15-block wall structures
+ * GFD's own worldapi urbanChunk generator already builds into scene 200's chunk (0,0), confirmed
+ * live this session (GET /chunks?scene=200&cx=0&cz=0 -> real blocks at X in {12,13}/{0,1},
+ * Z in {0,1}, Y in 65..69, each an L-shaped 3-column cluster, not a solid 2x2 -- (13,1)/(1,1) are
+ * real, genuinely NOT present in the real data).
+ *
+ * The actual carve-out mechanism is now real, data-driven, general PcWorldObjectDef machinery
+ * (packages/common/papercraft_worldobjects.h's own has_carve/carve_* fields) -- these constants
+ * are just where apps/server's own real default-object seeding gets the walls' own real
+ * position/extent/carve-box values from, the same real role PC_DEFAULT_OBJECT_* already plays
+ * for the original standalone test prop. Any world object (editor-placed or seeded) can carry
+ * real carve bounds now, not just these hardcoded cases -- apps/mapeditor's own --carve flag lets
+ * a real modder add more.
+ *
+ * Wall A is now a real, precise TWO-BOX L-shape (2026-08-29), not a bounding-box approximation --
+ * closes docs/NORTHSTAR_PAPER_ENGINE.md's own honestly-named "a real L-shaped/multi-part object
+ * matching a carved wall's own exact real footprint" gap, for this one wall. Re-confirmed live
+ * against the actual worldapi (not assumed from the old comment): the real 15 blocks split
+ * exactly into column (12,0)+(12,1) (a real 1x2x5 slab, PC_CITY_WALL_A1_*) and column (13,0) alone
+ * (a real 1x1x5 slab, PC_CITY_WALL_A2_*) -- together these two real carve boxes remove EXACTLY
+ * the real 15 blocks GFD's own generator placed, zero phantom overhang into the real, genuinely
+ * empty (13,1) column the old single 2x2x5 bounding box used to claim. Wall B stays a real,
+ * honest bounding-box approximation (same real reasoning, not upgraded this pass) -- using both
+ * of Wall A's real object slots plus Wall B plus the test prop now fills the real, bounded
+ * PC_WO_MAX_OBJECTS=4 cap completely, zero free real slots left; a real, explicit tradeoff, not
+ * an accident (this repo's own real wire budget can't fit a fifth object without either raising
+ * that cap -- real, separate wire-budget-accounting work -- or dropping one of the four). Still
+ * deliberately bounded to chunk (0,0), even though the real 3x3 grid's other 8 chunks currently
+ * carry byte-identical repeated content (PwWorld's own doc comment) -- carving all 9 copies out,
+ * or upgrading Wall B to its own real L-shape too, remain real, later, straightforward-but-
+ * unnecessary work. */
+#define PC_CITY_WALL_A1_BLOCK_X0 12
+#define PC_CITY_WALL_A1_BLOCK_X1 12
+#define PC_CITY_WALL_A1_BLOCK_Z0 0
+#define PC_CITY_WALL_A1_BLOCK_Z1 1
+#define PC_CITY_WALL_A1_BLOCK_Y0 65
+#define PC_CITY_WALL_A1_BLOCK_Y1 69
+/* Real object placement derived directly from the real block bounds above (world X in [12,13),
+   Z in [0,2), Y in [65,70)). */
+#define PC_CITY_WALL_A1_MATERIAL    2 /* PAPER_MATERIAL_CONCRETE -- matches the real city's own concrete blocks */
+#define PC_CITY_WALL_A1_SEED        20260829u
+#define PC_CITY_WALL_A1_X 12.5f
+#define PC_CITY_WALL_A1_Y 67.5f
+#define PC_CITY_WALL_A1_Z 1.0f
+#define PC_CITY_WALL_A1_HALF_X 0.5f
+#define PC_CITY_WALL_A1_HALF_Y 2.5f
+#define PC_CITY_WALL_A1_HALF_Z 1.0f
+
+#define PC_CITY_WALL_A2_BLOCK_X0 13
+#define PC_CITY_WALL_A2_BLOCK_X1 13
+#define PC_CITY_WALL_A2_BLOCK_Z0 0
+#define PC_CITY_WALL_A2_BLOCK_Z1 0
+#define PC_CITY_WALL_A2_BLOCK_Y0 65
+#define PC_CITY_WALL_A2_BLOCK_Y1 69
+/* Real object placement derived directly from the real block bounds above (world X in [13,14),
+   Z in [0,1), Y in [65,70) -- the real column the old single bounding box over-claimed into empty
+   air at (13,1) has no object here at all, correctly, since no real block ever stood there. */
+#define PC_CITY_WALL_A2_MATERIAL    2 /* PAPER_MATERIAL_CONCRETE */
+#define PC_CITY_WALL_A2_SEED        20260831u /* distinct from A1/B so all three don't share fragment geometry */
+#define PC_CITY_WALL_A2_X 13.5f
+#define PC_CITY_WALL_A2_Y 67.5f
+#define PC_CITY_WALL_A2_Z 0.5f
+#define PC_CITY_WALL_A2_HALF_X 0.5f
+#define PC_CITY_WALL_A2_HALF_Y 2.5f
+#define PC_CITY_WALL_A2_HALF_Z 0.5f
+
+/* PC_CITY_WALL_B1_* / PC_CITY_WALL_B2_*: Wall B now gets the same real, precise two-box L-shape
+   treatment Wall A1/A2 already proved (2026-08-29) -- real, direct follow-up now that
+   PC_WO_MAX_OBJECTS=8 (S206-43's own bit-packing win) leaves real free slots, closing the "still a
+   real, honest single-box bounding approximation" gap this comment named when Wall A's own split
+   first shipped. Re-confirmed live against the actual worldapi, not assumed from memory: Wall B's
+   real 15 blocks are at chunk-local X in {0,1}, Z in {0,1}, Y in 65..69, columns (0,0)/(0,1)/(1,0)
+   present, (1,1) genuinely NOT present -- byte-for-byte the same real shape as Wall A's own, just
+   at a different chunk-local position. Same real split pattern: B1 covers the two-deep column
+   (0,0)+(0,1), B2 covers the lone column (1,0). */
+#define PC_CITY_WALL_B1_BLOCK_X0 0
+#define PC_CITY_WALL_B1_BLOCK_X1 0
+#define PC_CITY_WALL_B1_BLOCK_Z0 0
+#define PC_CITY_WALL_B1_BLOCK_Z1 1
+#define PC_CITY_WALL_B1_BLOCK_Y0 65
+#define PC_CITY_WALL_B1_BLOCK_Y1 69
+/* Real object placement derived directly from the real block bounds above (world X in [0,1),
+   Z in [0,2), Y in [65,70)). */
+#define PC_CITY_WALL_B1_MATERIAL    2 /* PAPER_MATERIAL_CONCRETE */
+#define PC_CITY_WALL_B1_SEED        20260830u
+#define PC_CITY_WALL_B1_X 0.5f
+#define PC_CITY_WALL_B1_Y 67.5f
+#define PC_CITY_WALL_B1_Z 1.0f
+#define PC_CITY_WALL_B1_HALF_X 0.5f
+#define PC_CITY_WALL_B1_HALF_Y 2.5f
+#define PC_CITY_WALL_B1_HALF_Z 1.0f
+
+#define PC_CITY_WALL_B2_BLOCK_X0 1
+#define PC_CITY_WALL_B2_BLOCK_X1 1
+#define PC_CITY_WALL_B2_BLOCK_Z0 0
+#define PC_CITY_WALL_B2_BLOCK_Z1 0
+#define PC_CITY_WALL_B2_BLOCK_Y0 65
+#define PC_CITY_WALL_B2_BLOCK_Y1 69
+/* Real object placement derived directly from the real block bounds above (world X in [1,2),
+   Z in [0,1), Y in [65,70) -- the real column the old single Wall B bounding box over-claimed
+   into empty air at (1,1) has no object here at all, correctly, same real fix as Wall A2. */
+#define PC_CITY_WALL_B2_MATERIAL    2 /* PAPER_MATERIAL_CONCRETE */
+#define PC_CITY_WALL_B2_SEED        20260832u /* distinct from A1/A2/B1 so none share fragment geometry */
+#define PC_CITY_WALL_B2_X 1.5f
+#define PC_CITY_WALL_B2_Y 67.5f
+#define PC_CITY_WALL_B2_Z 0.5f
+#define PC_CITY_WALL_B2_HALF_X 0.5f
+#define PC_CITY_WALL_B2_HALF_Y 2.5f
+#define PC_CITY_WALL_B2_HALF_Z 0.5f
+
+/* Real, bounded, multi-object broadcast (packages/common/papercraft_worldobjects.h) -- up to
+ * PC_WO_MAX_OBJECTS real Paper Engine props, each with its own real editor-placed position/
+ * material/seed (world_objects[]) and per-fragment damage state (world_object_state[][]).
+ * world_object_active[] flags which slots actually hold a real object (a real object list can be
+ * shorter than PC_WO_MAX_OBJECTS). The client independently regenerates each active object's own
+ * identical real geometry from its own broadcast position/material/seed (verified deterministic
+ * by paper_mesh_test.c), so only per-fragment STATE crosses the wire every tick, not geometry --
+ * the same real "seed + per-fragment deltas, not the whole mesh" shape paper_mesh.h's own doc
+ * comment already named as the target wire format, now spanning a real, editor-authored object
+ * list instead of one hardcoded prop. Real, honest size note, re-measured (2026-08-29) after
+ * `world_object_state` moved to a real, bit-packed `PC_WO_STATE_BYTES` shape (2 bits/fragment --
+ * see `papercraft_worldobjects.h`'s own doc comment for the full real reasoning): each additional
+ * real object now costs 65 real bytes (`sizeof(PcWorldObjectDef)`=40 + `PC_WO_STATE_BYTES`=24 + 1
+ * active byte), down from 137 before that fix -- real, direct headroom that let
+ * `PC_WO_MAX_OBJECTS` double from 4 to 8 the same day, landing `sizeof(PcSnapshotPacket)` at a
+ * real, measured 1380 bytes, still comfortably under (92 real bytes of margin, left on purpose,
+ * not maxed to the exact byte) the real 1472-byte (Ethernet MTU minus IP/UDP headers)
+ * unfragmented-UDP-packet budget -- fine for this proof point's own real localhost/LAN testing; a
+ * real production deployment sensitive to WAN fragmentation is real, later, flagged work, not
+ * addressed here. Raising `PC_WO_MAX_OBJECTS` again, or adding per-object relevance/streaming,
+ * still eats into that same real budget and needs real, deliberate accounting when it happens --
+ * this fix (and the packing one before it) make that real accounting more favorable each time,
+ * they don't remove the need for it.
+ * PcWorldObjectDef's own real carve_* fields are packed as `unsigned char`, not `int`,
+ * specifically to keep this budget real and honest -- chunk-local block coordinates are always
+ * genuinely small (0..15 for X/Z, comfortably under 255 for Y), so the wider type would have been
+ * pure real waste broadcast every snapshot for no real benefit. */
+/* PcFallingFragment / PC_FALLING_FRAGMENTS_MAX -- real Phase 1a server-authoritative fragment
+ * physics (NORTHSTAR.md's own "Real Phase 1" section, 2026-08-29): the real, deliberately narrow
+ * first slice -- vertical-only motion for a real, small, bounded set of recently-detached
+ * fragments, no lateral scatter, no rotation, no fragment-fragment/player collision (all real,
+ * honest, explicitly-named non-goals, not oversights).
+ *
+ * Real, bounded cap (`PC_FALLING_FRAGMENTS_MAX`), same "small, bounded cap" precedent
+ * `PC_MAX_PLAYERS`/`PC_WO_MAX_OBJECTS` already set -- apps/server's own real, simple eviction
+ * policy (first free slot, else round-robin oldest) is documented at its own real call site, not
+ * here.
+ *
+ * Real, minimal wire shape: only `y` crosses the wire, not the full real (x,y,z) position --
+ * `object_idx`/`fragment_idx` are enough for the client to derive the real, FIXED x/z itself (the
+ * object's own broadcast position + that fragment's own real local center, the exact same real
+ * computation apps/client's own spawn_debris_for_fragment already does), since this real slice's
+ * own explicit non-goal is "no lateral scatter" -- x/z never change after the real fragment
+ * detaches, only y does under real gravity. A landed real fragment is simply evicted (its own
+ * `PC_FALLING_FRAGMENTS_MAX` slot's `falling_active[]` flag goes back to 0), not kept broadcasting
+ * a real resting position forever -- Phase 1a's own real job is proving the fall, not a permanent
+ * rubble-pile system (real, separate, later work if ever wanted).
+ *
+ * `fragment_idx` fits a real `unsigned char` (0..`PC_WO_FRAGMENTS`-1, 96 today, comfortably under
+ * 255); `object_idx` likewise (0..`PC_WO_MAX_OBJECTS`-1, 8 today). */
+#define PC_FALLING_FRAGMENTS_MAX 4 /* real, deliberately small for this real first slice -- real
+    wire-budget accounting (see the actual measured sizeof(PcSnapshotPacket) this change produces)
+    left real margin on purpose, matching S206-44's own "not maxed to the exact byte" discipline,
+    not just "whatever number fits." Raising it later is real, separate, easy, bounded work once
+    this real first slice earns it. */
+
+typedef struct {
+    unsigned char object_idx;
+    unsigned char fragment_idx;
+    float y;
+    float rotation_deg; /* real Phase 1c (2026-08-29) -- a real, simple, constant-rate spin around
+        the world Y axis, real angular velocity assigned once at spawn (deterministic, derived
+        from fragment_idx, no rand() -- same real convention apps/client's own debris "kick"
+        jitter already uses) and integrated every real server tick, same real "server decides,
+        client renders" split every other real Phase 1 piece already follows. Server-side only
+        this pass -- apps/client doesn't yet apply this real angle to its own rendering (a real,
+        separate, deliberately deferred next step: getting a real 3D rotation transform visually
+        correct benefits from actually seeing it, which this environment's own real, honest
+        client-verification limit -- no known real test IDUNA user for a live graphical session --
+        doesn't allow yet; see MODDING.md-style honesty, not glossed over). */
+} PcFallingFragment;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned int server_tick;
+    unsigned char active[PC_MAX_PLAYERS];
+    PcPlayerState players[PC_MAX_PLAYERS];
+    unsigned char world_object_active[PC_WO_MAX_OBJECTS];
+    PcWorldObjectDef world_objects[PC_WO_MAX_OBJECTS];
+    unsigned char world_object_state[PC_WO_MAX_OBJECTS][PC_WO_STATE_BYTES]; /* real, bit-packed
+        PAPER_STATE_* per fragment, 2 bits each -- pc_wo_state_pack/pc_wo_state_unpack
+        (papercraft_worldobjects.h) are the real, only sanctioned way to read/write this, not a
+        direct index (the real fragment-to-bit mapping isn't 1:1 with the byte array anymore). */
+    unsigned char falling_active[PC_FALLING_FRAGMENTS_MAX];
+    PcFallingFragment falling[PC_FALLING_FRAGMENTS_MAX];
+    unsigned int echo_cmd_time_ms; /* real ping/RTT support (2026-08-30, founder real-time: "you
+        can show the ping at the top of the screen") -- ONE real field, not a real per-player
+        array (PC_MAX_PLAYERS * 4 bytes would have real wire-budget consequences worth avoiding
+        for something every OTHER real field in this struct is already shared/broadcast-identical
+        for), since a client only ever needs to know its OWN real round-trip time, never anyone
+        else's. apps/server writes a DIFFERENT real value into this exact field right before each
+        real per-recipient `sendto()` -- the recipient's own most-recently-received
+        PcUserCmdPacket::cmd_time_ms, verbatim, echoed straight back. The client that sent that
+        real cmd_time_ms computes `now_ms() - echo_cmd_time_ms` for a real, honest round-trip
+        time with zero clock-synchronization assumption at all -- both the original timestamp and
+        the later comparison happen on that SAME client's own local clock, the server never
+        touches or interprets the value, just reflects it. */
+} PcSnapshotPacket;
+
+/* pc_falling_lookup: real Phase 1b/1c logic (2026-08-29, NORTHSTAR.md's own "Real Phase 1"
+ * section) -- given a real (object_idx, fragment_idx) pair, scans a real snapshot's own
+ * falling[] broadcast for an active match and writes the real, current, server-authoritative
+ * entry (both `y` and `rotation_deg`) to *out. Returns 1 on a real match, 0 otherwise (caller
+ * falls back to local, client-side simulation for that piece -- untracked, evicted under the
+ * real, small PC_FALLING_FRAGMENTS_MAX cap, or already landed are all real, honest, expected
+ * cases, not errors).
+ *
+ * Real, deliberately renamed from its own original Phase 1b-only `pc_falling_lookup_y` (2026-08-29,
+ * same day, when Phase 1c added `rotation_deg`) -- returns the whole real matching entry now
+ * instead of just `y`, one real lookup for both real quantities instead of two near-duplicate
+ * scans.
+ *
+ * Pulled out as its own real, pure, header-level function -- no OpenGL/SDL dependency at all --
+ * specifically so it's real, independently testable (packages/common/
+ * papercraft_falling_test.c) without a live graphical client or a real IDUNA login, the same
+ * real reason paper_mesh.h's own geometry functions live in a header instead of being inlined
+ * into apps/client directly. apps/client's own update_and_draw_debris calls this once per real
+ * debris piece per frame; it does not duplicate this real lookup logic itself. */
+static inline int pc_falling_lookup(const PcSnapshotPacket *snap, int object_idx, int fragment_idx, PcFallingFragment *out) {
+    for (int fi = 0; fi < PC_FALLING_FRAGMENTS_MAX; fi++) {
+        if (snap->falling_active[fi] &&
+            snap->falling[fi].object_idx == (unsigned char)object_idx &&
+            snap->falling[fi].fragment_idx == (unsigned char)fragment_idx) {
+            *out = snap->falling[fi];
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#endif
