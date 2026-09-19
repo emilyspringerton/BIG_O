@@ -80,9 +80,57 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  client_linux:
+    name: Game client (Linux, SDL2)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl-dev libglu1-mesa-dev
+      - run: scripts/build_client.sh
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          mkdir -p BIG_O_Linux
+          cp build/bigo_client_linux build/mapeditor_linux BIG_O_Linux/
+          printf '%s\n' '#!/usr/bin/env bash' 'exec "$(dirname "$0")/bigo_client_linux" "$@"' > BIG_O_Linux/PLAY.sh
+          chmod +x BIG_O_Linux/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-linux-${{ github.run_number }}
+          path: BIG_O_Linux/
+          if-no-files-found: error
+
+  client_windows:
+    name: Game client (Windows, mingw + bundled SDL2.dll)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y mingw-w64 zip wget
+      - name: Fetch SDL2 mingw devel package
+        run: |
+          set -euo pipefail
+          wget -q --retry-connrefused --tries=3 https://github.com/libsdl-org/SDL/releases/download/release-2.30.10/SDL2-devel-2.30.10-mingw.tar.gz
+          tar xzf SDL2-devel-2.30.10-mingw.tar.gz
+          mv SDL2-2.30.10/x86_64-w64-mingw32 ./sdl2_mingw
+      - run: scripts/build_client.sh --windows ./sdl2_mingw
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          mkdir -p BIG_O_Windows
+          cp build/bigo_client.exe build/mapeditor.exe sdl2_mingw/bin/SDL2.dll BIG_O_Windows/
+          printf '%s\r\n' 'start bigo_client.exe' > BIG_O_Windows/PLAY.bat
+          printf '%s\r\n' 'start mapeditor.exe' > BIG_O_Windows/EDIT_MAP.bat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-windows-${{ github.run_number }}
+          path: BIG_O_Windows/
+          if-no-files-found: error
+
   release:
     name: Tag & Release
-    needs: [version, core, windows]
+    needs: [version, core, windows, client_linux, client_windows]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -103,4 +151,6 @@ jobs:
           mkdir out
           cp artifacts/linux-*/* out/
           [ -f artifacts/windows-*/bigo_sim.exe ] && cp artifacts/windows-*/bigo_sim.exe out/ || true
+          (cd artifacts/client-linux-* && tar -czf "$OLDPWD/out/bigo-linux-x86_64.tar.gz" .)
+          (cd artifacts/client-windows-* && zip -qr "$OLDPWD/out/bigo-windows-x86_64.zip" .)
           gh release create "$TAG" out/* --target "$GITHUB_SHA" --title "$TAG" --generate-notes
