@@ -86,3 +86,10 @@ Rip out: client `--no-lz4`, server env `PAPERCRAFT_NO_LZ4=1` (no rebuild), or de
 **LZ4 keep/remove:** unproven either way. It is harmless (~190 B/snapshot, negotiated, `--no-lz4` / `PAPERCRAFT_NO_LZ4=1` to disable) and removes a plausible
 fragmentation risk. Decide from a real session's `[net]` lines: if `avg` is ~190B with `lz4>0` and problems persist with soft_rehellos near zero, LZ4 was not the
 issue and can go; if `soft_rehellos` fire and recover, the NAT fix is what mattered.
+
+4. **Client froze during "connection lost"** (server log: a working lz4 client's `usercmds_rx` fell 99 -> 56 -> 11 -> 0 and stayed 0 for 50s while snapshots kept
+   flowing; slot timed out; never recovered). Cause: ticket/JWT refresh and the reconnect re-mint ran HTTP on the MAIN thread, and `connect()`/DNS in
+   `http_client.h` have no timeout, so one call on a flaky link blocked the whole client (no movement, no CONNECT retries, frozen reconnect screen).
+   **Fix:** a single detached worker thread runs all such jobs; the main loop only starts/polls them (test: main loop kept 397 iterations in 4s with a
+   black-holed server). While reconnecting it keeps sending CONNECT with the current ticket as long as it is inside its 5-minute life. Also: the server now refuses a
+   second live window on one account (see 3 above). Known remaining gap: `http_client` still has no connect timeout; it now only ties up the worker, not the game.
