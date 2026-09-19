@@ -1,0 +1,6 @@
+# BIG_O Bazel config (same shape as PAPERCRAFT/PARENA).
+build --conlyopt=-std=c99
+build --copt=-O2
+build --copt=-Wall
+build --copt=-Wextra
+build:day --copt=-D_DEFAULT_SOURCE

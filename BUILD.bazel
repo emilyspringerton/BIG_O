@@ -1,0 +1,28 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+COPTS = ["-std=c99", "-Wall", "-Wextra", "-Werror", "-DPARENA_NO_GRAPHICS"]
+
+cc_library(
+    name = "witness_rules",
+    srcs = ["core/witness_rules.c"],
+    hdrs = ["core/witness_rules.h"],
+    includes = ["core", "core/runtime"],
+    copts = COPTS,
+    textual_hdrs = glob(["core/runtime/*"]),
+)
+
+cc_test(
+    name = "witness_rules_test",
+    srcs = ["tests/test_witness_rules.c"],
+    data = ["tests/parity_vectors.txt"],
+    args = ["$(location tests/parity_vectors.txt)"],
+    deps = [":witness_rules"],
+    copts = COPTS,
+)
+
+cc_binary(
+    name = "bigo_sim",
+    srcs = ["apps/bigo_sim/main.c", "core/sim.c", "core/sim.h"],
+    deps = [":witness_rules"],
+    copts = COPTS + ["-DBIGO_VERSION=\\\"bazel\\\""],
+)

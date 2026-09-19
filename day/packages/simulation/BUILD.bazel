@@ -1,0 +1,374 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+# level -- the real, PARENA-compiled RPG level-for-XP decision logic (this repo's own first real
+# "mods first everything" slice, matching NORTHSTAR.md's own citation of
+# WEAKNIGHT_BEDROCK_RACERS' racer/bike-gear-mod.prn as the pattern to follow). level_mod.c is
+# GENERATED (`parena build stdlib/papercraft/level_mod.prn`, PARENA repo) and committed here per
+# this monorepo's own "generated code committed" precedent -- not regenerated at build time.
+cc_library(
+    name = "level",
+    srcs = ["level_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    # alwayslink: real, standard Bazel fix so this library's own real symbols
+    # (xp_required_for_level, on_papercraft_level_for_xp) survive into :liblevel_mod.so below --
+    # same real reason and same real no-op-for-apps/server tradeoff documented on :xp_award's own
+    # alwayslink, not repeated in full here.
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "level_mod_test",
+    srcs = ["level_mod_test.c"],
+    deps = [":level"],
+)
+
+# liblevel_mod.so -- the EXACT same real, unmodified generated C as :level above, built as a real
+# shared library for apps/dynmod_poc's own dlopen/dlsym proof of concept -- real, second-shape
+# evidence (a real 1-arg and a real 2-arg I32 function, not just :libxp_award_mod.so's own
+# trivial 0-arg case) that the real dynamic-loading mechanism generalizes across the real
+# function shapes this repo's own mods actually use.
+cc_binary(
+    name = "liblevel_mod.so",
+    deps = [":level"],
+    linkshared = True,
+    linkopts = ["-Wl,--export-dynamic"],
+    visibility = ["//visibility:public"],
+)
+
+# paper_fragment -- the real, PARENA-compiled Paper Engine damage-decision logic
+# (docs/NORTHSTAR_PAPER_ENGINE.md). Generated from
+# PARENA/stdlib/papercraft/paper_fragment_mod.prn via `parena build`, committed here.
+cc_library(
+    name = "paper_fragment",
+    srcs = ["paper_fragment_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "paper_fragment_mod_test",
+    srcs = ["paper_fragment_mod_test.c"],
+    deps = [":paper_fragment"],
+)
+
+# paper_mesh_test -- exercises packages/common/paper_mesh.h (the real subdivide-and-jitter cube
+# generator) linked against :paper_fragment and :interact_falloff (paper_mesh.h calls the real
+# PARENA-compiled on_paper_fragment_damage/on_paper_fragment_state_for_hp/
+# on_papercraft_interact_damage_falloff functions directly).
+cc_test(
+    name = "paper_mesh_test",
+    srcs = ["paper_mesh_test.c"],
+    deps = [
+        ":paper_fragment",
+        ":interact_falloff",
+        "//day/packages/common:common_headers",
+    ],
+    linkopts = ["-lm"],
+)
+
+# talent -- the real, PARENA-compiled talent-point allocation gate, ported from the real
+# construct's own progression_try_allocate (SHANKPIT_CONSTRUCT.txt lines 867-872). This mod's own
+# real .prn source (PARENA/stdlib/papercraft/talent_mod.prn) declares a `Bool` return type -- the
+# real, first non-I32-return mod shape in this repo -- see :libtalent_mod.so below.
+cc_library(
+    name = "talent",
+    srcs = ["talent_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    # alwayslink: real, standard Bazel fix so this library's own real symbol
+    # (on_papercraft_can_allocate_talent) survives into :libtalent_mod.so below -- same real
+    # reason and same real no-op-for-apps/server tradeoff documented on :xp_award's own
+    # alwayslink, not repeated in full here.
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "talent_mod_test",
+    srcs = ["talent_mod_test.c"],
+    deps = [":talent"],
+)
+
+# libtalent_mod.so -- the EXACT same real, unmodified generated C as :talent above, built as a
+# real shared library for apps/dynmod_poc's own dlopen/dlsym proof of concept -- real, first
+# evidence that a `Bool`-returning real mod function (VS0 compiles `Bool` to the same plain `int`
+# ABI as `I32` in its generated C -- confirmed by reading talent_mod.c's own real return
+# statement, `return ((unspent_points > 0) && (ability_value < 5));`, a plain C `int` expression)
+# needs zero new dispatch code in apps/dynmod_poc -- the existing I32Fn2 shape already calls it
+# correctly, real 0/1 result and all.
+cc_binary(
+    name = "libtalent_mod.so",
+    deps = [":talent"],
+    linkshared = True,
+    linkopts = ["-Wl,--export-dynamic"],
+    visibility = ["//visibility:public"],
+)
+
+# stat_effects -- the real, PARENA-compiled per-stat gameplay CONSEQUENCE of a spent talent
+# point, ported from the real construct's own progression_apply_bonuses (SHANKPIT_CONSTRUCT.txt
+# lines 819-846) -- MOVE only for now, see the .prn's own doc comment for why
+# vitality/handling/shield/storm are deliberately not ported yet (no real systems to affect).
+cc_library(
+    name = "stat_effects",
+    srcs = ["stat_effects_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "stat_effects_mod_test",
+    srcs = ["stat_effects_mod_test.c"],
+    deps = [":stat_effects"],
+)
+
+# slide_jump -- the real, PARENA-compiled slide-jump trick magnitude decision, PAPERCRAFT's own
+# first real "trick" input (founder: "PAPERCRAFT is like minecraft meets gta3" -> "plus SKATE2").
+# Ported from the real construct's own "PHASE 485: TUNED SLIDE JUMP"
+# (SHANKPIT_CONSTRUCT.txt lines 9183-9196).
+cc_library(
+    name = "slide_jump",
+    srcs = ["slide_jump_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "slide_jump_mod_test",
+    srcs = ["slide_jump_mod_test.c"],
+    deps = [":slide_jump"],
+)
+
+# xp_award -- the real, PARENA-compiled reward for a real "destroyed a world object" event,
+# PAPERCRAFT's own first real worked mod-authoring example (see PAPERCRAFT/MODDING.md). Ported
+# from the real construct's own progression_tick (SHANKPIT_CONSTRUCT.txt line 860, `delta * 60`
+# XP per real kill).
+cc_library(
+    name = "xp_award",
+    srcs = ["xp_award_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    # alwayslink: real, standard Bazel mechanism forcing the linker to keep this library's own
+    # object file (and every real symbol in it) even when nothing in the link directly
+    # references it -- needed for :libxp_award_mod.so below (apps/server's own real static link
+    # already references on_papercraft_xp_for_object_destroyed directly, so this is a real no-op
+    # there, not a behavior change). Found live: Bazel's default cc_binary link wraps object
+    # files in -Wl,--start-lib/--end-lib (gold linker archive-style symbol resolution), which
+    # silently drops an unreferenced .o's own symbols from a linkshared output entirely --
+    # alwayslink is the real, intended fix for exactly this shape of problem.
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "xp_award_mod_test",
+    srcs = ["xp_award_mod_test.c"],
+    deps = [":xp_award"],
+)
+
+# libxp_award_mod.so -- the EXACT same real, unmodified generated C as :xp_award above, built as
+# a real shared library instead of statically linked -- real, checked-in evidence for
+# apps/dynmod_poc's own dlopen/dlsym proof of concept (PAPERCRAFT/MODDING.md's own "no dynamic
+# loading" gap). Not used by apps/server (which still statically links :xp_award, unchanged, for
+# real production stability) -- this is a real, deliberately separate build product proving the
+# mechanism, not a production integration.
+cc_binary(
+    name = "libxp_award_mod.so",
+    deps = [":xp_award"],
+    linkshared = True,
+    linkopts = ["-Wl,--export-dynamic"],
+    visibility = ["//visibility:public"],
+)
+# Real debugging note, not glossed over: this target's own real link command does carry Bazel's
+# default -Wl,-S (strip all symbols, driven by the global --strip flag, default "sometimes"), and
+# an early real hypothesis was that this was the blocker -- confirmed live it is NOT: -Wl,-S
+# strips the real static/debug symbol table but leaves a shared library's own real DYNAMIC symbol
+# table (.dynsym, what dlsym() actually reads) intact, verified by comparing `readelf -sW` output
+# with and without an explicit `--strip=never` override (identical, both show the real symbol).
+# The actual real blocker, found by comparing the object file's own real symbol table (correct,
+# GLOBAL DEFAULT) against the final linked .so's own (missing): Bazel's default cc_binary link
+# wraps its own object-file inputs in -Wl,--start-lib/--end-lib (gold linker archive-style
+# resolution), which drops a real, otherwise-unreferenced .o's own symbols from a `linkshared`
+# output entirely -- exactly what `alwayslink = True` on :xp_award above is the real, standard
+# Bazel fix for. A plain `bazel build //...` (no special flags) is enough.
+
+# phone -- the real, PARENA-compiled phone-notification decision, PAPERCRAFT's own first real
+# slice of TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1
+# only: Messages app + notification banner). Generated from
+# PARENA/stdlib/papercraft/phone_mod.prn via `parena build`, committed here.
+cc_library(
+    name = "phone",
+    srcs = ["phone_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    # alwayslink: same real reason as :xp_award above -- apps/server's own static link needs
+    # on_papercraft_phone_message_for_event to survive even though nothing else in this library
+    # references it directly.
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "phone_mod_test",
+    srcs = ["phone_mod_test.c"],
+    deps = [":phone"],
+)
+
+# item_drop -- the real, PARENA-compiled item-drop decision for PAPERCRAFT's own GTA3-style
+# "stuff drops and you can pick it up" system. Generated from
+# PARENA/stdlib/papercraft/item_drop_mod.prn via `parena build`, committed here.
+cc_library(
+    name = "item_drop",
+    srcs = ["item_drop_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "item_drop_mod_test",
+    srcs = ["item_drop_mod_test.c"],
+    deps = [":item_drop"],
+)
+
+# inventory -- the real, PARENA-compiled inventory-slot decisions (stack-max, can-stack) for
+# PAPERCRAFT's own FFXI-style list inventory. Generated from
+# PARENA/stdlib/papercraft/inventory_mod.prn via `parena build`, committed here.
+cc_library(
+    name = "inventory",
+    srcs = ["inventory_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "inventory_mod_test",
+    srcs = ["inventory_mod_test.c"],
+    deps = [":inventory"],
+)
+
+# weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
+# weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
+# PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.
+cc_library(
+    name = "weapon",
+    srcs = ["weapon_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "weapon_mod_test",
+    srcs = ["weapon_mod_test.c"],
+    deps = [":weapon"],
+)
+
+# pickup -- the real, PARENA-compiled pickup-radius decision for PAPERCRAFT's own GTA3-style
+# walk-over item pickup. Generated from PARENA/stdlib/papercraft/pickup_mod.prn via
+# `parena build`, committed here.
+cc_library(
+    name = "pickup",
+    srcs = ["pickup_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "pickup_mod_test",
+    srcs = ["pickup_mod_test.c"],
+    deps = [":pickup"],
+)
+
+# papercraft_inventory_test -- real, pure, headless coverage for packages/common/
+# papercraft_inventory.h's own pc_try_add_item_to_inventory, against the real, live
+# PARENA-compiled :inventory library (not a mock) -- same real cross-package shape as
+# :paper_mesh_test below (a real packages/common header, real PARENA-compiled decision logic).
+# This is the real, permanent, native replacement for a first-pass throwaway Python UDP probe
+# (founder real-time, 2026-08-30: "can we make it a native test?").
+cc_test(
+    name = "papercraft_inventory_test",
+    srcs = ["papercraft_inventory_test.c"],
+    deps = [
+        ":inventory",
+        "//day/packages/common:common_headers",
+    ],
+)
+
+# interact_falloff -- the real, PARENA-compiled interact damage falloff-by-distance decision,
+# closing paper_mesh.h's own honestly-deferred gap ("uniform per-fragment for this first real
+# pass; falloff by distance is real, later tuning"). Composes with :paper_fragment (material
+# resistance) rather than replacing it -- two real, separately-testable decisions.
+cc_library(
+    name = "interact_falloff",
+    srcs = ["interact_falloff_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "interact_falloff_mod_test",
+    srcs = ["interact_falloff_mod_test.c"],
+    deps = [":interact_falloff"],
+)
+
+# parena_runtime -- the REAL, FULL PARENA runtime (Arena/Vec/String/host-glue), vendored from
+# PARENA/runtime/parena_runtime.{h,c} verbatim. Real, deliberate mod-boundary evolution (founder
+# real-time: "evolve the mod boundary"), replacing the previous deliberately-minimal 17-line
+# header-only stub every prior mod in this file compiled against (that stub's own header comment
+# named this exact moment: "grow this file for real... the moment a future mod genuinely needs
+# Arena/String/Vec/host-glue support" -- :editor below is that mod). Every PRIOR scalar-only mod
+# (:level, :phone, :item_drop, etc.) still compiles unchanged against this strictly larger header
+# -- verified directly via `bazel build //...`, not assumed backward-compatible.
+cc_library(
+    name = "parena_runtime",
+    srcs = ["parena_runtime.c"],
+    hdrs = ["parena_runtime.h"],
+    visibility = ["//visibility:public"],
+)
+
+# editor -- the real, first PARENA mod in this repo to cross the host boundary with structs and
+# Strings, not just I32 scalars (PAPERCRAFT/CLAUDE.md's own "Mods first, everything" section is
+# updated in the same commit to document this real evolution). A real, single bundle rather than
+# four separate .c files: PARENA/stdlib/editor/{buffer,document,registry}.prn and
+# PARENA/stdlib/papercraft/note_version_mod.prn have real cross-module dependencies, and this
+# monorepo's own already-documented finding (PARENA's own CHANGELOG, k8s/helm work) is that
+# cross-module calls only resolve correctly when every needed .prn file is passed to ONE real
+# `parena build` invocation together -- so editor_mod.c is that one real combined output,
+# committed here per this repo's own "generated code committed" precedent.
+cc_library(
+    name = "editor",
+    srcs = ["editor_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    deps = [":parena_runtime"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "editor_mod_test",
+    srcs = ["editor_mod_test.c"],
+    deps = [":editor", ":parena_runtime"],
+)
+
+# explosion -- the real, PARENA-compiled first slice of PAPERCRAFT's own "Roblox API parity" mod
+# surface (kanban priority-queue card 499988, 2026-09-03: "start with the api for setting an
+# explosion"). Real linear blast-radius damage falloff (Roblox's own real Explosion primitive as
+# the reference point) -- host C owns turning real vector distance into the single integer
+# distance this mod takes, and owns actually triggering an explosion at all (no PAPERCRAFT
+# gameplay host code exists yet, same real gap level_mod.prn's own header comment already
+# names). Generated from PARENA/stdlib/papercraft/explosion_mod.prn via `parena build`,
+# committed here per this repo's own "generated code committed" precedent.
+cc_library(
+    name = "explosion",
+    srcs = ["explosion_mod.c"],
+    hdrs = ["parena_runtime.h"],
+    deps = [":parena_runtime"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "explosion_mod_test",
+    srcs = ["explosion_mod_test.c"],
+    deps = [":explosion", ":parena_runtime"],
+)

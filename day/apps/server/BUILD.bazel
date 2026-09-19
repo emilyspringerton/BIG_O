@@ -1,0 +1,23 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "papercraft_server",
+    srcs = ["src/main.c"],
+    deps = [
+        "//day/packages/common:common_headers",
+        "//day/packages/simulation:level",
+        "//day/packages/simulation:talent",
+        "//day/packages/simulation:stat_effects",
+        "//day/packages/simulation:paper_fragment",
+        "//day/packages/simulation:slide_jump",
+        "//day/packages/simulation:xp_award",
+        "//day/packages/simulation:phone",
+        "//day/packages/simulation:item_drop",
+        "//day/packages/simulation:inventory",
+        "//day/packages/simulation:weapon",
+        "//day/packages/simulation:pickup",
+        "//day/packages/simulation:interact_falloff",
+    ],
+    linkopts = ["-lm", "-ldl"],
+    visibility = ["//visibility:public"],
+)

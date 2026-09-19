@@ -1,0 +1,63 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+# common_headers -- the real header-only bag every apps/* binary's own relative-path #include
+# needs declared as a Bazel input somewhere in its dep graph. Same real shape
+# WEAKNIGHT_BEDROCK_RACERS' own packages/common:common_headers already establishes.
+cc_library(
+    name = "common_headers",
+    hdrs = [
+        "hmac_sha256.h",
+        "http_client.h",
+        "hud_text.h",
+        "paper_mesh.h",
+        "papercraft_inventory.h",
+        "papercraft_persist.h",
+        "papercraft_protocol.h",
+        "papercraft_world.h",
+        "papercraft_worldobjects.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# hmac_sha256_test -- real RFC 4231 test-vector coverage for this repo's own real connect-ticket
+# HMAC (apps/server/src/main.c's own verify_connect_ticket), ported from shankpit-460's own real,
+# never-before-wired-into-a-build hmac_sha256_test.c. Zero deps beyond the header itself -- pure,
+# deterministic crypto math, no sockets/files, same real reason paper_mesh_test.c gets a cc_test
+# instead of relying on live verification the way apps/server's own host-plumbing code does.
+cc_test(
+    name = "hmac_sha256_test",
+    srcs = ["hmac_sha256_test.c", "hmac_sha256.h"],
+)
+
+# papercraft_persist_test -- real round-trip + real failure-mode (missing file, wrong magic)
+# coverage for papercraft_persist.h's own real player-progression save/load pair. Depends on
+# :common_headers rather than listing every transitively-included header directly (unlike
+# hmac_sha256_test above, papercraft_persist.h itself #includes papercraft_protocol.h, which in
+# turn #includes papercraft_worldobjects.h -- the real, existing header-only bag already declares
+# all of them as real Bazel inputs).
+cc_test(
+    name = "papercraft_persist_test",
+    srcs = ["papercraft_persist_test.c"],
+    deps = [":common_headers"],
+)
+
+# papercraft_worldobjects_test -- same real round-trip + real failure-mode coverage, for
+# papercraft_worldobjects.h's own two real on-disk formats: PcWorldObjectFile (apps/mapeditor's
+# own real map data) and PcWorldDamageFile (apps/server's own real per-fragment damage
+# persistence).
+cc_test(
+    name = "papercraft_worldobjects_test",
+    srcs = ["papercraft_worldobjects_test.c"],
+    deps = [":common_headers"],
+)
+
+# papercraft_falling_test -- real, pure, headless coverage for pc_falling_lookup_y
+# (papercraft_protocol.h's own real Phase 1b lookup, NORTHSTAR.md's own "Real Phase 1" section).
+# apps/client's own update_and_draw_debris calls this same real function every frame; this test
+# is the real, standing regression check for it that a live graphical client session can't
+# provide in this environment (no known real test IDUNA user for full login automation).
+cc_test(
+    name = "papercraft_falling_test",
+    srcs = ["papercraft_falling_test.c"],
+    deps = [":common_headers"],
+)

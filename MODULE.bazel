@@ -1,0 +1,8 @@
+"""BIG_O -- "A SHANKPIT Story". Bazel build (monorepo convention: every repo builds under Bazel)."""
+
+module(
+    name = "big_o",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
