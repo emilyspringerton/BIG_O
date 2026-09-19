@@ -63,3 +63,13 @@ localhost:7070 ... WSA error 10061 (refused)`. `PLAY.bat` / `PLAY.sh` now pass t
 game UDP 7799 -- the live PAPERCRAFT servers), and the Windows launcher keeps its window open (`pause`) so errors stay readable.
 `PLAY_LOCAL.*` is the bare launch for a self-hosted stack. BIG_O has no server of its own yet, so online play means being in
 PAPERCRAFT's world with BIG_O's phone/sky on top. A true offline mode (no servers) is not built.
+
+## Snapshot compression (LZ4) -- why, and how to rip it out
+Founder on a phone modem saw "weak connection (170s)" and the level appearing minutes late (2026-09-19). The server's snapshot is a fixed
+1436-byte struct (1464 on the wire) that is almost all zeros (16 player slots + fixed world arrays). That exceeds the 1280-1428 byte path MTU
+common on mobile carriers, so it fragments, and carriers drop fragments while small packets (WELCOME, USERCMD) still pass.
+`lz4mini.h` (standard LZ4 block format, tested incl. 200k hostile-input rounds under ASan/UBSan) compresses it to ~190 bytes. Clients advertise
+`PC_CAP_LZ4` in one extra byte after CONNECT; old clients/servers interoperate (plain snapshots). Verified against a scratch server: LZ4 client gets
+~190-byte snapshots, no-capability and old clients get plain ones, all decode. **Not yet verified on a real mobile link.**
+Rip out: client `--no-lz4`, server env `PAPERCRAFT_NO_LZ4=1` (no rebuild), or delete `lz4mini.h` + the three marked blocks
+(`PC_PACKET_SNAPSHOT_LZ4` in protocol/server/client).

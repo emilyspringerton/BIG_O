@@ -7,6 +7,7 @@ cc_library(
     name = "common_headers",
     hdrs = [
         "bigo_phone.h",
+        "lz4mini.h",
         "bigo_sky.h",
         "bigo_skycfg.h",
         "hmac_sha256.h",
@@ -73,4 +74,9 @@ cc_test(
 cc_test(
     name = "bigo_skycfg_test",
     srcs = ["bigo_skycfg_test.c", "bigo_skycfg.h"],
+)
+
+cc_test(
+    name = "lz4mini_test",
+    srcs = ["lz4mini_test.c", "lz4mini.h"],
 )
