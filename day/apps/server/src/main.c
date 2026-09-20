@@ -44,6 +44,7 @@
 #include "../../../packages/common/papercraft_world.h"
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/papercraft_persist.h"
+#include "../../../packages/common/bigo_pheromone.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -306,6 +307,32 @@ typedef struct {
 } ServerNpc;
 static ServerNpc g_npcs[PC_NPC_MAX];
 
+/* g_pheromones -- S504-PHEROMONE real command-point state (bigo_pheromone.h). Global rather than
+ * per-crew: this v0 has exactly one shared crew/world (NORTHSTAR.md §7's own "one crew, one
+ * onboarding" decision), so there is no separate crew scope to key it by yet. */
+static PheromoneMarker g_pheromones[BIGO_PHEROMONE_MAX];
+
+#define PHEROMONE_DURATION_MS 30000      /* a thrown marker commands for 30 real seconds */
+#define PHEROMONE_DETECTION_RADIUS 40.0f /* a zombie within this range of an active marker locks on */
+#define PHEROMONE_ZOMBIE_SPEED 5.5f      /* units/sec -- deliberately below PC_SPRINT_SPEED: a
+    commanded zombie closing in is a real threat, not an instant one; tuned separately from any
+    human movement speed on purpose, matching zombie_values.h's own "own vocabulary" convention */
+
+/* server_throw_pheromone -- claims a marker slot and drops a real command point at (x,y,z),
+ * expiring PHEROMONE_DURATION_MS from now. See PcPheromoneThrowPacket's own doc comment for why
+ * the target is computed client-side rather than derived server-side like PC_PACKET_INTERACT. */
+static void server_throw_pheromone(float x, float y, float z, unsigned int now_ms) {
+    int slot = pheromone_claim_slot(g_pheromones, BIGO_PHEROMONE_MAX);
+    PheromoneMarker *m = &g_pheromones[slot];
+    m->active = 1;
+    m->x = x;
+    m->z = z;
+    (void)y; /* cosmetic drop height only -- targeting is x/z, matching zombies' own flat-plane movement */
+    m->expires_at_ms = now_ms + PHEROMONE_DURATION_MS;
+    printf("S504-PHEROMONE: marker thrown at (%.1f, %.1f), slot %d, expires in %ds\n",
+           x, z, slot, PHEROMONE_DURATION_MS / 1000);
+}
+
 /* server_spawn_npcs -- real, fixed v0 test population (NORTHSTAR.md §8's own "~6 humanness-lite
  * NPCs... and one thought-police NPC" scale): 3 Citizens, 1 The Men (the thought-police-adjacent
  * "muscle" role), 4 zombies, placed on a small real circle around world origin so they're
@@ -342,15 +369,36 @@ static void server_spawn_npcs(unsigned int now_ms) {
  * PC_SNAPSHOT_HZ broadcast rate) -- humanness_tick_mood/zombie_tick are both real, internally
  * timer-gated (their own mood_change_at_ms), so calling this every tick is cheap and correct, same
  * discipline core/humanness.h's own doc comment already establishes ("per tick or per decision
- * cycle"). has_target is hardcoded 0 for every zombie -- no player-detection/targeting exists yet
- * (NORTHSTAR.md §8c item 4), so zombies stay DORMANT/AGITATED on hunger drift alone in this pass,
- * never HUNTING/FRENZIED; that transition is real, future work once a target signal exists. */
+ * cycle").
+ *
+ * S504-PHEROMONE (2026-09-20): has_target is no longer hardcoded 0 -- a zombie within
+ * PHEROMONE_DETECTION_RADIUS of an active thrown marker (bigo_pheromone.h) now real-locks on
+ * (has_target=1 drives zombie_tick toward HUNTING/FRENZIED per zombie_values.c's own real mood
+ * arc) and actually steers toward the marker (pheromone_step_toward), closing the player-driven
+ * half of NORTHSTAR.md §8e item 2. The OTHER half -- autonomous player-detection with no thrown
+ * marker at all -- is still real, separate, deliberately not attempted here (a zombie with no
+ * marker in range stays exactly as before: DORMANT/AGITATED on hunger drift alone, stationary). */
 static void server_tick_npcs(unsigned int now_ms) {
+    static unsigned int last_npc_tick_ms = 0;
+    float dt_sec = (last_npc_tick_ms == 0) ? 0.0f : (float)(now_ms - last_npc_tick_ms) / 1000.0f;
+    if (dt_sec > 0.5f) dt_sec = 0.5f; /* clamp a stall/hitch, matching the client's own gband dt clamp */
+    last_npc_tick_ms = now_ms;
+
+    pheromone_marker_expire(g_pheromones, BIGO_PHEROMONE_MAX, now_ms);
+
     for (int i = 0; i < PC_NPC_MAX; i++) {
         ServerNpc *n = &g_npcs[i];
         if (!n->active) continue;
         if (n->role == PC_NPC_ROLE_ZOMBIE) {
-            zombie_tick(&n->zombie, now_ms, 0);
+            float target_x, target_z;
+            int has_target = pheromone_find_nearest(g_pheromones, BIGO_PHEROMONE_MAX,
+                                                      n->x, n->z, PHEROMONE_DETECTION_RADIUS,
+                                                      &target_x, &target_z);
+            zombie_tick(&n->zombie, now_ms, has_target);
+            if (has_target && dt_sec > 0.0f) {
+                pheromone_step_toward(&n->x, &n->z, target_x, target_z, PHEROMONE_ZOMBIE_SPEED, dt_sec);
+                n->yaw = atan2f(target_x - n->x, target_z - n->z);
+            }
         } else {
             npc_brain_tick(&n->brain, now_ms);
         }
@@ -1529,6 +1577,14 @@ int main(int argc, char **argv) {
                     }
                     break;
                 }
+            } else if (hdr.type == PC_PACKET_PHEROMONE_THROW && (size_t)n >= sizeof(PcPheromoneThrowPacket)) {
+                /* S504-PHEROMONE: real client-driven command point. No sender validation beyond
+                   the existing recv-side size check -- any connected client can drop a marker for
+                   the whole crew, matching NORTHSTAR.md §7's own "one crew, one onboarding, shared
+                   lab" co-op model (this is a shared crew tool, not a per-player one). */
+                PcPheromoneThrowPacket req;
+                memcpy(&req, buf, sizeof(req));
+                server_throw_pheromone(req.x, req.y, req.z, now_ms());
             }
         }
 

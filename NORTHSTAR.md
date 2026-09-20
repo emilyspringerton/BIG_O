@@ -316,3 +316,40 @@ verification pattern every prior core module in this repo already used. Wired in
    equipment numbers are not currently expected to need mod-author tuning, but that could change.
 5. **No connection to the harvest/day loop.** `lab_sample_init_wild_harvest`'s `contamination_pct` input has no real
    source yet — day-phase harvest doesn't produce a `LabSample` today; that's a real, separate, not-yet-built bridge.
+
+## 10. Pheromone command tools (2026-09-20, S504-PHEROMONE) — closes half of §8e item 2
+
+Founder-priority gap: `zombie_tick`'s `has_target` was hardcoded `0` (§8d/§8e), so zombies never reached HUNTING/
+FRENZIED and The Men had nothing to dispatch toward. Real answer: `day/packages/common/bigo_pheromone.h`, a pure,
+header-only targeting/steering module (`pheromone_marker_expire`, `pheromone_claim_slot`, `pheromone_find_nearest`,
+`pheromone_step_toward`, 8 real tests), plus a new one-shot wire packet `PC_PACKET_PHEROMONE_THROW`
+(`PcPheromoneThrowPacket`, `papercraft_protocol.h`) — the client's **G key** throws a marker at the player's own
+position + camera-forward × a fixed throw distance (no real projectile arc, matching `docs/DESIGN_DIGEST.md` §6's
+"paint a target" framing over actual physics), the server claims a slot in a small, bounded
+`g_pheromones[BIGO_PHEROMONE_MAX]` array (30s real expiry), and `server_tick_npcs` now gives every zombie a real
+`has_target` computed from proximity to an active marker instead of `0`, steering it toward the marker at
+`PHEROMONE_ZOMBIE_SPEED` when locked on. Verified live: a raw UDP `PC_PACKET_PHEROMONE_THROW` sent to a running
+server produces the real marker log line, and a scratch integration check (zombie starting on the real 10-unit spawn
+circle, ticked the same way `server_tick_npcs` does) converges the zombie's position exactly onto the thrown marker
+and escalates it to FRENZIED.
+
+**Real, honest finding, not fixed here (scope discipline, not an oversight):** `zombie_tick` internally approximates
+a flat ~1 real second of drift per call regardless of actual elapsed time (its own header's documented v0
+simplification, from the original §8b pass) — `server_tick_npcs` calls it at `PC_TICK_HZ` (20Hz), so a newly
+targeted zombie now reaches FRENZIED almost immediately rather than over a realistic window. This quirk pre-dates
+this pass (it already ran at 20Hz with `has_target` hardcoded 0, just silently, since hunger/aggression drift alone
+never mattered) — this pass is the first time it's actually visible, because `has_target` is now reachable. The real
+fix (passing a real `dt_sec` into `zombie_tick`/`npc_brain_tick`) is separate work, deliberately not folded into this
+pass to avoid re-touching a module whose own tests were already locked down in §8b.
+
+**Deferred, named:**
+1. **No autonomous player-detection.** A zombie with no thrown marker in range is exactly as before — stationary,
+   drifting on hunger alone. This closes only the player-*commanded* half of §8e item 2; a zombie independently
+   noticing a nearby player/citizen with no marker thrown is still real, separate, unbuilt work.
+2. **No real projectile.** The marker lands instantly at a computed point; no arc, no travel time, no line-of-sight
+   check against walls (this client's own level geometry isn't loaded server-side yet regardless, §8a).
+3. **No acoustic pingers / hormone emitter** (`docs/DESIGN_DIGEST.md` §6's other two named command tools) — only the
+   pheromone ball/dart was built, matching the founder's own specific "has_target" framing of the gap.
+4. **Citizens/The Men never react to a commanded zombie.** This closes the zombie-side targeting gap only; nothing
+   yet feeds a nearby human NPC's own witness/vigilance decision from a HUNTING/FRENZIED zombie's presence — that's
+   §8e item 1 (wiring vigilance into an actual `noticed()` decision), still open.

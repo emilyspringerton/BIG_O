@@ -39,6 +39,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > reliability score, breeding with one-way genetic drift across generations, and embryo incubation viability. This
 > is the simulation core only — it is not yet wired into the phone's `BP_APP_LAB` screen or persisted anywhere; that
 > UI is still the client-only mockup it always was. See `NORTHSTAR.md` §9 for what's deferred.
+> Zombies can now be commanded: press **G** to throw a pheromone marker (`PC_PACKET_PHEROMONE_THROW`), and any
+> zombie within range locks on (`has_target` is no longer hardcoded 0) and steers toward it, escalating mood toward
+> HUNTING/FRENZIED as it closes in — verified live against a running server. No autonomous player-detection yet (a
+> zombie with no thrown marker stays exactly as before), no real projectile arc, and Citizens/The Men still don't
+> react to a commanded zombie's presence. See `NORTHSTAR.md` §10 for what's deferred.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

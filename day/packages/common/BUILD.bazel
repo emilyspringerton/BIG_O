@@ -11,6 +11,7 @@ cc_library(
         "bigo_sky.h",
         "bigo_skycfg.h",
         "bigo_npc_visual.h",
+        "bigo_pheromone.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",
@@ -113,5 +114,14 @@ cc_test(
 cc_test(
     name = "bigo_npc_visual_test",
     srcs = ["bigo_npc_visual_test.c"],
+    deps = [":common_headers"],
+)
+
+# bigo_pheromone_test -- real, direct coverage for bigo_pheromone.h's pure targeting/steering
+# decisions (S504-PHEROMONE). Same "standing regression check a live server session can't provide
+# in this sandbox" reasoning as bigo_npc_visual_test above.
+cc_test(
+    name = "bigo_pheromone_test",
+    srcs = ["bigo_pheromone_test.c"],
     deps = [":common_headers"],
 )

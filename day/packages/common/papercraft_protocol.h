@@ -30,6 +30,9 @@
 #define PC_PACKET_INVENTORY_UPDATE 10
 #define PC_PACKET_WEAPON_SWITCH    11 /* client -> server: "let me switch to this weapon slot" */
 #define PC_PACKET_SNAPSHOT_LZ4     13 /* server -> client: LZ4-compressed PcSnapshotPacket (see PcSnapshotLz4Header), only sent to clients that advertised PC_CAP_LZ4 */
+#define PC_PACKET_PHEROMONE_THROW  14 /* client -> server: S504-PHEROMONE, docs/DESIGN_DIGEST.md
+    §6's "pheromone balls/darts (paint a target; clones enter enraged pursuit)" command tool --
+    see PcPheromoneThrowPacket below */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -232,6 +235,20 @@ typedef struct {
 typedef struct {
     PcHeader hdr;
 } PcInteractPacket;
+
+/* PcPheromoneThrowPacket -- S504-PHEROMONE, docs/DESIGN_DIGEST.md §6's own "pheromone balls/darts
+ * (paint a target; clones enter enraged pursuit; the Half-Life 2 antlion pheromone-pod idea)"
+ * command tool -- the first real half of the "zombies need a targeting/command mechanic" gap
+ * NORTHSTAR.md §8e item 2 named. Unlike PcInteractPacket (which derives its hit point from the
+ * sender's own position+yaw), a THROWN marker needs an explicit world-space target the server
+ * can't otherwise derive -- v0 keeps that derivation client-side (own position + camera-forward *
+ * a fixed throw distance, matching PC_PACKET_INTERACT's own PC_INTERACT_REACH-style math) rather
+ * than inventing real projectile physics/arc simulation, which stays real, separate, deferred
+ * work (NORTHSTAR.md's own "not a real projectile" note). */
+typedef struct {
+    PcHeader hdr;
+    float x, y, z; /* world-space target the marker lands at */
+} PcPheromoneThrowPacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

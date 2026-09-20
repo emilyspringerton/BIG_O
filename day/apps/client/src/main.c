@@ -1737,6 +1737,23 @@ int main(int argc, char **argv) {
                     req.hdr.sequence = ++allocate_seq;
                     sendto(sock, (const char *)&req, sizeof(req), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
                 }
+                /* S504-PHEROMONE: real "throw a pheromone marker" request -- G, one real request
+                   per keypress, same "client asks, server decides" split PC_PACKET_INTERACT
+                   already establishes above. Unlike INTERACT's own melee reach, the target is
+                   computed HERE (own position + camera-forward * a real throw distance) and sent
+                   explicitly, since the server has no other way to know where a THROWN marker
+                   should land (see PcPheromoneThrowPacket's own doc comment). */
+                if (e.key.keysym.sym == SDLK_g) {
+                    const float PC_PHEROMONE_THROW_DISTANCE = 8.0f;
+                    PcPlayerState own_now = latest_snap.players[my_slot];
+                    PcPheromoneThrowPacket req; memset(&req, 0, sizeof(req));
+                    req.hdr.type = PC_PACKET_PHEROMONE_THROW;
+                    req.hdr.sequence = ++allocate_seq;
+                    req.x = own_now.x + sinf(cam_yaw) * PC_PHEROMONE_THROW_DISTANCE;
+                    req.y = own_now.y;
+                    req.z = own_now.z + cosf(cam_yaw) * PC_PHEROMONE_THROW_DISTANCE;
+                    sendto(sock, (const char *)&req, sizeof(req), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+                }
                 /* Real "arsenal" weapon-switch request -- F1-F6, matching PC_WPN_KNIFE..KATANA's
                    own real order (papercraft_protocol.h). Function-row, not the number row
                    already spent on talent allocation (1-5) above. One real request per keypress,
