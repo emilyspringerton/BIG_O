@@ -26,3 +26,59 @@ cc_binary(
     deps = [":witness_rules"],
     copts = COPTS + ["-DBIGO_VERSION=\\\"bazel\\\""],
 )
+
+# humanness -- MISHRI-derived mood/energy/timing-jitter primitives (S504, founder real-time:
+# "start building the AI brain attention mechanisms and values and all the mishri stuff"),
+# vendored verbatim from SHANKPIT/packages/simulation/humanness.c (2026-09-20, proven there via
+# SHANKPIT's own HUMANNESS_NORTHSTAR.md Phase 1/2). Plain C, not PARENA, by design -- runs every
+# tick per NPC, needs to be fast, not author-editable per-instance (same reasoning gband.c's own
+# sampler already established).
+cc_library(
+    name = "humanness",
+    srcs = ["core/humanness.c"],
+    hdrs = ["core/humanness.h"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "humanness_test",
+    srcs = ["core/humanness_test.c"],
+    deps = [":humanness"],
+    copts = COPTS,
+)
+
+# npc_archetype -- the real attention-mechanism integration point for Citizens and The Men: gives
+# core/witness_rules.c's own static per-NPC vigilance (docs/B1_WITNESS_RULES.md §5) a real,
+# dynamic, mood-modulated value to read instead, via humanness.c. See core/npc_archetype.h's own
+# doc comment for the full design and what's deliberately deferred.
+cc_library(
+    name = "npc_archetype",
+    srcs = ["core/npc_archetype.c"],
+    hdrs = ["core/npc_archetype.h"],
+    deps = [":humanness"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "npc_archetype_test",
+    srcs = ["core/npc_archetype_test.c"],
+    deps = [":npc_archetype"],
+    copts = COPTS,
+)
+
+# zombie_values -- zombies' OWN attention/value vocabulary (hunger/aggression/decay, a 4-state
+# mood arc), deliberately NOT a variant of humanness.c's human mood set -- see
+# core/zombie_values.h's own top doc comment for why. Independent of :humanness on purpose.
+cc_library(
+    name = "zombie_values",
+    srcs = ["core/zombie_values.c"],
+    hdrs = ["core/zombie_values.h"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "zombie_values_test",
+    srcs = ["core/zombie_values_test.c"],
+    deps = [":zombie_values"],
+    copts = COPTS,
+)
