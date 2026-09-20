@@ -60,6 +60,12 @@
 #include "../../../packages/common/bigo_sky.h"
 #include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
 #include "../../../packages/common/bigo_phone.h"
+/* level_loader.h — SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1 (S504-10): loads a NOCK-authored
+ * SHANKPIT level (walls/spawners/exits) from IDUNA's shankpit_levels registry, as an alternative
+ * to the mandatory PAPERCRAFT worldapi chunk-grid fetch below. Selected at runtime via --level-id;
+ * the PAPERCRAFT chunk path (default) is completely untouched when it isn't passed. */
+#define LEVEL_LOADER_IMPL
+#include "../../../packages/common/level_loader.h"
 
 static unsigned int now_ms(void) { return SDL_GetTicks(); }
 
@@ -511,6 +517,46 @@ static void draw_city_world(const PwWorld *world) {
                 glVertex3f(x1, y0, z0); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0);
             }
         }
+    }
+    glEnd();
+}
+
+/* draw_level_walls: renders a NOCK-authored SHANKPIT Level's walls (level_loader.h) as simple
+ * axis-aligned boxes, same immediate-mode GL_QUADS style as draw_city_world above -- one real
+ * render path per world representation for now (SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 2,
+ * "Unify Rendering Pipeline", is the deferred follow-up that merges the two). Each wall's x/y/z is
+ * its center and sx/sy/sz are HALF-extents (level_loader.h's own documented convention), and its
+ * r/g/b is used directly -- unlike the flat concrete-grey city grid, NOCK levels author their own
+ * per-wall color. Materials (shader/specular/texture) aren't parsed by level_loader.h yet, so
+ * every wall renders flat-shaded regardless of its named material; a real, known, not-silently-
+ * hidden gap, not an oversight. */
+static void draw_level_walls(const Level *lvl) {
+    glBegin(GL_QUADS);
+    for (uint32_t i = 0; i < lvl->wall_count; i++) {
+        float cx = lvl->walls[i].x, cy = lvl->walls[i].y, cz = lvl->walls[i].z;
+        float hx = lvl->walls[i].sx, hy = lvl->walls[i].sy, hz = lvl->walls[i].sz;
+        float x0 = cx - hx, x1 = cx + hx;
+        float y0 = cy - hy, y1 = cy + hy;
+        float z0 = cz - hz, z1 = cz + hz;
+        float r = lvl->walls[i].r, g = lvl->walls[i].g, b = lvl->walls[i].b;
+        /* top */
+        cel_color3f(r, g, b, 0.0f, 1.0f, 0.0f);
+        glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
+        /* bottom */
+        cel_color3f(r, g, b, 0.0f, -1.0f, 0.0f);
+        glVertex3f(x0, y0, z0); glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y0, z0);
+        /* front (+z) */
+        cel_color3f(r, g, b, 0.0f, 0.0f, 1.0f);
+        glVertex3f(x0, y0, z1); glVertex3f(x0, y1, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y0, z1);
+        /* back (-z) */
+        cel_color3f(r, g, b, 0.0f, 0.0f, -1.0f);
+        glVertex3f(x0, y0, z0); glVertex3f(x1, y0, z0); glVertex3f(x1, y1, z0); glVertex3f(x0, y1, z0);
+        /* left (-x) */
+        cel_color3f(r, g, b, -1.0f, 0.0f, 0.0f);
+        glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x0, y1, z1); glVertex3f(x0, y0, z1);
+        /* right (+x) */
+        cel_color3f(r, g, b, 1.0f, 0.0f, 0.0f);
+        glVertex3f(x1, y0, z0); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0);
     }
     glEnd();
 }
@@ -1235,6 +1281,10 @@ int main(int argc, char **argv) {
     int iduna_port = 8080;
     const char *prefill_email = NULL;
     const char *prefill_password = NULL;
+    /* --level-id: SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1 (S504-10) -- load a NOCK-
+     * authored level from IDUNA's shankpit_levels registry instead of the PAPERCRAFT worldapi
+     * chunk grid below. 0 (default) keeps the existing PAPERCRAFT client entirely unchanged. */
+    uint32_t level_id = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--worldapi-host") == 0 && i + 1 < argc) worldapi_host = argv[++i];
         else if (strcmp(argv[i], "--worldapi-port") == 0 && i + 1 < argc) worldapi_port = atoi(argv[++i]);
@@ -1244,11 +1294,23 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--iduna-port") == 0 && i + 1 < argc) iduna_port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--email") == 0 && i + 1 < argc) prefill_email = argv[++i];
         else if (strcmp(argv[i], "--password") == 0 && i + 1 < argc) prefill_password = argv[++i];
+        else if (strcmp(argv[i], "--level-id") == 0 && i + 1 < argc) level_id = (uint32_t)atoi(argv[++i]);
     }
 
-    printf("Fetching real %dx%d city chunk grid from worldapi %s:%d (scene=200)...\n", PW_GRID_DIM, PW_GRID_DIM, worldapi_host, worldapi_port);
     static PwWorld g_world;
-    {
+    static Level *g_level = NULL;
+    if (level_id != 0) {
+        printf("Fetching real NOCK level %u from IDUNA %s:%d (SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1)...\n", level_id, iduna_host, iduna_port);
+        char lvl_err[256];
+        g_level = level_load_from_iduna(iduna_host, iduna_port, level_id, lvl_err, sizeof(lvl_err));
+        if (!g_level) {
+            fprintf(stderr, "FATAL: could not load level %u from IDUNA %s:%d -- %s\n", level_id, iduna_host, iduna_port, lvl_err);
+            return 1;
+        }
+        printf("Real level loaded: \"%s\" (%u walls, %u spawners, %u exits, %u materials).\n",
+               g_level->name, g_level->wall_count, g_level->spawner_count, g_level->exit_count, g_level->material_count);
+    } else {
+        printf("Fetching real %dx%d city chunk grid from worldapi %s:%d (scene=200)...\n", PW_GRID_DIM, PW_GRID_DIM, worldapi_host, worldapi_port);
         static char resp[131072];
         for (int cz = -PW_GRID_RADIUS; cz <= PW_GRID_RADIUS; cz++) {
             for (int cx = -PW_GRID_RADIUS; cx <= PW_GRID_RADIUS; cx++) {
@@ -1283,8 +1345,6 @@ int main(int argc, char **argv) {
                 g_world.loaded[idx] = 1;
             }
         }
-    }
-    {
         int total_blocks = 0;
         for (int i = 0; i < PW_GRID_CHUNKS; i++) total_blocks += g_world.chunks[i].block_count;
         printf("Real city chunk grid loaded (%d chunks, %d total blocks).\n", PW_GRID_CHUNKS, total_blocks);
@@ -1992,7 +2052,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        draw_city_world(&g_world);
+        if (g_level) draw_level_walls(g_level); else draw_city_world(&g_world);
         /* latest_snap is zero-initialized, so world_object_active[] correctly reads as "nothing
            yet" before the first real snapshot arrives -- real, honest, no separate fallback
            needed (matches the old single-test-cube code's own established discipline for

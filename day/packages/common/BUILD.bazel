@@ -13,6 +13,7 @@ cc_library(
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",
+        "level_loader.h",
         "paper_mesh.h",
         "papercraft_inventory.h",
         "papercraft_persist.h",
@@ -79,4 +80,26 @@ cc_test(
 cc_test(
     name = "lz4mini_test",
     srcs = ["lz4mini_test.c", "lz4mini.h"],
+)
+
+# http_client_test -- hermetic regression coverage for http_client.h's chunked-transfer decode
+# (http_headers_has_chunked_encoding / http_dechunk), added 2026-09-20 after a real, live bug:
+# IDUNA's GET /api/v1/shankpit-levels/:id/export sends Transfer-Encoding: chunked, and this
+# client's hand-rolled HTTP parser used to hand the raw chunked body straight to callers. Pure
+# text transforms, no sockets -- same "headless, no live IDUNA needed" posture as the other
+# header-only tests above.
+cc_test(
+    name = "http_client_test",
+    srcs = ["http_client_test.c"],
+    deps = [":common_headers"],
+)
+
+# level_loader_test -- unit coverage for level_loader.h's unified SHANKPIT/PAPERCRAFT JSON parser
+# (S504-10, SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1). Covers both a hand-written minimal
+# shape and the real IDUNA /api/v1/shankpit-levels/:id/export shape (no top-level "id", spawners +
+# level_exits + next_level_id) -- confirmed live against local IDUNA, level 12 = nextown.
+cc_test(
+    name = "level_loader_test",
+    srcs = ["level_loader_test.c"],
+    deps = [":common_headers"],
 )

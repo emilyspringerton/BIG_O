@@ -23,6 +23,59 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+
+/* http_headers_has_chunked_encoding: case-insensitive search for "transfer-encoding: chunked" in
+ * the raw header block [headers, headers+header_len). IDUNA (Go net/http) sends this whenever a
+ * handler doesn't set an explicit Content-Length (confirmed live, 2026-09-20, GET
+ * /api/v1/shankpit-levels/:id/export) -- this file's own header comment used to call chunked
+ * decoding out-of-scope ("IDUNA is same-box... not adversarial input"), which was true only while
+ * every endpoint this client actually called happened to send Content-Length. That's no longer
+ * true, so both http_json_request implementations below now dechunk when this returns true,
+ * instead of handing the caller a body with raw hex chunk-size lines still embedded in it. */
+static int http_headers_has_chunked_encoding(const char *headers, size_t header_len) {
+    static const char needle[] = "transfer-encoding: chunked";
+    size_t needle_len = sizeof(needle) - 1;
+    if (header_len < needle_len) return 0;
+    for (size_t i = 0; i + needle_len <= header_len; i++) {
+        size_t j = 0;
+        for (; j < needle_len; j++) {
+            if (tolower((unsigned char)headers[i + j]) != needle[j]) break;
+        }
+        if (j == needle_len) return 1;
+    }
+    return 0;
+}
+
+/* http_dechunk: decodes an HTTP/1.1 "Transfer-Encoding: chunked" body (chunk-size line in hex,
+ * CRLF, that many data bytes, CRLF, repeat, terminated by a zero-size chunk) into out (bounded by
+ * out_cap-1, NUL-terminated). Stops early if out_cap would be exceeded, if a chunk-size line
+ * fails to parse, or at the terminating zero-size chunk. Returns bytes written. Malformed/partial
+ * trailing data (e.g. this client's own recv loop truncating at its 128KB raw buffer) degrades to
+ * "however much decoded cleanly," matching this header's existing best-effort posture (see
+ * http_json_request's own comment on truncation) rather than a hard failure. */
+static size_t http_dechunk(const char *chunked, char *out, size_t out_cap) {
+    size_t out_len = 0;
+    const char *p = chunked;
+    while (out_len + 1 < out_cap) {
+        char *end = NULL;
+        long chunk_size = strtol(p, &end, 16);
+        if (end == p || chunk_size < 0) break; /* not a valid chunk-size line */
+        p = end;
+        if (p[0] == '\r' && p[1] == '\n') p += 2;
+        if (chunk_size == 0) break; /* terminating chunk */
+        size_t n = (size_t)chunk_size;
+        if (n > out_cap - 1 - out_len) n = out_cap - 1 - out_len;
+        memcpy(out + out_len, p, n);
+        out_len += n;
+        if (n < (size_t)chunk_size) break; /* ran out of output space mid-chunk */
+        p += chunk_size;
+        if (p[0] == '\r' && p[1] == '\n') p += 2;
+    }
+    out[out_len] = '\0';
+    return out_len;
+}
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -158,8 +211,12 @@ static int http_json_request(const char *method, const char *host, int port, con
     const char *resp_body = strstr(raw, "\r\n\r\n");
     if (resp_body && resp_buf_len > 0) {
         resp_body += 4;
-        strncpy(resp_buf, resp_body, resp_buf_len - 1);
-        resp_buf[resp_buf_len - 1] = '\0';
+        if (http_headers_has_chunked_encoding(raw, (size_t)(resp_body - raw))) {
+            http_dechunk(resp_body, resp_buf, resp_buf_len);
+        } else {
+            strncpy(resp_buf, resp_body, resp_buf_len - 1);
+            resp_buf[resp_buf_len - 1] = '\0';
+        }
     } else if (resp_buf_len > 0) {
         resp_buf[0] = '\0';
     }
@@ -324,8 +381,12 @@ static int http_json_request(const char *method, const char *host, int port, con
     const char *resp_body = strstr(raw, "\r\n\r\n");
     if (resp_body && resp_buf_len > 0) {
         resp_body += 4;
-        strncpy(resp_buf, resp_body, resp_buf_len - 1);
-        resp_buf[resp_buf_len - 1] = '\0';
+        if (http_headers_has_chunked_encoding(raw, (size_t)(resp_body - raw))) {
+            http_dechunk(resp_body, resp_buf, resp_buf_len);
+        } else {
+            strncpy(resp_buf, resp_body, resp_buf_len - 1);
+            resp_buf[resp_buf_len - 1] = '\0';
+        }
     } else if (resp_buf_len > 0) {
         resp_buf[0] = '\0';
     }

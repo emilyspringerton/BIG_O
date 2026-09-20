@@ -13,8 +13,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > **Status: early code, not yet a playable game.** Working and tested: the witness/decorum rules core (PARENA -> C),
 > a headless co-op crew sim with scenario tests, the Act I Mission 1 rulebook (`core/mission.c`, scenarios 20-23), and the world sim (day/night clock, weather, day zombies + harvest; PARENA rules, REFLUX hooks for mods, scenarios 30-35, [`docs/B2_WORLD.md`](docs/B2_WORLD.md)).
 > A `day/` fork of PAPERCRAFT's SDL2 client + server builds (Linux/Windows, CI-bundled) with an in-game phone holding every
-> menu, but it is still the PAPERCRAFT city, not BIG_O's levels; zombie clips for the mannequin exist but are not wired
-> into any character. Nothing here has been played end to end against a live server.
+> menu. The client can now load a NOCK-authored SHANKPIT level (`--level-id`, `day/packages/common/level_loader.h`) as an
+> alternative to the PAPERCRAFT city — verified live against IDUNA's `nextown` (80 walls, 1 spawner, 1 exit) — but it
+> defaults to the PAPERCRAFT city still, since no BIG_O-specific level is authored yet, walls render flat-shaded (materials
+> aren't parsed yet), and the server side of this fetch isn't wired at all (client-only, so far). Zombie clips for the
+> mannequin exist but are not wired into any character. Nothing here has been played end to end against a live server.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page
