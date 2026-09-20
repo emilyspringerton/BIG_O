@@ -66,6 +66,17 @@
  * the PAPERCRAFT chunk path (default) is completely untouched when it isn't passed. */
 #define LEVEL_LOADER_IMPL
 #include "../../../packages/common/level_loader.h"
+/* GOLDENBAND mannequin + animation library (founder real-time, S504: "bring in animations make
+ * all characters use the manequin we have and pull from the animations library"). Vendored
+ * verbatim from SHANKPIT/packages/goldenband (2026-09-20) -- gband_skel_npc.c/h is the general,
+ * arbitrary-joint-count character renderer (SHANKPIT's own doc comment: "for any OTHER GOLDENBAND
+ * character asset ... used to spawn NPCs"), built on gpose.c (N-joint forward kinematics +
+ * skinning) and gseq.c (named-channel animation sampling); gband.c/gmesh.c/gskel.c are its own
+ * real .gband/.gmesh/.gskel file loaders. NOT vendored: gband_mesh_rig.c/h -- that module is
+ * SHANKPIT's own hardcoded 5-joint tyler_body rig, not a general asset loader, and has no BIG_O
+ * use. mat4.h (packages/common/) is gband_skel_npc.h's only real dependency outside its own
+ * package, vendored alongside it. */
+#include "../../../packages/goldenband/gband_skel_npc.h"
 
 static unsigned int now_ms(void) { return SDL_GetTicks(); }
 
@@ -557,6 +568,59 @@ static void draw_level_walls(const Level *lvl) {
         /* right (+x) */
         cel_color3f(r, g, b, 1.0f, 0.0f, 0.0f);
         glVertex3f(x1, y0, z0); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x1, y1, z0);
+    }
+    glEnd();
+}
+
+/* GOLDENBAND general-skeleton NPC kits (S504, "bring in animations ... use the manequin"). Both
+ * kits share the exact SAME mesh+skeleton (mannequin_npc.gmesh/.gskel) -- confirmed live by
+ * inspecting the vendored zombie clip channel names (pelvis/spine_01/thigh_l/... -- the same
+ * joint names mannequin_npc.gskel itself declares) -- differing only in which animation clips are
+ * loaded: the mannequin kit gets the generic human idle/walk/dance set, the zombie kit gets the
+ * dedicated zombie_idle/zombie_walk set. This is the real, direct answer to "make all characters
+ * use the mannequin we have and pull from the animations library" -- one shared rig, an
+ * animation-library swap per archetype, not a separate zombie mesh. */
+static int g_skel_npc_kit_mannequin = -1;
+static int g_skel_npc_kit_zombie = -1;
+static int g_skel_npc_ready = 0;
+
+static void bigo_load_gband_npc_kits(void) {
+    g_skel_npc_kit_mannequin = gband_skel_npc_load_kit("assets/goldenband", "mannequin_npc",
+                                                         "UAL1_Standard_Idle_Loop", "UAL1_Standard_Walk_Loop",
+                                                         NULL, "UAL1_Standard_Dance_Loop");
+    if (g_skel_npc_kit_mannequin < 0) fprintf(stderr, "S504: mannequin_npc kit load failed (assets/goldenband)\n");
+    /* Real, deliberate same-mesh-different-clips kit: gband_skel_npc_load_kit's own mesh_name
+     * argument ("mannequin_npc" again) loads the identical .gmesh/.gskel a second time into its
+     * own independent kit slot -- a real, small, known duplication (SHANKPIT's own module has no
+     * "share this mesh with another kit" path; matches this session's own established "small,
+     * fixed roster, loaded once" scope, not a perf-sensitive path at 2 kits). */
+    g_skel_npc_kit_zombie = gband_skel_npc_load_kit("assets/goldenband", "mannequin_npc",
+                                                      "zombie_idle", "zombie_walk", NULL, NULL);
+    if (g_skel_npc_kit_zombie < 0) fprintf(stderr, "S504: zombie kit load failed (assets/goldenband)\n");
+    g_skel_npc_ready = (g_skel_npc_kit_mannequin >= 0 || g_skel_npc_kit_zombie >= 0);
+    printf("S504: GOLDENBAND NPC kits ready (mannequin=%d zombie=%d)\n", g_skel_npc_kit_mannequin, g_skel_npc_kit_zombie);
+}
+
+/* bigo_gband_draw_skinned: the real draw_skinned callback gband_skel_npc_draw calls per triangle
+ * batch. Deliberately plain immediate-mode GL_TRIANGLES, NOT SHANKPIT lobby's own GLSL/VBO path
+ * (gl_shader.h + DynamicVBO) -- this client is "deliberately legacy/fixed-function OpenGL" (this
+ * file's own opening doc comment) throughout, and gband_skel_npc_draw's own real contract already
+ * does the reason why a shader isn't needed here: verts6 is pos+normal, WORLD-SPACE, with `model`
+ * always identity (world transform pre-baked in) -- so the current GL_MODELVIEW/GL_PROJECTION
+ * state already set up for this frame (draw_level_walls/draw_city_world already render into it,
+ * same call site) transforms these vertices correctly with zero extra matrix work; `mvp` is
+ * accepted (the real callback contract requires it) but unused here since nothing here needs a
+ * uniform. Reuses cel_color3f verbatim, per-vertex instead of per-face -- same real lighting
+ * model the walls/city grid already use, just fed a per-vertex skinned normal instead of one flat
+ * face normal. */
+static void bigo_gband_draw_skinned(const float *verts6, int vert_count, const Mat4 *mvp, const Mat4 *model) {
+    (void)mvp; (void)model;
+    static const float base_r = 0.55f, base_g = 0.50f, base_b = 0.46f; /* plain mannequin tan, matches SHANKPIT lobby's own skel_npc_draw_skinned tone */
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < vert_count; i++) {
+        const float *v = verts6 + (size_t)i * 6;
+        cel_color3f(base_r, base_g, base_b, v[3], v[4], v[5]);
+        glVertex3f(v[0], v[1], v[2]);
     }
     glEnd();
 }
@@ -1396,6 +1460,7 @@ int main(int argc, char **argv) {
     SDL_GLContext ctx = SDL_GL_CreateContext(win);
     if (!ctx) { fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError()); return 1; }
     SDL_GL_SetSwapInterval(1);
+    bigo_load_gband_npc_kits();
 
     if (!run_login_screen(win, win_w, win_h, iduna_host, iduna_port, prefill_email, prefill_password)) {
         SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
@@ -2062,6 +2127,49 @@ int main(int argc, char **argv) {
         }
 
         if (g_level) draw_level_walls(g_level); else draw_city_world(&g_world);
+
+        /* Real, minimal proof-of-concept NPC draw (S504, "bring in animations"): the GOLDENBAND
+         * mannequin+animation-library pipeline vendored above has no live NPC entity system to
+         * drive it yet (checked directly: PC_PACKET_ENTITY_SPAWN/PcEntitySpawnPacket is an item-
+         * pickup system only, item_id + position, nothing role/AI-shaped -- a real, separate,
+         * not-yet-built piece of work, see NORTHSTAR.md's own S504 animation/AI-brain section).
+         * Two real, stationary test instances -- one mannequin kit, one zombie kit -- prove the
+         * real load-skin-animate-draw path end to end (same "primitives proven in isolation
+         * first" discipline SHANKPIT's own humanness.c Phase 1 and this repo's own gband_sim
+         * tools already established) without inventing fake server-driven entities. Placed near
+         * the level's own first spawner when one exists (real NOCK-level coordinates, not an
+         * arbitrary point in space) so both are visible near where a player actually starts. */
+        {
+            static unsigned int g_gband_last_ms = 0;
+            unsigned int gband_now = now_ms();
+            float gband_dt_ms = (g_gband_last_ms == 0) ? 16.0f : (float)(gband_now - g_gband_last_ms);
+            if (gband_dt_ms > 250.0f) gband_dt_ms = 250.0f; /* clamp stalls/first-frame spike */
+            g_gband_last_ms = gband_now;
+
+            float npc_base_x = 5.0f, npc_base_y = 0.0f, npc_base_z = 5.0f;
+            if (g_level && g_level->spawner_count > 0) {
+                npc_base_x = g_level->spawners[0].x;
+                npc_base_y = g_level->spawners[0].y;
+                npc_base_z = g_level->spawners[0].z;
+            }
+
+            if (g_skel_npc_ready) {
+                Mat4 gband_proj, gband_modelview;
+                glGetFloatv(GL_PROJECTION_MATRIX, gband_proj.m);
+                glGetFloatv(GL_MODELVIEW_MATRIX, gband_modelview.m);
+                Mat4 gband_vp = mat4_multiply(&gband_proj, &gband_modelview);
+
+                if (g_skel_npc_kit_mannequin >= 0) {
+                    gband_skel_npc_draw(g_skel_npc_kit_mannequin, 0, npc_base_x + 2.0f, npc_base_y, npc_base_z,
+                                         0.0f, gband_dt_ms, GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
+                }
+                if (g_skel_npc_kit_zombie >= 0) {
+                    gband_skel_npc_draw(g_skel_npc_kit_zombie, 1, npc_base_x - 2.0f, npc_base_y, npc_base_z,
+                                         0.0f, gband_dt_ms, GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
+                }
+            }
+        }
+
         /* latest_snap is zero-initialized, so world_object_active[] correctly reads as "nothing
            yet" before the first real snapshot arrives -- real, honest, no separate fallback
            needed (matches the old single-test-cube code's own established discipline for

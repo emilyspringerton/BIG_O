@@ -4,9 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build
-SRC="day/apps/client/src/main.c day/packages/simulation/paper_fragment_mod.c day/packages/simulation/parena_runtime.c"
+SRC="day/apps/client/src/main.c day/packages/simulation/paper_fragment_mod.c day/packages/simulation/parena_runtime.c day/packages/goldenband/gband.c day/packages/goldenband/gmesh.c day/packages/goldenband/gskel.c day/packages/goldenband/gpose.c day/packages/goldenband/gseq.c day/packages/goldenband/gsync.c day/packages/goldenband/gband_skel_npc.c"
 WORLD_OBJS="core/world.c core/world_rules.c core/world_alerts.c core/reflux_runtime.c core/sim.c core/witness_rules.c"
-INC="-Iday/packages/common -Iday/packages/simulation"
+INC="-Iday/packages/common -Iday/packages/simulation -Iday/packages/goldenband"
 # The world sim (core/) is compiled separately: it has its own PARENA runtime include dir that must not shadow the client's.
 mkdir -p build/coreobj
 core_objs() {  # $1 = compiler
