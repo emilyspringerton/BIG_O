@@ -58,6 +58,20 @@
     real snapshot broadcast every (PC_TICK_HZ / PC_SNAPSHOT_HZ) ticks -- halving real client
     bandwidth without touching simulation fidelity at all. Must evenly divide PC_TICK_HZ. */
 #define PC_MOVE_SPEED 4.0f /* world units/sec, real walking pace */
+/* PC_SPRINT_SPEED -- "the SHANKPIT run" (S504-10, SHANKPIT/PAPERCRAFT physics unification, founder
+ * real-time: "make it work like the shankpit run so normally we are walking but there is a run
+ * button"), converted into this file's own units-per-second convention, not guessed. SHANKPIT's
+ * own PlayerState has exactly one move speed -- MAX_SPEED = 0.95 (packages/common/physics.h) --
+ * applied as a direct per-tick position delta with no dt multiply at all (confirmed live:
+ * update_entity's own `p->x += p->vx`, packages/simulation/local_game.h), at SHANKPIT's own fixed
+ * SHANKPIT_NET_FIXED_DT = 0.016s tick (packages/common/net_sim.h) = 62.5 ticks/sec. Steady-state
+ * speed is therefore 0.95 * 62.5 = 59.375 world units/sec in SHANKPIT's own coordinate space --
+ * the SAME space this server now renders real NOCK levels in (level_loader.h, S504-10b), so no
+ * further scale conversion is needed. PC_MOVE_SPEED's own walking pace was tuned for the smaller,
+ * 1-unit-block PAPERCRAFT city grid; loading a SHANKPIT-scale level like nextown (walls up to 864
+ * units wide) at that same 4.0 units/sec pace would take minutes to cross on foot -- sprint is
+ * this file's own real fix for that scale mismatch, not merely a cosmetic speed-up. */
+#define PC_SPRINT_SPEED 59.375f
 #define PC_USERCMD_STALE_MS 500
 #define PC_PLAYER_TIMEOUT_MS 60000 /* real, generous "genuinely abandoned" threshold -- comfortably
                                        longer than apps/client's own real PC_CLIENT_STALE_MS
@@ -1534,6 +1548,16 @@ int main(int argc, char **argv) {
                 float mx = local_z * sinf(yaw) + local_x * cosf(yaw);
                 float mz = local_z * cosf(yaw) - local_x * sinf(yaw);
 
+                /* Sprint (S504-10, SHANKPIT/PAPERCRAFT physics unification) -- read straight from
+                   latest_buttons here, ahead of the `crouching` bool below (which only exists
+                   after this point), because sprint and crouch are mutually exclusive: you cannot
+                   sprint while crouched, matching every other game's own convention and this
+                   client's own real Shift=sprint/Ctrl=crouch keybinding (Shift no longer also
+                   binds crouch -- see apps/client/src/main.c's own real key-read comment). */
+                int sprinting = ((s->latest_buttons & PC_BTN_SPRINT) != 0) &&
+                                 ((s->latest_buttons & PC_BTN_CROUCH) == 0);
+                float base_move_speed = sprinting ? PC_SPRINT_SPEED : PC_MOVE_SPEED;
+
                 /* Real MOVE-stat gameplay consequence -- the real PARENA-compiled
                    on_papercraft_move_speed_boost_permille (packages/simulation/stat_effects_mod.c),
                    not a hand-rolled float formula here. Ported from the construct's own real
@@ -1542,8 +1566,9 @@ int main(int argc, char **argv) {
                    actual multiplier -- VS0 has no F32 params yet, same real ceiling every other
                    mod in this monorepo respects. Real slide-jump boost (see below) stacks
                    multiplicatively on top while its own real, timed window is still active --
-                   both are legitimate, independent speed modifiers. */
-                float move_speed = PC_MOVE_SPEED * (float)on_papercraft_move_speed_boost_permille(s->state.ability[PC_ABILITY_MOVE]) / 1000.0f;
+                   both are legitimate, independent speed modifiers, and both now stack on top of
+                   base_move_speed (walk or sprint) rather than PC_MOVE_SPEED directly. */
+                float move_speed = base_move_speed * (float)on_papercraft_move_speed_boost_permille(s->state.ability[PC_ABILITY_MOVE]) / 1000.0f;
                 if (now < s->speed_boost_until_ms) {
                     move_speed *= (float)s->speed_boost_permille / 1000.0f;
                 }

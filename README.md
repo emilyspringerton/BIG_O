@@ -16,8 +16,12 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > menu. The client can now load a NOCK-authored SHANKPIT level (`--level-id`, `day/packages/common/level_loader.h`) as an
 > alternative to the PAPERCRAFT city — verified live against IDUNA's `nextown` (80 walls, 1 spawner, 1 exit) — but it
 > defaults to the PAPERCRAFT city still, since no BIG_O-specific level is authored yet, walls render flat-shaded (materials
-> aren't parsed yet), and the server side of this fetch isn't wired at all (client-only, so far). Zombie clips for the
-> mannequin exist but are not wired into any character. Nothing here has been played end to end against a live server.
+> aren't parsed yet), and the server side of this fetch isn't wired at all (client-only, so far). Movement now has a real
+> walk/sprint split (hold Left Shift to run) — a first step in unifying PAPERCRAFT's own dt-scaled walking pace (4
+> units/sec) with SHANKPIT's own real, measured run speed (~59.4 units/sec, converted from its per-tick `MAX_SPEED`),
+> since a SHANKPIT-scale level like `nextown` is far too large to cross on foot at PAPERCRAFT's walking pace alone.
+> Zombie clips for the mannequin exist but are not wired into any character. Nothing here has been played end to end
+> against a live server.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

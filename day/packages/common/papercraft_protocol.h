@@ -117,6 +117,10 @@ typedef struct {
 #define PC_BTN_CROUCH  2 /* real, minimal crouch signal -- gates the real slide-jump trick below,
                             no real crouch collision-height change yet (this game has no capsule/
                             height collision at all, only column-based ground snapping) */
+#define PC_BTN_SPRINT  4 /* S504-10, SHANKPIT/PAPERCRAFT physics unification: "hold to run" up to
+                            PC_SPRINT_SPEED (apps/server/src/main.c) instead of the default
+                            PC_MOVE_SPEED walking pace; mutually exclusive with PC_BTN_CROUCH,
+                            server-enforced (see the server's own real movement-tick comment). */
 
 /* PcAllocateTalentPacket -- real client request to spend one unspent point on one of the real
  * five construct stats (PC_ABILITY_* below). The real DECISION (is this legal right now?) is

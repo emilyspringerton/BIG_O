@@ -1882,14 +1882,20 @@ int main(int argc, char **argv) {
         if (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]) move_x -= 1.0f;
         if (keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) move_x += 1.0f;
 
-        /* Real jump/crouch input -- held-key state, same real polling convention move_x/move_z
-           already use (not a discrete keydown event) so a held jump/crouch reads correctly every
-           real tick, matching PcUserCmdPacket's own continuous-input-stream contract. Space =
-           jump, Left Ctrl/Shift = crouch (a real slide-jump trick needs jump momentarily pressed
-           WHILE crouch is already held -- crouch first, then tap jump). */
+        /* Real jump/crouch/sprint input -- held-key state, same real polling convention
+           move_x/move_z already use (not a discrete keydown event) so a held jump/crouch/sprint
+           reads correctly every real tick, matching PcUserCmdPacket's own continuous-input-stream
+           contract. Space = jump, Left Ctrl = crouch (a real slide-jump trick needs jump
+           momentarily pressed WHILE crouch is already held -- crouch first, then tap jump), Left
+           Shift = sprint (S504-10, SHANKPIT/PAPERCRAFT physics unification -- "make it work like
+           the shankpit run so normally we are walking but there is a run button"). Left Shift
+           used to also bind crouch; moved to the sole sprint key (standard FPS convention, and
+           the two are mutually exclusive server-side anyway -- see apps/server/src/main.c's own
+           real movement-tick comment) rather than doubling up with Ctrl. */
         unsigned int buttons = 0;
         if (keys[SDL_SCANCODE_SPACE]) buttons |= PC_BTN_JUMP;
-        if (keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_LSHIFT]) buttons |= PC_BTN_CROUCH;
+        if (keys[SDL_SCANCODE_LCTRL]) buttons |= PC_BTN_CROUCH;
+        if (keys[SDL_SCANCODE_LSHIFT]) buttons |= PC_BTN_SPRINT;
 
         /* Real, basic controller input -- see `pad`'s own doc comment above for the full real
            mapping. Every read here is a real, harmless no-op when `pad` is NULL (no controller
@@ -1913,6 +1919,9 @@ int main(int argc, char **argv) {
 
             if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A)) buttons |= PC_BTN_JUMP;
             if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B)) buttons |= PC_BTN_CROUCH;
+            /* Left stick click (L3) = sprint -- the standard console-controller sprint bind,
+               mirroring keyboard's own Left Shift (S504-10). */
+            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK)) buttons |= PC_BTN_SPRINT;
         }
 
         /* Real, live redesign (2026-09-02, founder real-time first "make movement relative to
