@@ -20,7 +20,15 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > walk/sprint split (hold Left Shift to run) — a first step in unifying PAPERCRAFT's own dt-scaled walking pace (4
 > units/sec) with SHANKPIT's own real, measured run speed (~59.4 units/sec, converted from its per-tick `MAX_SPEED`),
 > since a SHANKPIT-scale level like `nextown` is far too large to cross on foot at PAPERCRAFT's walking pace alone.
-> Zombie clips for the mannequin exist but are not wired into any character. Nothing here has been played end to end
+> The GOLDENBAND mannequin + animation library are now vendored and wired in (`day/packages/goldenband/`,
+> `gband_skel_npc.c`) — the client draws two real, live test NPCs (one human-clip mannequin, one zombie-clip mannequin,
+> same shared mesh/skeleton) near the loaded level's spawner, proving the load→skin→animate→draw path end to end.
+> No live NPC entity system drives this yet (server has no role-bearing NPCs to spawn), so it's a proof of concept,
+> not a populated world. A real, matching AI-brain layer exists alongside it but isn't wired to anything live either:
+> `core/humanness.c` (MISHRI-derived mood/timing-jitter primitives, vendored from SHANKPIT), `core/npc_archetype.c`
+> (Citizens vs. The Men — a real, dynamic, mood-modulated vigilance feeding `core/witness_rules.c`'s own attention
+> mechanism), and `core/zombie_values.c` (zombies' own hunger/aggression/decay vocabulary, deliberately not a human
+> mood reskin). See `NORTHSTAR.md` §8 for the full scope and what's deferred. Nothing here has been played end to end
 > against a live server.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 

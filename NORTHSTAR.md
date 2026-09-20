@@ -137,3 +137,101 @@ variants — later it can be a mode with **no onboarding** (or faked), and V0 fo
 - **Onboarding (founder refinement, 2026-09-18):** skipped entirely for adversarial modes; optional for co-op. Build an onboarding
   that works for co-op, but do **not** over-design it until more game systems materialize — until then it is a thin, skippable
   stub (no dedicated tutorial content, no per-role variants), and no system may *depend* on having gone through it.
+
+## 8. Animation + AI-brain scoping pass (2026-09-20, S504) — "bring in animations ... start building the AI brain"
+
+Founder real-time: *"bring in animations make all characters use the manequin we have and pull from the animations
+library start building the AI brain attention mechanisms and values and all the mishri stuff for both 'citizens' and
+also for 'the men' to a certain extent ZOMBIES need to also have their own values and attention mechanisms but they
+are mofe [more] zombie values and behaving you know?"* Per Principle 19 this is a big, unscoped ask spanning two real
+domains (character rendering, NPC AI); this section investigates what already exists, cuts a real V0 for each, and
+names what's deferred rather than building either blind.
+
+**Checked first, not assumed:** SHANKPIT already has a real, general-skeleton character renderer
+(`packages/goldenband/gband_skel_npc.c`, "for any OTHER GOLDENBAND character asset ... used to spawn NPCs") and a
+real, tested MISHRI-derived mood/timing-jitter layer (`packages/simulation/humanness.c`,
+`docs/HUMANNESS_NORTHSTAR.md` Phase 1+2 DONE). BIG_O's own `core/witness_rules.c` already has a real attention
+mechanism for citizens — `vigilance` (0..100, per-NPC, `docs/B1_WITNESS_RULES.md` §5) feeding `noticed()` — and a
+real zombie tactic state machine (`zombie_next_state`, terrain/wall-breach logic). Neither of these needed
+reinventing; the real gap was (a) BIG_O's day client had zero GOLDENBAND code at all (only 4 loose zombie animation
+clips, no mesh/skeleton, no renderer), and (b) `vigilance` was a static int, never modulated by anything.
+
+### 8a. Animation — DONE (vendoring + a real, minimal end-to-end proof)
+
+Vendored verbatim from SHANKPIT (`packages/goldenband/{gband,gband_skel_npc,gmesh,gpose,gseq,gskel,gsync}.{c,h}`,
+`sha256.h`, `packages/common/mat4.h`) into `day/packages/goldenband/` + `day/packages/common/mat4.h`, plus the
+mannequin's own mesh/skeleton (`mannequin_npc.gmesh`/`.gskel`) and its generic idle/walk/dance clip set
+(`UAL1_Standard_*`) into `day/assets/goldenband/`. **All characters use the mannequin** (the direct answer to "make
+all characters use the manequin we have"): the zombie clips already vendored in a prior session turned out to target
+the *exact same* skeleton (confirmed live — the zombie clips' own channel names, `pelvis`/`spine_01`/`thigh_l`/...,
+match `mannequin_npc.gskel`'s own joint names byte-for-byte) — one shared rig, an animation-library swap per
+archetype, never a separate zombie mesh. Wired a `bigo_gband_draw_skinned` callback into `day/apps/client/src/main.c`
+(plain immediate-mode `GL_TRIANGLES`, reusing `cel_color3f` per-vertex — this client stays "deliberately legacy
+fixed-function OpenGL", no shader/VBO pipeline pulled in) and two test NPC kits (mannequin + zombie-clip-on-mannequin)
+drawn once per frame near the loaded level's own spawner, proving the real load→skin→animate→draw path end to end.
+
+**Real, live, found-and-fixed bug along the way** (not guessed): `GSEQ_MAX_CHANNELS` was 256, but
+`mannequin_npc.gskel` has 65 joints × 7 channels/joint = 455 — the mannequin's own clips silently failed to load,
+in BOTH this vendored copy AND upstream SHANKPIT itself (confirmed live against SHANKPIT's own real asset library:
+only `Leela`, 17 joints, actually fit under the old cap — `mannequin_npc`/`Stan`/`Mike`/`George` all silently failed,
+and SHANKPIT's own kit-cycling fallback converged every player/NPC onto `Leela` regardless of intended per-id
+variety). Fixed upstream (SHANKPIT `d14c7a6`) and here identically, verified live: all kits now load, `make lobby`
+and this repo's own client build both clean.
+
+**Deferred, named:** no live NPC entity system exists to drive this yet (`PC_PACKET_ENTITY_SPAWN` is an item-pickup
+system only, not role/AI-shaped) — that's real, separate, not-yet-built work (§8c below), not a rendering gap.
+Materials/shaders aren't parsed by `level_loader.h` yet (walls render flat-shaded — a pre-existing, already-named gap,
+unrelated to this pass). Per-role clip selection (a citizen vs. The Men vs. a zombie all picking a *different* animset
+off the same mannequin) needs the AI-brain work below to know which role an NPC even is.
+
+### 8b. AI brain / values / attention — DONE (primitives + citizen/Men integration + zombie module, no live integration yet)
+
+Same real "primitives proven in isolation first" discipline SHANKPIT's own `humanness.c` Phase 1 already used — this
+pass builds and tests the brain layer, it does not yet wire it into a live server tick (§8c).
+
+- **`core/humanness.c`/`.h`** — MISHRI's real primitives, vendored verbatim from SHANKPIT (mood enum, energy/
+  fatigue/curiosity/boredom, `humanness_reaction_delay_ms`, `humanness_aim_noise`, `humanness_smooth_turn_step`,
+  `humanness_tick_mood`/`humanness_get_startled`). `core/humanness_test.c`'s own 7 real MISHRI-bar behavioral tests
+  (STARTLED genuinely faster than TIRED over 500 trials, etc.) re-verified passing on this copy. One real portability
+  fix along the way: `M_PI` isn't exposed under this repo's own strict `-std=c99 -Werror` Bazel toolchain (SHANKPIT's
+  looser Makefile build never hit it) — replaced with a literal, matching `zombie_values.c`'s own established
+  convention.
+- **`core/npc_archetype.h`/`.c`** — Citizens + The Men (design digest §11's "blue-collar cleanup crew" — plumbers/
+  electricians/engineers/regulators). Real answer to "attention mechanisms and values": `NpcBrain` pairs a
+  `HumannessState` with an archetype-differentiated `base_vigilance` (Citizen 35, The Men 85 — the docs' own
+  "tired contractor" vs. "veteran guard" ends of the 0..100 scale) and `npc_brain_effective_vigilance()` modulates it
+  live by mood/energy/fatigue (STARTLED +25, TIRED −15, each fatigue/low-energy point further down), clamped to
+  `witness_rules.h`'s own real 0..100 scale — **the actual attention-mechanism integration point**: this is a real,
+  dynamic value meant to replace `core/sim.h`'s `SimNpc.vigilance` (currently a static int, set once, never
+  modulated) at the call site that feeds `noticed()`. 7 real statistical tests (`core/npc_archetype_test.c`),
+  including a 500-trial run confirming The Men's average effective vigilance genuinely exceeds Citizens' across real
+  mood variation, not just at init.
+- **`core/zombie_values.h`/`.c`** — zombies' **own** vocabulary, per the founder's own explicit "more zombie values
+  and behaving, you know?" — deliberately NOT `NpcBrain` with different numbers plugged into the human mood enum.
+  `ZombieState`: hunger/aggression/decay (0.0-1.0) instead of energy/curiosity/boredom, a 4-state mood arc
+  (DORMANT→AGITATED→HUNTING→FRENZIED, frenzy is a real spike from a stimulus or high sustained aggression, never a
+  slow drift) instead of MISHRI's 8 states, and `decay` — a one-way physical-deterioration clock with no human
+  equivalent, widening reaction delay and lunge inaccuracy over the zombie's lifetime regardless of mood. Reaction
+  timing has a genuinely different shape from `humanness.c`'s STARTLED/TIRED curve: FRENZIED is faster **and**
+  measurably more erratic (real, higher variance, not just a lower mean) — verified via a real 2000-trial variance
+  comparison, and a real, live bug caught and fixed along the way (spread was scaling off the mood-adjusted mean
+  instead of off `base_ms`, so DORMANT's own inflated mean was accidentally producing a *larger* absolute spread than
+  FRENZIED — backwards from the intended "erratic" contract). Deliberately NOT wired into `core/witness_rules.c` —
+  zombies are the thing citizens/The Men witness, never a witness themselves;
+  `zombie_effective_alertness()` is a separate, future perception-radius hook, not a second copy of `vigilance`. 11
+  real statistical tests (`core/zombie_values_test.c`).
+
+### 8c. Deferred (named, phased — not built this pass)
+
+1. **Live NPC entity system.** No server-side spawn/tick/despawn or wire representation for a role-bearing NPC exists
+   at all yet (only item-pickup entities). Needed before either §8a's animation kits or §8b's brains can drive an
+   actual on-screen character. Real, honest size: a new packet type or snapshot extension, server-side NPC array,
+   role assignment.
+2. **Wiring `npc_brain_effective_vigilance`/`zombie_effective_alertness` into `core/sim.c`** (replacing `SimNpc`'s
+   static `vigilance` field) and into whatever live server ticks NPCs once §8c.1 exists.
+3. **Per-role clip selection** on the animation side (§8a) once an NPC's real archetype/role is known at draw time.
+4. **The Men's own dispatch/sanitize behavior** (SILENCING/ENGAGE → `resolved=1` memory-wipe, `docs/B1_WITNESS_RULES.md`
+   §1) as an actual decision loop, not just a faster/steadier `NpcBrain` — this pass built the *personality*, not the
+   *job*.
+5. **PARENA-scriptable per-role personality config** — SHANKPIT's own named Phase 4, still deferred there too; real
+   future home for designer-tunable archetype presets instead of the hardcoded ones in `npc_brain_init` today.
