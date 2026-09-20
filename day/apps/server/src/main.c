@@ -44,6 +44,11 @@
 #include "../../../packages/common/papercraft_world.h"
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/papercraft_persist.h"
+/* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
+ * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
+ * isolation only. See ServerNpc's own doc comment below for the full design. */
+#include "../../../../core/npc_archetype.h"
+#include "../../../../core/zombie_values.h"
 
 #define PC_SERVER_PORT 7799
 #define PC_TICK_HZ 20 /* on-foot movement doesn't need a vehicle sim's own 60Hz -- real, deliberately lower tick rate for Phase 0 */
@@ -283,6 +288,74 @@ typedef struct {
     float x, y, z;
 } ServerEntity;
 static ServerEntity g_entities[PC_ENTITY_MAX];
+
+/* ServerNpc -- S504 §8c's own real, named next step: a live, role-bearing NPC, server-authoritative
+ * like everything else in this file. Array index IS the wire slot index, same "slot index is the
+ * id" convention g_entities[]/g_slots[] already use. Brain state (HumannessState via NpcBrain, or
+ * ZombieState) lives ONLY here, server-side -- PcNpcState (papercraft_protocol.h) deliberately
+ * carries none of it, matching the file's own established "server decides, client renders" split.
+ * Both an NpcBrain AND a ZombieState field, unconditionally, rather than a union: at PC_NPC_MAX=8
+ * the wasted bytes are trivial, and a plain struct is simpler to reason about than a tagged union
+ * for a v0 this small -- only the field matching `role` is ever ticked or read. */
+typedef struct {
+    int active;
+    unsigned char role; /* PC_NPC_ROLE_* */
+    float x, y, z, yaw;
+    NpcBrain brain;       /* valid when role == PC_NPC_ROLE_CITIZEN or PC_NPC_ROLE_THE_MEN */
+    ZombieState zombie;   /* valid when role == PC_NPC_ROLE_ZOMBIE */
+} ServerNpc;
+static ServerNpc g_npcs[PC_NPC_MAX];
+
+/* server_spawn_npcs -- real, fixed v0 test population (NORTHSTAR.md §8's own "~6 humanness-lite
+ * NPCs... and one thought-police NPC" scale): 3 Citizens, 1 The Men (the thought-police-adjacent
+ * "muscle" role), 4 zombies, placed on a small real circle around world origin so they're
+ * findable without needing a real level loaded server-side yet (level_loader.h is client-only so
+ * far, see NORTHSTAR.md §8a). Stationary in v0, on purpose -- real movement/behavior selection
+ * (The Men's own dispatch loop, zombies pursuing a sensed player) is named, deferred work
+ * (NORTHSTAR.md §8c items 3-4), not attempted here; this pass wires the entity system and proves
+ * the brains tick live, it does not yet make them act. */
+static void server_spawn_npcs(unsigned int now_ms) {
+    static const unsigned char roles[PC_NPC_MAX] = {
+        PC_NPC_ROLE_CITIZEN, PC_NPC_ROLE_CITIZEN, PC_NPC_ROLE_CITIZEN, PC_NPC_ROLE_THE_MEN,
+        PC_NPC_ROLE_ZOMBIE, PC_NPC_ROLE_ZOMBIE, PC_NPC_ROLE_ZOMBIE, PC_NPC_ROLE_ZOMBIE
+    };
+    for (int i = 0; i < PC_NPC_MAX; i++) {
+        ServerNpc *n = &g_npcs[i];
+        memset(n, 0, sizeof(*n));
+        n->active = 1;
+        n->role = roles[i];
+        float angle = (float)i * (2.0f * 3.14159265f / (float)PC_NPC_MAX);
+        n->x = 10.0f * cosf(angle);
+        n->z = 10.0f * sinf(angle);
+        n->y = 0.0f;
+        n->yaw = angle;
+        if (n->role == PC_NPC_ROLE_ZOMBIE) {
+            zombie_state_init(&n->zombie, now_ms);
+        } else {
+            npc_brain_init(&n->brain, (n->role == PC_NPC_ROLE_THE_MEN) ? NPC_ARCHETYPE_THE_MEN : NPC_ARCHETYPE_CITIZEN, now_ms);
+        }
+    }
+    printf("S504: spawned %d real NPCs (3 citizen, 1 the_men, 4 zombie) on a 10-unit circle around origin.\n", PC_NPC_MAX);
+}
+
+/* server_tick_npcs -- real, per-server-tick brain update (PC_TICK_HZ, not the slower
+ * PC_SNAPSHOT_HZ broadcast rate) -- humanness_tick_mood/zombie_tick are both real, internally
+ * timer-gated (their own mood_change_at_ms), so calling this every tick is cheap and correct, same
+ * discipline core/humanness.h's own doc comment already establishes ("per tick or per decision
+ * cycle"). has_target is hardcoded 0 for every zombie -- no player-detection/targeting exists yet
+ * (NORTHSTAR.md §8c item 4), so zombies stay DORMANT/AGITATED on hunger drift alone in this pass,
+ * never HUNTING/FRENZIED; that transition is real, future work once a target signal exists. */
+static void server_tick_npcs(unsigned int now_ms) {
+    for (int i = 0; i < PC_NPC_MAX; i++) {
+        ServerNpc *n = &g_npcs[i];
+        if (!n->active) continue;
+        if (n->role == PC_NPC_ROLE_ZOMBIE) {
+            zombie_tick(&n->zombie, now_ms, 0);
+        } else {
+            npc_brain_tick(&n->brain, now_ms);
+        }
+    }
+}
 
 /* Real PARENA-compiled progression decisions (packages/simulation/level_mod.c) -- wiring the
    already-tested "mods first everything" leveling logic into the actual live game loop for the
@@ -1055,6 +1128,7 @@ int main(int argc, char **argv) {
 
     memset(g_slots, 0, sizeof(g_slots));
     memset(g_entities, 0, sizeof(g_entities));
+    server_spawn_npcs(now_ms());
     g_pickup_radius = (float)on_papercraft_pickup_radius_millis() / 1000.0f;
     printf("Real, PARENA-decided pickup radius: %.2f world units.\n", g_pickup_radius);
 
@@ -1462,6 +1536,7 @@ int main(int argc, char **argv) {
         if (now - last_tick_ms >= tick_ms) {
             last_tick_ms = now;
             server_tick++;
+            server_tick_npcs(now);
 
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 PlayerSlot *s = &g_slots[i];
@@ -1741,6 +1816,19 @@ int main(int argc, char **argv) {
                     snap.falling[fi].fragment_idx = (unsigned char)g_falling[fi].fragment_idx;
                     snap.falling[fi].y = g_falling[fi].y;
                     snap.falling[fi].rotation_deg = g_falling[fi].rotation_deg;
+                }
+            }
+            /* S504 §8c real NPC broadcast -- position/role only, matching PcNpcState's own
+               "server decides, client renders" wire-lean doc comment; brain/mood state never
+               crosses the wire. */
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                snap.npc_active[ni] = (unsigned char)g_npcs[ni].active;
+                if (g_npcs[ni].active) {
+                    snap.npcs[ni].x = g_npcs[ni].x;
+                    snap.npcs[ni].y = g_npcs[ni].y;
+                    snap.npcs[ni].z = g_npcs[ni].z;
+                    snap.npcs[ni].yaw = g_npcs[ni].yaw;
+                    snap.npcs[ni].role = g_npcs[ni].role;
                 }
             }
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {

@@ -77,6 +77,7 @@
  * use. mat4.h (packages/common/) is gband_skel_npc.h's only real dependency outside its own
  * package, vendored alongside it. */
 #include "../../../packages/goldenband/gband_skel_npc.h"
+#include "../../../packages/common/bigo_npc_visual.h"
 
 static unsigned int now_ms(void) { return SDL_GetTicks(); }
 
@@ -613,9 +614,16 @@ static void bigo_load_gband_npc_kits(void) {
  * uniform. Reuses cel_color3f verbatim, per-vertex instead of per-face -- same real lighting
  * model the walls/city grid already use, just fed a per-vertex skinned normal instead of one flat
  * face normal. */
+/* g_gband_current_color: set immediately before each gband_skel_npc_draw call, read inside the
+ * callback below -- the standard pattern for varying appearance per instance when the callback's
+ * own fixed signature (gband_skel_npc.h's real contract) has no per-call userdata parameter.
+ * Defaults to the plain mannequin tan (matches SHANKPIT lobby's own skel_npc_draw_skinned tone)
+ * so any call site that doesn't set it explicitly still gets a sane, existing color. */
+static float g_gband_current_color[3] = {0.55f, 0.50f, 0.46f};
+
 static void bigo_gband_draw_skinned(const float *verts6, int vert_count, const Mat4 *mvp, const Mat4 *model) {
     (void)mvp; (void)model;
-    static const float base_r = 0.55f, base_g = 0.50f, base_b = 0.46f; /* plain mannequin tan, matches SHANKPIT lobby's own skel_npc_draw_skinned tone */
+    float base_r = g_gband_current_color[0], base_g = g_gband_current_color[1], base_b = g_gband_current_color[2];
     glBegin(GL_TRIANGLES);
     for (int i = 0; i < vert_count; i++) {
         const float *v = verts6 + (size_t)i * 6;
@@ -2128,45 +2136,40 @@ int main(int argc, char **argv) {
 
         if (g_level) draw_level_walls(g_level); else draw_city_world(&g_world);
 
-        /* Real, minimal proof-of-concept NPC draw (S504, "bring in animations"): the GOLDENBAND
-         * mannequin+animation-library pipeline vendored above has no live NPC entity system to
-         * drive it yet (checked directly: PC_PACKET_ENTITY_SPAWN/PcEntitySpawnPacket is an item-
-         * pickup system only, item_id + position, nothing role/AI-shaped -- a real, separate,
-         * not-yet-built piece of work, see NORTHSTAR.md's own S504 animation/AI-brain section).
-         * Two real, stationary test instances -- one mannequin kit, one zombie kit -- prove the
-         * real load-skin-animate-draw path end to end (same "primitives proven in isolation
-         * first" discipline SHANKPIT's own humanness.c Phase 1 and this repo's own gband_sim
-         * tools already established) without inventing fake server-driven entities. Placed near
-         * the level's own first spawner when one exists (real NOCK-level coordinates, not an
-         * arbitrary point in space) so both are visible near where a player actually starts. */
-        {
+        /* Real, server-authoritative NPC draw (S504 §8c): renders every active PcNpcState from
+         * the live snapshot (apps/server/src/main.c's own real ServerNpc array -- 3 Citizens, 1
+         * The Men, 4 zombies, ticking core/npc_archetype.h / core/zombie_values.h brains every
+         * real server tick), no longer two hardcoded stationary test instances. Kit + tint are
+         * picked by role: Citizens and The Men share the mannequin kit (distinguished by a tint,
+         * since core/npc_archetype.h's own personality difference has no visual asset of its own
+         * yet -- a real, named, deferred gap, not an oversight), zombies get the zombie-clip kit
+         * on the exact same shared mesh (§8a's own "one rig, an animation-library swap" design).
+         * facing_rad applies the same "180 - degrees" correction SHANKPIT's own lobby established
+         * for this exact glTF-imported mannequin rig's bind pose (apps/lobby/src/main.c's own
+         * draw_player_skin_mannequin) -- not independently re-verified visually here (no live GL
+         * in this sandbox), same honest limitation that fix itself already carries upstream. */
+        if (g_skel_npc_ready) {
             static unsigned int g_gband_last_ms = 0;
             unsigned int gband_now = now_ms();
             float gband_dt_ms = (g_gband_last_ms == 0) ? 16.0f : (float)(gband_now - g_gband_last_ms);
             if (gband_dt_ms > 250.0f) gband_dt_ms = 250.0f; /* clamp stalls/first-frame spike */
             g_gband_last_ms = gband_now;
 
-            float npc_base_x = 5.0f, npc_base_y = 0.0f, npc_base_z = 5.0f;
-            if (g_level && g_level->spawner_count > 0) {
-                npc_base_x = g_level->spawners[0].x;
-                npc_base_y = g_level->spawners[0].y;
-                npc_base_z = g_level->spawners[0].z;
-            }
+            Mat4 gband_proj, gband_modelview;
+            glGetFloatv(GL_PROJECTION_MATRIX, gband_proj.m);
+            glGetFloatv(GL_MODELVIEW_MATRIX, gband_modelview.m);
+            Mat4 gband_vp = mat4_multiply(&gband_proj, &gband_modelview);
 
-            if (g_skel_npc_ready) {
-                Mat4 gband_proj, gband_modelview;
-                glGetFloatv(GL_PROJECTION_MATRIX, gband_proj.m);
-                glGetFloatv(GL_MODELVIEW_MATRIX, gband_modelview.m);
-                Mat4 gband_vp = mat4_multiply(&gband_proj, &gband_modelview);
-
-                if (g_skel_npc_kit_mannequin >= 0) {
-                    gband_skel_npc_draw(g_skel_npc_kit_mannequin, 0, npc_base_x + 2.0f, npc_base_y, npc_base_z,
-                                         0.0f, gband_dt_ms, GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                if (!latest_snap.npc_active[ni]) continue;
+                const PcNpcState *npc = &latest_snap.npcs[ni];
+                int kit;
+                if (!bigo_npc_visual_for_role(npc->role, g_skel_npc_kit_mannequin, g_skel_npc_kit_zombie, &kit, g_gband_current_color)) {
+                    continue; /* this role's own kit failed to load -- skip, never draw garbage */
                 }
-                if (g_skel_npc_kit_zombie >= 0) {
-                    gband_skel_npc_draw(g_skel_npc_kit_zombie, 1, npc_base_x - 2.0f, npc_base_y, npc_base_z,
-                                         0.0f, gband_dt_ms, GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
-                }
+                float facing_rad = bigo_npc_facing_rad_from_yaw(npc->yaw);
+                gband_skel_npc_draw(kit, ni, npc->x, npc->y, npc->z, facing_rad, gband_dt_ms,
+                                     GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
             }
         }
 

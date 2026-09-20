@@ -10,6 +10,7 @@ cc_library(
         "lz4mini.h",
         "bigo_sky.h",
         "bigo_skycfg.h",
+        "bigo_npc_visual.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",
@@ -101,5 +102,16 @@ cc_test(
 cc_test(
     name = "level_loader_test",
     srcs = ["level_loader_test.c"],
+    deps = [":common_headers"],
+)
+
+# bigo_npc_visual_test -- real, direct coverage for bigo_npc_visual.h's NPC role->kit/tint
+# selection and yaw->facing_rad conversion (S504 §8c). Pure logic, factored out of
+# apps/client/src/main.c's own live NPC render loop specifically because it can't be exercised
+# end to end in this sandbox (no real GL driver) -- same "standing regression check a live
+# graphical session can't provide" reasoning papercraft_falling_test above already established.
+cc_test(
+    name = "bigo_npc_visual_test",
+    srcs = ["bigo_npc_visual_test.c"],
     deps = [":common_headers"],
 )

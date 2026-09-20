@@ -60,9 +60,11 @@ typedef struct {
 } PcWelcomePacket;
 
 /* PcSnapshotLz4Header -- followed by `comp_len` bytes of LZ4 block data that decompress to exactly raw_len == sizeof(PcSnapshotPacket).
- * Why (2026-09-19, founder on a phone modem: "weak connection 170", level appearing minutes late): PcSnapshotPacket is a fixed
- * 1436 bytes (1464 on the wire), almost all zeros -- above the 1280-1428 byte path MTU common on mobile carriers, so it fragments
- * and carriers drop fragments while small packets (WELCOME, USERCMD) still get through. Compressed it is ~200 bytes. */
+ * Why (2026-09-19, founder on a phone modem: "weak connection 170", level appearing minutes late): PcSnapshotPacket was a fixed
+ * 1436 bytes (1464 on the wire) as of that fix -- now 1604 (S504 §8c's own PC_NPC_MAX*sizeof(PcNpcState)+PC_NPC_MAX addition,
+ * measured directly, not estimated) -- almost all zeros either way, above the 1280-1428 byte path MTU common on mobile carriers,
+ * so it fragments and carriers drop fragments while small packets (WELCOME, USERCMD) still get through. Compressed it was ~200
+ * bytes at 1436; the NPC block's own mostly-zero/inactive-slot shape should compress comparably well, not independently verified. */
 typedef struct {
     PcHeader hdr;
     unsigned short raw_len;
@@ -532,6 +534,37 @@ typedef struct {
         doesn't allow yet; see MODDING.md-style honesty, not glossed over). */
 } PcFallingFragment;
 
+/* PcNpcState -- S504 §8c's own real, named next step: a live, role-bearing NPC entity, finally
+ * giving core/npc_archetype.h (Citizens/The Men) and core/zombie_values.h (zombies) something
+ * live to drive, and the GOLDENBAND mannequin kits (day/apps/client's own bigo_load_gband_npc_kits)
+ * an actual server-authoritative population to render instead of two hardcoded stationary test
+ * instances. Deliberately lean, matching PcFallingFragment's own "only what the wire needs"
+ * discipline just above: no mood/vigilance/hunger fields cross the wire at all -- those live
+ * server-side only (in ServerNpc, apps/server/src/main.c), the same "server decides, client
+ * renders" split every other real system in this file already follows. `role` is enough for the
+ * client to pick the right GOLDENBAND kit and a distinguishing tint; `anim` is deliberately NOT
+ * included -- these NPCs don't move yet (v0 scope, see NORTHSTAR.md §8c), so
+ * GBAND_SKEL_NPC_ANIM_AUTO's own existing movement-detection already resolves to idle correctly
+ * with zero extra wire cost, and a real anim-selector field is easy, separate, later work once
+ * movement exists to select between. */
+#define PC_NPC_MAX 8 /* real, small, bounded cap, matching NORTHSTAR.md's own V0 recommendation
+    ("~6 humanness-lite NPCs... and one thought-police NPC") with a little headroom -- same
+    "small bounded cap" precedent PC_MAX_PLAYERS/PC_WO_MAX_OBJECTS/PC_FALLING_FRAGMENTS_MAX/
+    PC_ENTITY_MAX already set. Raising it later is real, separate, easy work. */
+#define PC_NPC_ROLE_CITIZEN 0 /* core/npc_archetype.h's NPC_ARCHETYPE_CITIZEN */
+#define PC_NPC_ROLE_THE_MEN 1 /* core/npc_archetype.h's NPC_ARCHETYPE_THE_MEN */
+#define PC_NPC_ROLE_ZOMBIE  2 /* core/zombie_values.h's ZombieState -- NOT an NpcBrain, see that
+                                  header's own top doc comment for why */
+
+typedef struct {
+    float x, y, z;
+    float yaw; /* radians, world-space heading -- same real convention PcPlayerState::yaw already
+                  documents; day/apps/client's own draw call converts this to gband_skel_npc_draw's
+                  facing_rad using the exact same "180 - degrees" correction SHANKPIT's lobby
+                  already established for this same glTF-imported mannequin rig's own bind pose. */
+    unsigned char role; /* PC_NPC_ROLE_* */
+} PcNpcState;
+
 typedef struct {
     PcHeader hdr;
     unsigned int server_tick;
@@ -545,6 +578,8 @@ typedef struct {
         direct index (the real fragment-to-bit mapping isn't 1:1 with the byte array anymore). */
     unsigned char falling_active[PC_FALLING_FRAGMENTS_MAX];
     PcFallingFragment falling[PC_FALLING_FRAGMENTS_MAX];
+    unsigned char npc_active[PC_NPC_MAX];
+    PcNpcState npcs[PC_NPC_MAX];
     unsigned int echo_cmd_time_ms; /* real ping/RTT support (2026-08-30, founder real-time: "you
         can show the ping at the top of the screen") -- ONE real field, not a real per-player
         array (PC_MAX_PLAYERS * 4 bytes would have real wire-budget consequences worth avoiding
