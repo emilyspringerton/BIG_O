@@ -50,6 +50,8 @@
  * isolation only. See ServerNpc's own doc comment below for the full design. */
 #include "../../../../core/npc_archetype.h"
 #include "../../../../core/zombie_values.h"
+#include "../../../../core/witness_rules.h"
+#include "../../../../core/witness_live.h"
 
 #define PC_SERVER_PORT 7799
 #define PC_TICK_HZ 20 /* on-foot movement doesn't need a vehicle sim's own 60Hz -- real, deliberately lower tick rate for Phase 0 */
@@ -304,6 +306,21 @@ typedef struct {
     float x, y, z, yaw;
     NpcBrain brain;       /* valid when role == PC_NPC_ROLE_CITIZEN or PC_NPC_ROLE_THE_MEN */
     ZombieState zombie;   /* valid when role == PC_NPC_ROLE_ZOMBIE */
+
+    /* S504-DISPATCH (2026-09-20) -- valid when role == PC_NPC_ROLE_CITIZEN or PC_NPC_ROLE_THE_MEN.
+       witness_state is core/witness_rules.h's own WS_* enum -- see server_tick_witness. arrogance
+       is a real, live witness_rules.c input (engage vs. silence, panic threshold); a fixed 50 for
+       every human NPC in this v0 -- per-NPC arrogance variety is real, honest, separate, future
+       work (a personality axis, same category as §8e item 6's deferred PARENA-scriptable presets),
+       not attempted here. */
+    int witness_state;
+    int arrogance;
+
+    /* S504-DISPATCH -- valid when role == PC_NPC_ROLE_THE_MEN only: this NPC's own real, live
+       dispatch assignment. has_dispatch_target/dispatch_target_npc name WHICH human NPC (by index
+       into this same g_npcs[] array) this The Men unit is currently travelling to go resolve. */
+    int has_dispatch_target;
+    int dispatch_target_npc;
 } ServerNpc;
 static ServerNpc g_npcs[PC_NPC_MAX];
 
@@ -360,6 +377,9 @@ static void server_spawn_npcs(unsigned int now_ms) {
             zombie_state_init(&n->zombie, now_ms);
         } else {
             npc_brain_init(&n->brain, (n->role == PC_NPC_ROLE_THE_MEN) ? NPC_ARCHETYPE_THE_MEN : NPC_ARCHETYPE_CITIZEN, now_ms);
+            n->witness_state = WS_UNAWARE;
+            n->arrogance = 50; /* v0 fixed default -- see ServerNpc's own doc comment on this field */
+            n->has_dispatch_target = 0;
         }
     }
     printf("S504: spawned %d real NPCs (3 citizen, 1 the_men, 4 zombie) on a 10-unit circle around origin.\n", PC_NPC_MAX);
@@ -401,6 +421,125 @@ static void server_tick_npcs(unsigned int now_ms) {
             }
         } else {
             npc_brain_tick(&n->brain, now_ms);
+        }
+    }
+}
+
+static const char *WS_NAMES[] = {"UNAWARE", "DENIAL", "COMPROMISED", "SILENCING", "PANIC", "ENGAGE"};
+
+/* server_tick_witness -- S504-DISPATCH, closes NORTHSTAR.md §8e item 1's LOUD-event half: every
+ * HUNTING/FRENZIED zombie (witness_live.h's own bigo_zombie_is_witnessable_event) is now a real
+ * witnessed event for every Citizen/The Men NPC within BIGO_WITNESS_DETECTION_RADIUS, driving
+ * their witness_state through core/witness_rules.c's own real npc_next_state -- exactly
+ * core/sim.c's own sim_release semantics (count computed once per event, shared across every
+ * human who witnessed it), just radius-based instead of zone-based since this live server has no
+ * per-NPC zone concept yet. The QUIET-observation path (costume/gear noticing) is a real,
+ * separate, still-open gap -- not touched here, see witness_live.h's own top doc comment. */
+static void server_tick_witness(void) {
+    for (int zi = 0; zi < PC_NPC_MAX; zi++) {
+        ServerNpc *zn = &g_npcs[zi];
+        if (!zn->active || zn->role != PC_NPC_ROLE_ZOMBIE) continue;
+        if (!bigo_zombie_is_witnessable_event(zn->zombie.mood)) continue;
+
+        int total = 0;
+        for (int hi = 0; hi < PC_NPC_MAX; hi++) {
+            ServerNpc *hn = &g_npcs[hi];
+            if (!hn->active || hn->role == PC_NPC_ROLE_ZOMBIE) continue;
+            if (bigo_in_range(hn->x, hn->z, zn->x, zn->z, BIGO_WITNESS_DETECTION_RADIUS)) total++;
+        }
+        if (total == 0) continue;
+        int count = effective_witnesses(total, 0); /* no live accomplice concept yet -- real, named deferral */
+
+        for (int hi = 0; hi < PC_NPC_MAX; hi++) {
+            ServerNpc *hn = &g_npcs[hi];
+            if (!hn->active || hn->role == PC_NPC_ROLE_ZOMBIE) continue;
+            if (!bigo_in_range(hn->x, hn->z, zn->x, zn->z, BIGO_WITNESS_DETECTION_RADIUS)) continue;
+            int prev = hn->witness_state;
+            int nx = bigo_witness_next_state_for_event(prev, count, hn->arrogance, 0);
+            if (!is_legal_transition(prev, nx)) continue;
+            if (nx != prev) {
+                printf("S504-DISPATCH: npc%d witness_state %s -> %s (zombie%d event, count=%d)\n",
+                       hi, WS_NAMES[prev], WS_NAMES[nx], zi, count);
+            }
+            hn->witness_state = nx;
+        }
+    }
+}
+
+#define THE_MEN_DISPATCH_SPEED 6.0f /* units/sec -- The Men's own real response pace, tuned
+    separately from PHEROMONE_ZOMBIE_SPEED on purpose (they're professionals responding to a
+    call, not a commanded predator closing in) */
+
+/* server_tick_dispatch -- S504-DISPATCH: The Men's own real dispatch/sanitize decision loop
+ * (NORTHSTAR.md §8e item 3). Any Citizen/The Men NPC currently SILENCING/ENGAGE is an active hunt
+ * needing a response; an idle The Men NPC (no current assignment) is dispatched to the NEAREST
+ * one, travels there (bigo_pheromone.h's own pheromone_step_toward, reused verbatim -- steering
+ * toward a point is steering toward a point, human or zombie), and on arrival resolves the hunt
+ * (resolved=1 -> DENIAL, docs/DESIGN_DIGEST.md §11's own "memory-wipe spray"). A hunt that
+ * resolves some OTHER way first (or whose target NPC goes inactive) makes its responder stand
+ * down instead of arriving to nothing. */
+static void server_tick_dispatch(unsigned int now_ms) {
+    static unsigned int last_dispatch_tick_ms = 0;
+    float dt_sec = (last_dispatch_tick_ms == 0) ? 0.0f : (float)(now_ms - last_dispatch_tick_ms) / 1000.0f;
+    if (dt_sec > 0.5f) dt_sec = 0.5f; /* clamp a stall/hitch, matching server_tick_npcs's own dt clamp */
+    last_dispatch_tick_ms = now_ms;
+
+    for (int hi = 0; hi < PC_NPC_MAX; hi++) {
+        ServerNpc *hn = &g_npcs[hi];
+        if (!hn->active || hn->role == PC_NPC_ROLE_ZOMBIE) continue;
+        if (hn->witness_state != WS_SILENCING && hn->witness_state != WS_ENGAGE) continue;
+
+        int already_assigned = 0;
+        for (int mi = 0; mi < PC_NPC_MAX; mi++) {
+            ServerNpc *mn = &g_npcs[mi];
+            if (mn->active && mn->role == PC_NPC_ROLE_THE_MEN && mn->has_dispatch_target &&
+                mn->dispatch_target_npc == hi) {
+                already_assigned = 1;
+                break;
+            }
+        }
+        if (already_assigned) continue;
+
+        int responder = -1;
+        float best_d2 = 0.0f;
+        for (int mi = 0; mi < PC_NPC_MAX; mi++) {
+            ServerNpc *mn = &g_npcs[mi];
+            if (!mn->active || mn->role != PC_NPC_ROLE_THE_MEN || mn->has_dispatch_target) continue;
+            float dx = mn->x - hn->x, dz = mn->z - hn->z;
+            float d2 = dx * dx + dz * dz;
+            if (responder == -1 || d2 < best_d2) { responder = mi; best_d2 = d2; }
+        }
+        if (responder == -1) continue; /* every The Men unit already busy -- real, honest v0 cap,
+            NORTHSTAR.md §11's own "Corporate Service Call" escalation to Regulators at max heat
+            is the real future answer to this, not attempted here */
+
+        g_npcs[responder].has_dispatch_target = 1;
+        g_npcs[responder].dispatch_target_npc = hi;
+        printf("S504-DISPATCH: The Men npc%d dispatched to npc%d's hunt (%s)\n",
+               responder, hi, WS_NAMES[hn->witness_state]);
+    }
+
+    for (int mi = 0; mi < PC_NPC_MAX; mi++) {
+        ServerNpc *mn = &g_npcs[mi];
+        if (!mn->active || mn->role != PC_NPC_ROLE_THE_MEN || !mn->has_dispatch_target) continue;
+        ServerNpc *target = &g_npcs[mn->dispatch_target_npc];
+        if (!target->active || (target->witness_state != WS_SILENCING && target->witness_state != WS_ENGAGE)) {
+            mn->has_dispatch_target = 0; /* resolved some other way, or target gone -- stand down */
+            continue;
+        }
+        if (dt_sec > 0.0f) {
+            pheromone_step_toward(&mn->x, &mn->z, target->x, target->z, THE_MEN_DISPATCH_SPEED, dt_sec);
+            mn->yaw = atan2f(target->x - mn->x, target->z - mn->z);
+        }
+        if (bigo_in_range(mn->x, mn->z, target->x, target->z, BIGO_DISPATCH_ARRIVAL_RADIUS)) {
+            int prev = target->witness_state;
+            int nx = npc_next_state(prev, 0, target->arrogance, 0, 1, 1 /* resolved: memory wipe */);
+            if (is_legal_transition(prev, nx)) {
+                target->witness_state = nx;
+                printf("S504-DISPATCH: The Men npc%d resolved npc%d's hunt: %s -> %s (memory wipe)\n",
+                       mi, mn->dispatch_target_npc, WS_NAMES[prev], WS_NAMES[nx]);
+            }
+            mn->has_dispatch_target = 0;
         }
     }
 }
@@ -1593,6 +1732,8 @@ int main(int argc, char **argv) {
             last_tick_ms = now;
             server_tick++;
             server_tick_npcs(now);
+            server_tick_witness();
+            server_tick_dispatch(now);
 
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 PlayerSlot *s = &g_slots[i];

@@ -352,4 +352,53 @@ pass to avoid re-touching a module whose own tests were already locked down in �
    pheromone ball/dart was built, matching the founder's own specific "has_target" framing of the gap.
 4. **Citizens/The Men never react to a commanded zombie.** This closes the zombie-side targeting gap only; nothing
    yet feeds a nearby human NPC's own witness/vigilance decision from a HUNTING/FRENZIED zombie's presence — that's
-   §8e item 1 (wiring vigilance into an actual `noticed()` decision), still open.
+   §8e item 1 (wiring vigilance into an actual `noticed()` decision), still open at the time this section was
+   written (closed in §11 below, later the same day).
+
+## 11. Witness wiring + The Men's dispatch loop (2026-09-20, S504-DISPATCH) — closes §8e items 1 and 3
+
+Founder-priority gap, directly following §10: a compromised/silenced citizen was possible only in `core/sim.c`'s
+offline scenario harness, never live, and The Men had nothing real to dispatch toward. Real answer:
+`core/witness_live.h`, a pure, header-only glue module (`bigo_zombie_is_witnessable_event`, `bigo_in_range`,
+`bigo_witness_next_state_for_event`, 8 tests) wiring a HUNTING/FRENZIED zombie as a real, LOUD witnessed event
+(`docs/B1_WITNESS_RULES.md` §7's own "witnessed by every NPC in the zone" rule, scaled to a live detection radius
+since the server has no per-NPC zone concept) into `core/witness_rules.c`'s own real, already-tested
+`npc_next_state`/`effective_witnesses`/`is_legal_transition` — exactly `core/sim.c`'s own `sim_release` semantics,
+just radius-based. `apps/server/src/main.c` gained two new tick functions: `server_tick_witness` (every Citizen/The
+Men NPC within `BIGO_WITNESS_DETECTION_RADIUS` of a witnessable zombie now has a real, live `witness_state`, an
+added `ServerNpc` field) and `server_tick_dispatch` (The Men's own real dispatch/sanitize loop, §8e item 3: any
+human NPC reaching SILENCING/ENGAGE gets the nearest idle The Men NPC assigned, travelling toward it via
+`bigo_pheromone.h`'s own `pheromone_step_toward` reused verbatim, resolving the hunt to DENIAL — the digest's own
+"memory-wipe spray" — on arrival). `core/witness_rules.c` is now linked into the live day server for the first time
+(`scripts/build_day.sh`).
+
+Verified live: a thrown pheromone marker escalating a zombie to FRENZIED produces real `witness_state` transitions
+in the server log against the actual v0 spawn population. **Real, honest, live-found structural limit**: the v0
+spawn is only 3 Citizens + 1 The Men (4 humans total) — `docs/B1_WITNESS_RULES.md`'s own 5-witness SILENCING
+threshold is mathematically unreachable with a single witnessed event and only 4 humans in the whole world, so
+DENIAL is the practical ceiling in live play today; SILENCING/ENGAGE and the dispatch loop's own arrival/resolve
+behavior were verified instead via `core/witness_live_test.c` (pure, synthetic counts) and a larger scratch
+integration harness (5 citizens + 1 The Men + 1 zombie) confirming the full loop end to end. **A second real, live
+finding from that same harness**: resolving a hunt to DENIAL does not make the underlying zombie stop being a
+witnessable event — if it's still HUNTING/FRENZIED and still in range on the very next witness tick, the same
+humans re-witness it and the hunt reopens immediately, producing rapid dispatch/resolve churn. This is arguably
+correct per the fiction (The Men clean witnesses, they don't make the zombie disappear) but it means, mechanically,
+a hunt never truly ends without either the zombie itself leaving HUNTING/FRENZIED, leaving range, or being
+eliminated — `core/sim.c`'s own `resolved=2` ("target eliminated/gone → UNAWARE") and `sim_los_lost` already model
+exactly this second resolution path, but this pass only wires `resolved=1` (memory wipe); wiring the LOS-loss/
+elimination path is real, separate, deferred work below.
+
+**Deferred, named:**
+1. **No LOS-loss/elimination resolution.** Only `resolved=1` (memory wipe) is wired; a hunt can currently only end
+   by The Men arriving, never by the zombie itself losing HUNTING/FRENZIED status, leaving range, or being killed —
+   the churn behavior described above is the direct, live consequence.
+2. **No Corporate Service Call / Regulator escalation at max heat** (`docs/DESIGN_DIGEST.md` §11) — when every The
+   Men NPC is already dispatched, a new hunt simply waits with no responder (a real, honest v0 cap), rather than
+   escalating to a named, deadlier tier.
+3. **No quiet-observation (costume/gear) witnessing.** Only the LOUD zombie-event path is wired; `noticed()`/
+   `conspicuousness()`'s own costume/gear/decorum path (`core/sim.c`'s `sim_observe`) is a real, separate, still-
+   unbuilt gap — no live decorum meter, no costume enforcement, matches the original gap-analysis finding.
+4. **No accomplice/compromise mechanic live.** `effective_witnesses` is always called with `accomplices=0` — a
+   player can't yet force a witness into COMPROMISED in the live game, only in `core/sim.c`'s own scenario harness.
+5. **Fixed arrogance (50 for every human NPC).** Real per-NPC arrogance variety — needed for ENGAGE to ever fire
+   live without every witness sharing the exact same threshold behavior — is deferred, same category as §8e item 6.

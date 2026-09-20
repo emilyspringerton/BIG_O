@@ -105,3 +105,15 @@ cc_test(
     deps = [":lab_sim"],
     copts = COPTS,
 )
+
+# witness_live -- pure glue (S504-DISPATCH) wiring the live ServerNpc/zombie population
+# (day/apps/server/src/main.c) into :witness_rules' own real npc_next_state/effective_witnesses
+# for the LOUD-event ("a HUNTING/FRENZIED zombie is visible") witnessing path. Header-only, matching
+# day/packages/common/bigo_pheromone.h's own "extract testable logic" convention; depends on
+# :witness_rules and :zombie_values rather than owning any C source of its own.
+cc_test(
+    name = "witness_live_test",
+    srcs = ["core/witness_live_test.c", "core/witness_live.h"],
+    deps = [":witness_rules", ":zombie_values"],
+    copts = COPTS,
+)

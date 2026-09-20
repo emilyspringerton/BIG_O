@@ -43,7 +43,14 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > zombie within range locks on (`has_target` is no longer hardcoded 0) and steers toward it, escalating mood toward
 > HUNTING/FRENZIED as it closes in — verified live against a running server. No autonomous player-detection yet (a
 > zombie with no thrown marker stays exactly as before), no real projectile arc, and Citizens/The Men still don't
-> react to a commanded zombie's presence. See `NORTHSTAR.md` §10 for what's deferred.
+> react to a commanded zombie's presence — that gap is now half-closed (see next): a HUNTING/FRENZIED zombie is a
+> real, live witnessed event, verified live producing real `witness_state` escalation in the server log, and The
+> Men now have a real dispatch/response loop (nearest idle unit travels to a hunt and resolves it to DENIAL on
+> arrival, a real memory-wipe). Honest, live-found limits: the v0 spawn (4 humans total) can't reach the 5-witness
+> SILENCING threshold in practice (verified via tests + a larger scratch harness instead), and resolving a hunt
+> doesn't make the zombie itself stop being witnessable, so a still-active zombie can reopen the same hunt on the
+> very next tick — no zombie-elimination/LOS-loss resolution path is wired yet. See `NORTHSTAR.md` §11 for the
+> full account and what's deferred.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page
