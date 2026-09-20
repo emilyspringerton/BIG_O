@@ -257,3 +257,62 @@ client change here already carries, not new to this pass.
 5. **A distinct visual asset for The Men** — currently a tinted mannequin, same mesh as Citizens.
 6. **PARENA-scriptable per-role personality config** — SHANKPIT's own named Phase 4, still deferred there too; real
    future home for designer-tunable archetype presets instead of the hardcoded ones in `npc_brain_init` today.
+
+## 9. Cloning-facility lab simulation (2026-09-20, S504-LAB) — "simulate real lab equipment as much as possible"
+
+Founder real-time, following a gap-analysis pass that found `BP_APP_LAB`'s SPLICE screen was a client-only UI mockup
+with zero server logic anywhere: *"build out all of the cloning facility simulation tech we want to simulate real
+lab equipment as much as possible."* Real answer: `core/lab_sim.h`/`.c`, a headless equipment pipeline covering
+every piece of gear `docs/DESIGN_DIGEST.md` §5/§6 names, with its own named realism hooks built as live mechanics
+rather than flavor text — same "game vocabulary, not protocols" discipline the digest itself insists on, and the
+same "primitives proven in isolation first" discipline `core/npc_archetype.c`/`core/zombie_values.c` already used.
+
+- **Centrifuge** (`centrifuge_spin`) — purity rises on time×RPM ("spin work") with real diminishing returns;
+  over-spinning past a real threshold damages integrity (pelleting/shearing) — the digest's own named trade-off.
+- **PCR thermocycler** (`pcr_amplify`) — exponential read-depth amplification; cycling past a safe count both
+  damages integrity (primer dimer) and creeps contamination up via nonspecific amplification.
+- **Sequencer / bioinformatics terminal** (`sequencer_run`) — returns a `SequencerReadout`, a genuinely noisy
+  instrument estimate of contamination (Box-Muller jitter, verified over 2000 trials to converge to ground truth on
+  average without ever being handed to a caller directly) and an alignment% that degrades with both true
+  contamination and low read depth — the digest's own "isolate reads, filter contamination, align" terminal, given
+  a real measurement model instead of reading the sample's own ground-truth fields.
+- **CRISPR splice bench** (`crispr_splice`) — a real `SpliceOutcome` enum, not a binary pass/fail: `SPLICE_SUCCESS`,
+  `SPLICE_OFF_TARGET_MUTATION` (the digest's own named guide-RNA off-target risk, with a real severity value),
+  `SPLICE_NONSENSE_MEDIATED_DECAY` and `SPLICE_CRYPTIC_SPLICE_FAILURE` (the digest's own named failure states — real
+  dead ends, not degraded successes), and `SPLICE_UNSTABLE_LINE` (a clean edit a drifted line can still downgrade).
+  A `guide_rna_specificity` and `operator_skill_0_to_1` parameter pair are the real, live integration points for two
+  features that stay explicitly unbuilt here: a future guide-design choice and the digest's own named micromanipulation
+  needle mini-game — this module is where a future mini-game's score plugs in, not a mini-game itself.
+  `retrotransposon_jump` is a real, independent side-effect (more likely on contaminated samples, verified via a
+  2000-trial rate comparison) — the digest's own named "retrotransposon-style pathogen copying" flavor hook, made a
+  live, testable mechanic rather than lore.
+- **Repressor/kill-switch install** (`crispr_install_repressor`) — the digest's own named sequenceable kill-switch,
+  running the same splice risk model underneath; an off-target or drift-driven install carries a real, lower
+  `reliability_0_to_1` rather than a bare present/absent flag — a switch can be installed and still be unreliable.
+- **Breeding / genetic drift** (`clone_breed`) — a child sample averages its parents' physical stats but always
+  accrues new, one-way drift on top of theirs (verified never decreasing across 20 real bred generations) — the
+  digest's own named "genetic drift of repeatedly bred lines" realism hook, made a real, growing, game-mechanical
+  cost of breeding a line too many times rather than a flavor claim.
+- **Embryo incubation** (`incubate_embryo`) — viability derived from real integrity/contamination/drift plus the
+  last splice's own outcome; an NMD or cryptic-splice-failure sample can never incubate viable regardless of how
+  clean its physical stats are, and a real floor means a low-viability embryo genuinely does not take.
+
+17 real statistical tests (`core/lab_sim_test.c`, same MISHRI-bar discipline as `zombie_values_test.c` — distribution
+comparisons over 2000 trials where randomness is involved, not smoke tests), verified live via `gcc -std=c99 -Wall
+-Wextra -Werror` (matching this repo's own `COPTS`) since Bazel isn't installed in this sandbox — same standing
+verification pattern every prior core module in this repo already used. Wired into `BUILD.bazel` as `:lab_sim`/
+`:lab_sim_test`.
+
+**Deferred, named, not built in this pass:**
+
+1. **No UI/server wiring.** `BP_APP_LAB`'s phone screen (samples/base/trait/SPLICE/clone list) is still the exact
+   client-only mockup the gap analysis found — this pass builds the simulation core the screen would eventually call
+   into, not the screen itself, and not any server-side handling of a lab action packet (none exists).
+2. **No persistence.** `LabSample`/clone lines exist only as values passed between these functions in a test — no
+   save/load format, no per-crew lab state, no `papercraft_persist.h`-style file.
+3. **No micromanipulation mini-game UI.** `operator_skill_0_to_1` is a real, live parameter with no input source yet.
+4. **No PARENA rules-module version.** This is plain C (`core/lab_sim.c`), matching `core/humanness.c`'s own
+   "runs every tick, needs to be fast, not author-editable per-instance" reasoning — unlike `witness_rules.c`, lab
+   equipment numbers are not currently expected to need mod-author tuning, but that could change.
+5. **No connection to the harvest/day loop.** `lab_sample_init_wild_harvest`'s `contamination_pct` input has no real
+   source yet — day-phase harvest doesn't produce a `LabSample` today; that's a real, separate, not-yet-built bridge.

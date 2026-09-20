@@ -82,3 +82,26 @@ cc_test(
     deps = [":zombie_values"],
     copts = COPTS,
 )
+
+# lab_sim -- founder real-time: "build out all of the cloning facility simulation tech we want to
+# simulate real lab equipment as much as possible." Headless equipment pipeline (centrifuge, PCR,
+# sequencer, CRISPR splice bench, repressor/kill-switch install, breeding/genetic drift, embryo
+# incubation) covering every real piece of gear docs/DESIGN_DIGEST.md §5/§6 names, with its own
+# named realism hooks (contamination/alignment, guide-RNA off-target, genetic drift, nonsense-
+# mediated decay, cryptic splice sites, retrotransposon-style copying) as live mechanics. Same
+# "own RNG, no shared code with sibling value modules" convention as :zombie_values. Independent
+# of :witness_rules/:npc_archetype/:zombie_values on purpose -- not yet wired into the day/ server's
+# BP_APP_LAB UI (see NORTHSTAR.md's own lab-sim section for what's deferred).
+cc_library(
+    name = "lab_sim",
+    srcs = ["core/lab_sim.c"],
+    hdrs = ["core/lab_sim.h"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "lab_sim_test",
+    srcs = ["core/lab_sim_test.c"],
+    deps = [":lab_sim"],
+    copts = COPTS,
+)
