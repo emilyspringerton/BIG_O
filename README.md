@@ -21,15 +21,16 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > units/sec) with SHANKPIT's own real, measured run speed (~59.4 units/sec, converted from its per-tick `MAX_SPEED`),
 > since a SHANKPIT-scale level like `nextown` is far too large to cross on foot at PAPERCRAFT's walking pace alone.
 > The GOLDENBAND mannequin + animation library are now vendored and wired in (`day/packages/goldenband/`,
-> `gband_skel_npc.c`) — the client draws two real, live test NPCs (one human-clip mannequin, one zombie-clip mannequin,
-> same shared mesh/skeleton) near the loaded level's spawner, proving the load→skin→animate→draw path end to end.
-> No live NPC entity system drives this yet (server has no role-bearing NPCs to spawn), so it's a proof of concept,
-> not a populated world. A real, matching AI-brain layer exists alongside it but isn't wired to anything live either:
-> `core/humanness.c` (MISHRI-derived mood/timing-jitter primitives, vendored from SHANKPIT), `core/npc_archetype.c`
-> (Citizens vs. The Men — a real, dynamic, mood-modulated vigilance feeding `core/witness_rules.c`'s own attention
-> mechanism), and `core/zombie_values.c` (zombies' own hunger/aggression/decay vocabulary, deliberately not a human
-> mood reskin). See `NORTHSTAR.md` §8 for the full scope and what's deferred. Nothing here has been played end to end
-> against a live server.
+> `gband_skel_npc.c`), and the server now spawns a real, live NPC population (3 Citizens, 1 The Men, 4 zombies) and
+> broadcasts them in every snapshot — the client renders whichever kit each role calls for (Citizens/The Men share
+> the mannequin, tinted apart; zombies get the zombie-clip kit on the same shared mesh). Their brains
+> (`core/humanness.c` — MISHRI-derived mood/timing-jitter primitives, vendored from SHANKPIT; `core/npc_archetype.c`
+> for Citizens/The Men; `core/zombie_values.c` for zombies' own hunger/aggression/decay vocabulary) tick live on the
+> real server now too. Still a proof of concept, not a populated world: NPCs are stationary (no movement/targeting
+> yet), spawn on a fixed circle since the server can't load a NOCK level's own spawners yet (client-only,
+> `level_loader.h`), and nothing yet feeds a brain's output into an actual witness/attention decision. See
+> `NORTHSTAR.md` §8 for the full scope and what's deferred. Nothing here has been played end to end against a live
+> server.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

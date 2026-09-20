@@ -221,17 +221,39 @@ pass builds and tests the brain layer, it does not yet wire it into a live serve
   `zombie_effective_alertness()` is a separate, future perception-radius hook, not a second copy of `vigilance`. 11
   real statistical tests (`core/zombie_values_test.c`).
 
-### 8c. Deferred (named, phased — not built this pass)
+### 8d. Live NPC entity system — DONE (2026-09-20, S504 §8c item 1)
 
-1. **Live NPC entity system.** No server-side spawn/tick/despawn or wire representation for a role-bearing NPC exists
-   at all yet (only item-pickup entities). Needed before either §8a's animation kits or §8b's brains can drive an
-   actual on-screen character. Real, honest size: a new packet type or snapshot extension, server-side NPC array,
-   role assignment.
-2. **Wiring `npc_brain_effective_vigilance`/`zombie_effective_alertness` into `core/sim.c`** (replacing `SimNpc`'s
-   static `vigilance` field) and into whatever live server ticks NPCs once §8c.1 exists.
-3. **Per-role clip selection** on the animation side (§8a) once an NPC's real archetype/role is known at draw time.
-4. **The Men's own dispatch/sanitize behavior** (SILENCING/ENGAGE → `resolved=1` memory-wipe, `docs/B1_WITNESS_RULES.md`
-   §1) as an actual decision loop, not just a faster/steadier `NpcBrain` — this pass built the *personality*, not the
-   *job*.
-5. **PARENA-scriptable per-role personality config** — SHANKPIT's own named Phase 4, still deferred there too; real
+Closes the real blocker §8c named: `PcNpcState` (x/y/z/yaw/role) added to `PcSnapshotPacket` (measured, not
+estimated: 1436 → 1604 bytes), a real server-side `ServerNpc` array (`apps/server/src/main.c`) spawning 3
+Citizens/1 The Men/4 zombies on a 10-unit circle around origin at startup (no level spawner coordinates available
+server-side yet — `level_loader.h` is still client-only, a real, separate, still-open gap), and
+`server_tick_npcs` running `npc_brain_tick`/`zombie_tick` on every real server tick — **the brains built in §8b are
+now live**, ticking mood/hunger/aggression on an actually-running server, not just in a test harness. The client's
+two hardcoded test-NPC draws are gone, replaced by a real loop over the live snapshot; role→kit/tint selection and
+yaw→facing_rad conversion were factored into `day/packages/common/bigo_npc_visual.h` specifically so they're
+testable without a live GL driver (5 real tests, `bigo_npc_visual_test.c`). Citizens and The Men currently share the
+mannequin kit, tinted apart — this closes §8c's original item 3 (per-role clip/kit selection) for the
+kit-vs-tint layer, though a genuinely distinct visual asset for The Men is still a real, open gap.
+
+Verified live: the compiled server runs the full tick loop for 6 real seconds with all 8 NPCs active, no crash.
+The full client↔server round-trip (server broadcasts real NPC data, client receives and renders with the correct
+kit) still can't be exercised end to end in this sandbox (no real GL driver) — same standing limitation every prior
+client change here already carries, not new to this pass.
+
+### 8e. Deferred (named, phased — still not built)
+
+1. **Wiring `npc_brain_effective_vigilance`/`zombie_effective_alertness` into `core/sim.c`** (replacing `SimNpc`'s
+   static `vigilance` field) or into `apps/server/src/main.c`'s own new `ServerNpc` tick — the brains tick live now
+   (§8d), but nothing yet reads their output into an actual `noticed()`/witness-state decision.
+2. **Real movement/targeting.** NPCs are stationary; zombies' own `has_target` is hardcoded 0 (no player-detection
+   exists), so none currently reach HUNTING/FRENZIED in practice. Needed before The Men's own dispatch/sanitize
+   behavior (next item) has anything real to dispatch toward.
+3. **The Men's own dispatch/sanitize behavior** (SILENCING/ENGAGE → `resolved=1` memory-wipe, `docs/B1_WITNESS_RULES.md`
+   §1) as an actual decision loop, not just a faster/steadier `NpcBrain` — §8b/§8d built the *personality* and gave
+   it a live tick, not the *job*.
+4. **Server-side level loading.** NPCs spawn on a fixed circle around origin because the server has no level
+   spawner coordinates (`level_loader.h`, S504 §8a, is client-only) — a real, separate, already-named gap from an
+   earlier pass, still open.
+5. **A distinct visual asset for The Men** — currently a tinted mannequin, same mesh as Citizens.
+6. **PARENA-scriptable per-role personality config** — SHANKPIT's own named Phase 4, still deferred there too; real
    future home for designer-tunable archetype presets instead of the hardcoded ones in `npc_brain_init` today.
