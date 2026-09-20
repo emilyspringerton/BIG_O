@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 2026-09-20
+- feat(day): wire level_loader.h into day/apps/client (new `--level-id` flag, `draw_level_walls()`), verified live against local IDUNA level 12 (nextown: 80 walls/1 spawner/1 exit); fixed 4 real bugs blocking it — wrong `/export`-less endpoint path, a required top-level `id` field the real export never sends, nested wall/spawner/exit field parsers with no skip-unknown-key fallback (stalled past the first wall once real fields like `friction` were present), and `http_client.h` having no `Transfer-Encoding: chunked` support at all (IDUNA sends it; raw hex chunk lines were reaching the JSON parser). Added `level_loader_test`/new `http_client_test` to `BUILD.bazel` (previously unwired). README status corrected (S504-10, SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1)
+
 ## 2026-09-19
 - feat(sky): configurable procedural skybox + weather rendering (config file, per-weather profiles, F9 reload), client integration, preview tool, unit test (S504-15)
 - feat(phone): world feed (clock/weather/zombie counts in header, Map, Status), alert + Thorne A1M1 messages with full-text detail view, Thorne contact; client runs the world sim locally as an interim feed (S504-14)
