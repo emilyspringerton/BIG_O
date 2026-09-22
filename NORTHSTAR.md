@@ -402,3 +402,21 @@ elimination path is real, separate, deferred work below.
    player can't yet force a witness into COMPROMISED in the live game, only in `core/sim.c`'s own scenario harness.
 5. **Fixed arrogance (50 for every human NPC).** Real per-NPC arrogance variety — needed for ENGAGE to ever fire
    live without every witness sharing the exact same threshold behavior — is deferred, same category as §8e item 6.
+6. **The Men carry pagers** (founder real-time, 2026-09-22: "the men cary pagers"). Real, named design direction
+   for the dispatch mechanic above, not built. `server_tick_dispatch`'s own current "nearest idle The Men NPC
+   assigned" step is instant and omniscient — no in-fiction justification, no player-visible signal. A pager is
+   the real, concrete answer to "how does a Man know to respond," and the exact insertion point: it wraps that
+   existing nearest-idle-Man selection, it does not replace it. What this opens, none of it scoped or built yet:
+   - **Real dispatch latency.** A gap between a hunt escalating (SILENCING/ENGAGE) and the assigned Man actually
+     starting to move — an actual pager's real "message sent → Man notices the buzz → responds" delay, replacing
+     today's instant assignment.
+   - **A real, world-observable cue.** A buzz/beep, a lit pager on a Man's belt — something a sharp player could
+     actually notice as a tell that a hunt was just dispatched toward them. This is a direct, on-theme extension
+     of the signature Attention/Heat framing ("if they don't see it, it isn't real") — a pager going off IS a
+     real thing that can be seen, unlike the current invisible server-side assignment.
+   - **A possible future interaction surface** — intercepting, jamming, or stealing a pager. Named as the natural
+     next question this mechanic raises, not scoped or committed to.
+   - Where this reconciles with the SHANKPIT engine merge: `SHANKPIT/docs2/specs/BIGO_ENGINE_MERGE_NORTHSTAR.md`
+     phase 7d (the still-undecided `AI_ROLE_*` roster cutover) and phase 7b's own `witness_ai.c` (SHANKPIT's own
+     live population/tick loop, which explicitly does not yet have a resolution/memory-wipe loop at all) are the
+     real, eventual places this would need to land on the SHANKPIT side — not built or wired there either.
