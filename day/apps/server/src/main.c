@@ -344,6 +344,26 @@ typedef struct {
 } ServerGiantBug;
 static ServerGiantBug g_giant_bugs[BIGO_GIANT_BUG_MAX];
 
+/* "wheelbarrow" carry state -- SECTION 536 reverse-port phase 4, brought back from SHANKPIT's own
+ * witness_ai.c ("cannon - add wheelbarrow for carrying whole zombies or citizens back to your
+ * lab", founder real-time, 2026-09-22). g_carried_npc_index (-1 = nothing carried) indexes into
+ * g_npcs[]; g_carrier_slot tracks WHICH connected player is carrying, so the cargo trails that
+ * specific player's own position -- unlike SHANKPIT's own version, which always trails a fixed
+ * "hero" (player slot 0), this repo's own live server has no such fixed-hero convention (real
+ * co-op, up to 3 players, NORTHSTAR.md §7). Real, honest scope cut, same as SHANKPIT's own: no
+ * literal wheelbarrow prop/model -- the carry itself is the real feature. Lab delivery target is
+ * a new, real, hardcoded circle at (BIGO_LAB_ZONE_CX, BIGO_LAB_ZONE_CZ) -- well clear of the
+ * 10-unit NPC spawn circle at world origin and the giant-bug spawn point near (-9,0,1), same
+ * "hardcoded coordinates, no LevelZone/JSON authoring needed" precedent every other landmark in
+ * this live server already uses (pheromone detection radius, witness detection radius). */
+static int g_carried_npc_index = -1;
+static int g_carrier_slot = -1;
+static int g_lab_deliveries = 0;
+#define BIGO_WHEELBARROW_PICKUP_RADIUS 4.0f
+#define BIGO_LAB_ZONE_CX 30.0f
+#define BIGO_LAB_ZONE_CZ 0.0f
+#define BIGO_LAB_ZONE_RADIUS 6.0f
+
 /* g_pheromones -- S504-PHEROMONE real command-point state (bigo_pheromone.h). Global rather than
  * per-crew: this v0 has exactly one shared crew/world (NORTHSTAR.md §7's own "one crew, one
  * onboarding" decision), so there is no separate crew scope to key it by yet. */
@@ -669,6 +689,73 @@ typedef int (*I32Fn0)(void);
 
 static PlayerSlot g_slots[PC_MAX_PLAYERS];
 static char g_save_dir[256] = "var/players";
+
+/* server_wheelbarrow_toggle -- SECTION 536 reverse-port phase 4's own real toggle decision,
+ * factored out of the PC_PACKET_WHEELBARROW_TOGGLE handler so it's independently callable/
+ * testable without a live socket, same "extract the real decision, host code just wires it"
+ * discipline server_throw_pheromone already established. Drop if requester is already carrying,
+ * else pick up the nearest carryable (Citizen/Zombie only, matching the founder's own "whole
+ * zombie or citizen" wording -- The Men are never carryable) NPC within
+ * BIGO_WHEELBARROW_PICKUP_RADIUS of requester's own real position. */
+static void server_wheelbarrow_toggle(int requester) {
+    if (requester < 0 || requester >= PC_MAX_PLAYERS || !g_slots[requester].active) return;
+
+    if (g_carried_npc_index >= 0 && g_carrier_slot == requester) {
+        printf("S536-WHEELBARROW: player%d dropped npc%d\n", requester, g_carried_npc_index);
+        g_carried_npc_index = -1;
+        g_carrier_slot = -1;
+        return;
+    }
+    if (g_carried_npc_index >= 0) return; /* something else is already being carried */
+
+    PlayerSlot *rs = &g_slots[requester];
+    int best = -1;
+    float best_d2 = BIGO_WHEELBARROW_PICKUP_RADIUS * BIGO_WHEELBARROW_PICKUP_RADIUS;
+    for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+        ServerNpc *n = &g_npcs[ni];
+        if (!n->active || (n->role != PC_NPC_ROLE_CITIZEN && n->role != PC_NPC_ROLE_ZOMBIE)) continue;
+        float dx = n->x - rs->state.x, dy = n->y - rs->state.y, dz = n->z - rs->state.z;
+        float d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 <= best_d2) { best = ni; best_d2 = d2; }
+    }
+    if (best >= 0) {
+        g_carried_npc_index = best;
+        g_carrier_slot = requester;
+        printf("S536-WHEELBARROW: player%d picked up npc%d (role=%d)\n", requester, best, g_npcs[best].role);
+    }
+}
+
+/* server_tick_wheelbarrow -- SECTION 536 reverse-port phase 4. Trails the carried NPC just behind
+ * its carrier every tick (same real "pinned to the carrier" shape SHANKPIT's own version uses,
+ * BIG_O's state.yaw is already radians -- see PC_PACKET_INTERACT's own sinf/cosf(state.yaw), no
+ * degree conversion needed here either), then checks delivery into BIGO_LAB_ZONE_*. A carrier who
+ * disconnects, or cargo that goes inactive some other way (e.g. eaten by a giant bug -- a real,
+ * live possibility now that both mechanics touch the same g_npcs[] array), makes this stand down
+ * safely rather than trailing a stale reference. */
+static void server_tick_wheelbarrow(void) {
+    if (g_carried_npc_index < 0) return;
+    ServerNpc *cargo = &g_npcs[g_carried_npc_index];
+    if (g_carrier_slot < 0 || !g_slots[g_carrier_slot].active || !cargo->active) {
+        g_carried_npc_index = -1;
+        g_carrier_slot = -1;
+        return;
+    }
+
+    PlayerSlot *carrier = &g_slots[g_carrier_slot];
+    cargo->x = carrier->state.x - sinf(carrier->state.yaw) * 2.0f;
+    cargo->z = carrier->state.z + cosf(carrier->state.yaw) * 2.0f;
+    cargo->y = carrier->state.y;
+
+    float dx = cargo->x - BIGO_LAB_ZONE_CX, dz = cargo->z - BIGO_LAB_ZONE_CZ;
+    if (dx * dx + dz * dz <= BIGO_LAB_ZONE_RADIUS * BIGO_LAB_ZONE_RADIUS) {
+        g_lab_deliveries++;
+        printf("S536-WHEELBARROW: player%d delivered npc%d to the lab (total=%d)\n",
+               g_carrier_slot, g_carried_npc_index, g_lab_deliveries);
+        cargo->active = 0;
+        g_carried_npc_index = -1;
+        g_carrier_slot = -1;
+    }
+}
 
 /* g_shutdown_requested: set by a real SIGINT/SIGTERM handler -- lets a deliberate server restart
    (not just a crash) flush every real active player's own current state to disk before exiting,
@@ -1815,6 +1902,20 @@ int main(int argc, char **argv) {
                 PcPheromoneThrowPacket req;
                 memcpy(&req, buf, sizeof(req));
                 server_throw_pheromone(req.x, req.y, req.z, now_ms());
+            } else if (hdr.type == PC_PACKET_WHEELBARROW_TOGGLE && (size_t)n >= sizeof(PcWheelbarrowTogglePacket)) {
+                /* SECTION 536 reverse-port phase 4 -- resolve the sender the same way
+                   PC_PACKET_INTERACT does (addr-matched connected slot), then hand off to the
+                   real, independently-testable toggle logic. */
+                int requester = -1;
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *rs = &g_slots[i];
+                    if (rs->active && rs->addr.sin_addr.s_addr == from.sin_addr.s_addr &&
+                        rs->addr.sin_port == from.sin_port) {
+                        requester = i;
+                        break;
+                    }
+                }
+                if (requester >= 0) server_wheelbarrow_toggle(requester);
             }
         }
 
@@ -1824,6 +1925,7 @@ int main(int argc, char **argv) {
             server_tick++;
             server_tick_npcs(now);
             server_tick_giant_bugs(now);
+            server_tick_wheelbarrow();
             server_tick_witness();
             server_tick_dispatch(now);
 

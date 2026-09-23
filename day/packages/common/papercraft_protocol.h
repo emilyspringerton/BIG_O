@@ -33,6 +33,10 @@
 #define PC_PACKET_PHEROMONE_THROW  14 /* client -> server: S504-PHEROMONE, docs/DESIGN_DIGEST.md
     §6's "pheromone balls/darts (paint a target; clones enter enraged pursuit)" command tool --
     see PcPheromoneThrowPacket below */
+#define PC_PACKET_WHEELBARROW_TOGGLE 15 /* client -> server: EMILY/BACKLOG.md SECTION 536 reverse-
+    port phase 4 ("wheelbarrow"), brought back from SHANKPIT's own witness_ai.c carry mechanic --
+    picks up the nearest carryable Citizen/Zombie NPC within reach, or drops whatever this same
+    player is currently carrying. See PcWheelbarrowTogglePacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -249,6 +253,17 @@ typedef struct {
     PcHeader hdr;
     float x, y, z; /* world-space target the marker lands at */
 } PcPheromoneThrowPacket;
+
+/* PcWheelbarrowTogglePacket -- SECTION 536 reverse-port phase 4 ("cannon - add wheelbarrow for
+ * carrying whole zombies or citizens back to your lab", founder real-time, 2026-09-22, via
+ * SHANKPIT's own live witness_ai.c wiring). No payload beyond the header -- unlike
+ * PcPheromoneThrowPacket (which needs an explicit thrown target the server can't derive), pickup/
+ * drop only needs to know WHICH connected player sent it, which the server already resolves from
+ * the packet's own source address (same PC_PACKET_INTERACT-style addr lookup, not a new
+ * identification mechanism). */
+typedef struct {
+    PcHeader hdr;
+} PcWheelbarrowTogglePacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

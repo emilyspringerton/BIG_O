@@ -552,3 +552,54 @@ regressions; `scripts/build.sh` (the real CI ASan/UBSan path) also clean.
    already made (GTA7's own separate faction-doctrine system, not guessed at without checking that repo first).
 
 session: sess-20260920-1908-24cb3558.
+
+## 15. Reverse port phase 4: wheelbarrow (2026-09-23, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+§12 originally named wheelbarrow as blocked ("no equivalent authored landmark in BIG_O's persisted world").
+Re-checked: that blocker was real but smaller than it first looked -- SHANKPIT's own version doesn't use any
+real level-authoring system either, it reuses one hardcoded circle (`WITNESS_AI_LAB_ZONE_*`) "well clear of the
+NPC spawn footprint," the same discipline every other live-server landmark in this repo already uses
+(pheromone detection radius, witness detection radius, dispatch arrival radius). This phase makes the same
+call: a new, real, hardcoded circle at `(BIGO_LAB_ZONE_CX=30, BIGO_LAB_ZONE_CZ=0)`, radius 6 -- 24 units clear
+of the 10-unit NPC spawn circle at origin and the giant-bug spawn point near (-9,0,1).
+
+**Landed, live, in the real day server:** a new wire packet `PC_PACKET_WHEELBARROW_TOGGLE` (15) +
+`PcWheelbarrowTogglePacket` (header-only, no payload -- the server already resolves the sender from the packet's
+own source address, same `PC_PACKET_INTERACT`-style lookup, not a new identification mechanism).
+`server_wheelbarrow_toggle(requester)` -- real, independently-callable decision logic (factored out of the
+packet handler, same "extract the real decision" discipline `server_throw_pheromone` already established): drop
+if already carrying, else pick up the nearest carryable NPC (Citizen or Zombie only, matching the founder's own
+"whole zombie or citizen" wording -- The Men are never carryable) within `BIGO_WHEELBARROW_PICKUP_RADIUS`.
+`server_tick_wheelbarrow()` -- trails the carried NPC 2 units behind its carrier's own real position/yaw every
+tick (BIG_O's `state.yaw` is already radians, unlike SHANKPIT's degrees-with-a-conversion-factor version), then
+checks delivery into the lab circle. Unlike SHANKPIT's own version (which always trails a fixed "hero," player
+slot 0), this tracks WHICH connected player is carrying and trails that specific player -- a real, necessary
+difference since BIG_O's own live server has no fixed-hero convention (real co-op, up to 3 players, §7).
+
+**Live-verified, not scripted-only:** a real scratch integration harness (`#include`s `day/apps/server/src/
+main.c` directly, same "call the real, unmodified functions, skip the socket/ticket layer" precedent the
+pheromone/dispatch phases already used) exercises `server_spawn_npcs` → `server_wheelbarrow_toggle` →
+`server_tick_wheelbarrow` end to end against real state: pickup claims the nearest real Citizen NPC, a second
+toggle drops it, walking the cargo into the real lab zone despawns it and increments the real delivery counter,
+and a disconnected carrier makes the tick stand down safely (cargo stays active, not silently faked as
+delivered). Also re-ran the full, real `bigo_day_server` binary end to end (isolated port/paths, real shared
+worldapi read-only) to confirm the new state doesn't regress startup/shutdown -- clean boot, clean tick, clean
+signal-shutdown. `bazel test //...` 35/35 green; `scripts/build.sh` ASan/UBSan path clean.
+
+**Real, honest, deliberately NOT built here (named, not silently dropped), same scope cuts SHANKPIT's own
+version already made:**
+1. **No literal wheelbarrow prop/model.** A real, separate art task -- the carry mechanic itself is the real
+   feature, matching the founder's own framing.
+2. **No client input wiring.** The real client-side E-key binding (or equivalent) that sends
+   `PC_PACKET_WHEELBARROW_TOGGLE` doesn't exist yet in `day/apps/client` -- verified server-side only, same
+   "prove the server logic first" precedent pheromone/witness/dispatch already used before any client wiring
+   landed for them.
+3. **No network broadcast of carried-NPC position to other clients**, and no despawn broadcast on delivery --
+   moot until #2 gives this any client presence at all.
+4. **A real, live interaction found (not a bug, named for completeness):** a carried NPC that gets eaten by a
+   giant bug mid-carry (phase 3, both mechanics now touch the same `g_npcs[]`) would leave `g_carried_npc_index`
+   pointing at an inactive NPC -- `server_tick_wheelbarrow`'s own `!cargo->active` check already handles this
+   correctly (stands down, same as a disconnected carrier), verified by the scratch harness's own disconnect
+   case exercising the identical code path.
+
+session: sess-20260920-1908-24cb3558.
