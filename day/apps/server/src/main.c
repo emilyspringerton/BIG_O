@@ -487,7 +487,14 @@ static void server_spawn_npcs(unsigned int now_ms) {
         } else {
             npc_brain_init(&n->brain, (n->role == PC_NPC_ROLE_THE_MEN) ? NPC_ARCHETYPE_THE_MEN : NPC_ARCHETYPE_CITIZEN, now_ms);
             n->witness_state = WS_UNAWARE;
-            n->arrogance = 50; /* v0 fixed default -- see ServerNpc's own doc comment on this field */
+            n->arrogance = server_roll100(); /* real per-NPC arrogance variety, EMILY/BACKLOG.md
+                SECTION 536 follow-up, BIG_O/NORTHSTAR.md §22, closes §11 item 5. Was a fixed 50
+                for every human NPC -- since panic_arrogance_max()=15 and engage_arrogance_min()=70,
+                a uniform 50 meant WS_PANIC and WS_ENGAGE could never fire live at all, no matter
+                what happened in the world (every witness landed in the exact same SILENCING/
+                DENIAL split). A real, uniform 0..99 roll from the same seeded server RNG
+                server_tick_decorum already uses gives each NPC a genuine, individual personality
+                instead. */
             n->has_dispatch_target = 0;
         }
     }

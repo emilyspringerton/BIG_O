@@ -400,7 +400,7 @@ elimination path is real, separate, deferred work below.
    unbuilt gap — no live decorum meter, no costume enforcement, matches the original gap-analysis finding.
 4. **No accomplice/compromise mechanic live.** `effective_witnesses` is always called with `accomplices=0` — a
    player can't yet force a witness into COMPROMISED in the live game, only in `core/sim.c`'s own scenario harness.
-5. **Fixed arrogance (50 for every human NPC).** Real per-NPC arrogance variety — needed for ENGAGE to ever fire
+5. ~~**Fixed arrogance (50 for every human NPC).**~~ **Closed, 2026-09-23, see §22.** Real per-NPC arrogance variety — needed for ENGAGE to ever fire
    live without every witness sharing the exact same threshold behavior — is deferred, same category as §8e item 6.
 6. **The Men carry pagers** (founder real-time, 2026-09-22: "the men cary pagers"). Real, named design direction
    for the dispatch mechanic above, not built. `server_tick_dispatch`'s own current "nearest idle The Men NPC
@@ -1021,7 +1021,43 @@ Call/Regulator escalation when every The Men unit is already busy (distinct from
 Regulator path §18/§19 already shipped -- that one is per-player Decorum, this one is the LOUD zombie-witness
 path reaching max heat with no responder available); no quiet-observation costume/gear tie-in to THIS specific
 LOUD path (§18 Phase A wired quiet-observation as its own separate system, not merged with this one); no live
-accomplice/compromise mechanic; fixed arrogance=50 for every human NPC; The Men's own pagers (design-only,
-§11 item 6).
+accomplice/compromise mechanic; fixed arrogance=50 for every human NPC (closed separately, see §22); The Men's
+own pagers (design-only, §11 item 6).
+
+session: sess-20260923-1030-4a526255.
+
+## 22. Real per-NPC arrogance variety -- PANIC and ENGAGE can finally fire live (2026-09-23,
+EMILY/BACKLOG.md SECTION 536 follow-up, closes §11 item 5)
+
+Founder direction, continued ("continue"). §11 named this back on 2026-09-20: every human NPC spawned with the
+exact same hardcoded `arrogance = 50`. Checked the real thresholds in `core/witness_rules.c` directly:
+`panic_arrogance_max()` is 15, `engage_arrogance_min()` is 70 -- a uniform 50 sits strictly between both, so
+`witness_state`'s own real decision function could only ever return `WS_SILENCING` or `WS_CATATONIC`/DENIAL for
+every single human NPC in this world, no matter what happened. Two of the witness system's five real states
+(`WS_PANIC`, `WS_ENGAGE`) were mathematically unreachable in live play -- not a rare edge case, a structural
+dead branch.
+
+**What shipped:** one line. `server_spawn_npcs` now rolls `server_roll100()` (the same seeded server RNG
+`server_tick_decorum` already uses -- this pass adds no new RNG, just a second real call site) for each human
+NPC's arrogance instead of a fixed constant, giving a real, uniform 0..99 spread. No new design decision was
+needed: the range and mechanism both already existed in this codebase, this closes a pure completeness gap,
+not a new feature.
+
+**Verified, not just compiled:** a new scratch integration harness (same `#include main.c` precedent this
+whole thread has used) drives the real, unmodified `server_spawn_npcs` and confirms the 4 real human NPCs
+(3 Citizens + 1 The Men) land at genuinely different arrogance values in `[0,99]`, not a repeated 50. Then,
+directly against the real, unmodified `npc_next_state`: an arrogance-10 NPC reaches real `WS_PANIC` on a single
+witness; an arrogance-85 NPC reaches real `WS_ENGAGE` on a zombie event with enough witnesses; and, as a
+control, the real OLD fixed value of 50 is confirmed to only ever reach `WS_SILENCING` -- directly proving the
+bug this pass closes, not just asserting the fix in isolation. 4/4 real assertions pass. `bazel test //...`
+36/36 green (zero regressions). Real `scripts/build_day.sh`/`scripts/build_client.sh` both clean, zero new
+warnings. `scripts/build.sh` ASan/UBSan rules path clean.
+
+**Real, honest, still open:** `engage_outcome`'s own real consequence when ENGAGE actually fires live
+(`docs/DESIGN_DIGEST.md`'s "citizen annihilated" vs. "zombie destroyed" split, `core/sim.c`'s own
+`sim_release` already computes this offline) is not yet wired into any live server tick -- `witness_state`
+reaching `WS_ENGAGE` is now real and reachable, but nothing live consumes it into an actual combat/death
+outcome yet, same "logic reachable, consequence not built" shape several other gaps in this thread have. §11's
+remaining items 2, 4, 6 are all still open, unaffected by this pass.
 
 session: sess-20260923-1030-4a526255.
