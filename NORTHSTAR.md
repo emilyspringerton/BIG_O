@@ -508,3 +508,47 @@ add `PC_NPC_ROLE_GIANT_BUG`, wire the spawn/tick/eat loop and the Men-hold-the-k
 `server_tick_npcs`) — not guessed at or half-built here.
 
 session: sess-20260920-1908-24cb3558.
+
+## 14. Reverse port phase 3: giant zombie bugs go live (2026-09-23, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+§13 named phase 3 as "grow the roster, wire the Men-hold-the-key gate" — checked first, and the growing part
+turned out to be the wrong move: `PC_NPC_MAX=8` is baked into `PcNpcState[PC_NPC_MAX]`'s own wire snapshot size
+(`papercraft_protocol.h`), so resizing it is a real network-protocol change, not a cheap one. SHANKPIT's own live
+version (`witness_ai.c`) already made the same call for the same reason — a genuinely separate array
+(`g_giant_bugs[]`), not a new `PC_NPC_ROLE_*`. This phase copies that same real shape into BIG_O's own live
+server rather than the riskier roster-growth path §13 originally named.
+
+**Landed, live, in the real day server:** `day/apps/server/src/main.c` gained `ServerGiantBug
+g_giant_bugs[BIGO_GIANT_BUG_MAX]` (8 slots, separate from `g_npcs`), `server_spawn_giant_bugs` (one bug spawned
+adjacent to a real zombie NPC's own spawn point, close enough to verify the eat loop live without needing any
+movement AI — neither bugs nor zombies move in this v0), `server_giant_bug_command_authorized` (the real "Men
+hold the key" gate — brought back from SHANKPIT's `witness_ai_bug_command_authorized`, ported verbatim: >=1 live
+`PC_NPC_ROLE_THE_MEN` NPC required), and `server_tick_giant_bugs` (per-tick: if authorized, eat the nearest
+zombie NPC within `BIGO_GIANT_BUG_EAT_RADIUS`, else just drift hunger via `giant_bug_tick`). Wired into the real
+tick loop and startup spawn alongside `server_tick_npcs`/`server_spawn_npcs`. `scripts/build_day.sh` extended
+with the two new source files.
+
+**Live-verified, not just compiled:** ran the real `bigo_day_server` binary (isolated `--port`/`--save-dir`/
+`--world-file`/`--damage-file`, pointed at the real, shared, already-running worldapi on `:7070` read-only, same
+as PAPERCRAFT/WEAKNIGHT_BEDROCK_RACERS' own live instances) — real log output: `S536-BUG: spawned 1 real giant
+zombie bug...` then `S536-BUG: bug0 ate npc4 (zombie) -- strength=1.00 speed=1.13`. Strength stayed at baseline
+(correct: a freshly-spawned zombie has 0.0 aggression, so `giant_bug_eat_zombie`'s real strength-gain formula
+correctly contributes nothing) while speed grew (a dormant zombie's own reaction delay is still finite, so the
+speed proxy is always positive) — exactly the documented "eat a strong/fast zombie, get stronger/faster"
+mechanic behaving correctly on real, live data, not a scripted test. `bazel test //...` 35/35 green, zero
+regressions; `scripts/build.sh` (the real CI ASan/UBSan path) also clean.
+
+**Real, honest, deliberately NOT built here (named, not silently dropped):**
+1. **No bug movement.** Matches zombies' own existing "stationary in v0" scope cut — real movement/hunting AI
+   for either is separate, deferred work.
+2. **No network broadcast / client visual.** `g_giant_bugs` is server-side simulation only, verified via log
+   output — same "prove it live in the log first" precedent `server_tick_witness`'s own live-verification
+   already established. No wire packet, no rendering, no leela-kit-reused 2.5×-scaled-and-tinted visual
+   (SHANKPIT's own real answer, not replicated here).
+3. **No eaten-NPC despawn broadcast.** `prey->active = 0` is real and correct server-side state, but nothing
+   tells a connected client the eaten NPC is gone — moot until #2 above gives bugs (and the wider NPC roster)
+   any client presence at all.
+4. **TRAPX Rogue Swarm Doctrine** — real, named, deliberately not modeled, same deferral SHANKPIT's own version
+   already made (GTA7's own separate faction-doctrine system, not guessed at without checking that repo first).
+
+session: sess-20260920-1908-24cb3558.

@@ -52,6 +52,11 @@
 #include "../../../../core/zombie_values.h"
 #include "../../../../core/witness_rules.h"
 #include "../../../../core/witness_live.h"
+/* EMILY/BACKLOG.md SECTION 536 reverse-port phase 3 ("bring SHANKPIT stuff back into BIG_O"):
+ * Giant Zombie Bugs, brought back from SHANKPIT's own live witness_ai.c wiring. See
+ * server_giant_bug_command_authorized/server_tick_giant_bugs below for the real, live
+ * "Men hold the key" gate + eat-a-nearby-zombie loop. */
+#include "../../../../core/giant_bug_values.h"
 
 #define PC_SERVER_PORT 7799
 #define PC_TICK_HZ 20 /* on-foot movement doesn't need a vehicle sim's own 60Hz -- real, deliberately lower tick rate for Phase 0 */
@@ -324,6 +329,21 @@ typedef struct {
 } ServerNpc;
 static ServerNpc g_npcs[PC_NPC_MAX];
 
+/* ServerGiantBug -- SECTION 536 reverse-port phase 3. Deliberately a SEPARATE array from g_npcs,
+ * not a new PC_NPC_ROLE_* -- growing PC_NPC_MAX would change PcNpcState[PC_NPC_MAX]'s own wire
+ * size (papercraft_protocol.h), a real, riskier protocol change; SHANKPIT's own live version
+ * (witness_ai.c's g_giant_bugs[]) made the exact same call for the exact same reason. No network
+ * broadcast yet -- server-side simulation only, verified via log output, same "prove it live in
+ * the log first" precedent server_throw_pheromone/server_tick_witness already established. */
+#define BIGO_GIANT_BUG_MAX 8
+#define BIGO_GIANT_BUG_EAT_RADIUS 4.0f /* matches SHANKPIT's own WITNESS_AI_BUG_EAT_RADIUS */
+typedef struct {
+    int active;
+    float x, y, z;
+    GiantBugState bstate;
+} ServerGiantBug;
+static ServerGiantBug g_giant_bugs[BIGO_GIANT_BUG_MAX];
+
 /* g_pheromones -- S504-PHEROMONE real command-point state (bigo_pheromone.h). Global rather than
  * per-crew: this v0 has exactly one shared crew/world (NORTHSTAR.md §7's own "one crew, one
  * onboarding" decision), so there is no separate crew scope to key it by yet. */
@@ -421,6 +441,76 @@ static void server_tick_npcs(unsigned int now_ms) {
             }
         } else {
             npc_brain_tick(&n->brain, now_ms);
+        }
+    }
+}
+
+/* server_spawn_giant_bugs -- real, fixed v0 test population: ONE bug, placed close enough to
+ * npc4's own real zombie spawn point (server_spawn_npcs' roles[4] == PC_NPC_ROLE_ZOMBIE, on the
+ * same 10-unit circle at angle 4*(2pi/8) == (-10, 0, 0)) that the eat loop below can be verified
+ * live without waiting on any real movement AI -- neither bugs nor zombies move in this v0
+ * (matches server_spawn_npcs' own "stationary in v0, on purpose"). */
+static void server_spawn_giant_bugs(unsigned int now_ms) {
+    memset(g_giant_bugs, 0, sizeof(g_giant_bugs));
+    ServerGiantBug *b = &g_giant_bugs[0];
+    b->active = 1;
+    b->x = -9.0f; b->y = 0.0f; b->z = 1.0f; /* within BIGO_GIANT_BUG_EAT_RADIUS of npc4's (-10,0,0) */
+    giant_bug_state_init(&b->bstate, now_ms);
+    printf("S536-BUG: spawned 1 real giant zombie bug at (%.1f, %.1f, %.1f).\n", b->x, b->y, b->z);
+}
+
+/* server_giant_bug_command_authorized -- "men are the custodians of the keys for the giant
+ * zombie feral ai bugs" (founder real-time, 2026-09-22, via SHANKPIT's own live wiring --
+ * witness_ai_bug_command_authorized). A spawned bug only hunts/eats while >=1 live The Men NPC is
+ * active; with none active it just sits DORMANT-equivalent (hunger still drifts via giant_bug_
+ * tick, attack/eat never fires). TRAPX Rogue Swarm Doctrine is real, named, and deliberately NOT
+ * modeled further here -- GTA7's own separate faction-doctrine system, a real, separate follow-up. */
+static int server_giant_bug_command_authorized(void) {
+    for (int i = 0; i < PC_NPC_MAX; i++) {
+        if (g_npcs[i].active && g_npcs[i].role == PC_NPC_ROLE_THE_MEN) return 1;
+    }
+    return 0;
+}
+
+/* server_tick_giant_bugs -- SECTION 536 reverse-port phase 3, real live wiring (brought back from
+ * SHANKPIT's own witness_ai.c tick loop, same eat-radius/authorization logic). Real, honest,
+ * deliberately NOT built here (named, not silently dropped): no bug movement (matches zombies'
+ * own "stationary in v0" precedent above), no network broadcast/client visual (server-side
+ * simulation only -- verified via this function's own real log line, same "prove it live in the
+ * log" precedent server_tick_witness already established), no eaten-zombie despawn broadcast to
+ * connected clients (a real, separate gap once bugs ever get a network presence at all). */
+static void server_tick_giant_bugs(unsigned int now_ms) {
+    int authorized = server_giant_bug_command_authorized();
+    int live_bugs = 0;
+    for (int i = 0; i < BIGO_GIANT_BUG_MAX; i++) if (g_giant_bugs[i].active) live_bugs++;
+
+    for (int i = 0; i < BIGO_GIANT_BUG_MAX; i++) {
+        ServerGiantBug *bug = &g_giant_bugs[i];
+        if (!bug->active) continue;
+
+        int has_target = 0;
+        int eaten_ni = -1;
+        if (authorized) {
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                ServerNpc *n = &g_npcs[ni];
+                if (!n->active || n->role != PC_NPC_ROLE_ZOMBIE) continue;
+                float dx = n->x - bug->x, dy = n->y - bug->y, dz = n->z - bug->z;
+                if (dx * dx + dy * dy + dz * dz <= BIGO_GIANT_BUG_EAT_RADIUS * BIGO_GIANT_BUG_EAT_RADIUS) {
+                    has_target = 1;
+                    eaten_ni = ni;
+                    break;
+                }
+            }
+        }
+
+        giant_bug_tick(&bug->bstate, now_ms, has_target, live_bugs - 1);
+
+        if (eaten_ni >= 0) {
+            ServerNpc *prey = &g_npcs[eaten_ni];
+            giant_bug_eat_zombie(&bug->bstate, &prey->zombie, now_ms);
+            printf("S536-BUG: bug%d ate npc%d (zombie) -- strength=%.2f speed=%.2f\n",
+                   i, eaten_ni, bug->bstate.strength, bug->bstate.speed);
+            prey->active = 0;
         }
     }
 }
@@ -1316,6 +1406,7 @@ int main(int argc, char **argv) {
     memset(g_slots, 0, sizeof(g_slots));
     memset(g_entities, 0, sizeof(g_entities));
     server_spawn_npcs(now_ms());
+    server_spawn_giant_bugs(now_ms());
     g_pickup_radius = (float)on_papercraft_pickup_radius_millis() / 1000.0f;
     printf("Real, PARENA-decided pickup radius: %.2f world units.\n", g_pickup_radius);
 
@@ -1732,6 +1823,7 @@ int main(int argc, char **argv) {
             last_tick_ms = now;
             server_tick++;
             server_tick_npcs(now);
+            server_tick_giant_bugs(now);
             server_tick_witness();
             server_tick_dispatch(now);
 

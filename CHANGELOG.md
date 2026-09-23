@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 2026-09-23 (later)
+- feat: reverse port phase 3 — giant zombie bugs go live in the real day server (EMILY/BACKLOG.md SECTION 536 follow-up). New `ServerGiantBug g_giant_bugs[]` in `day/apps/server/src/main.c` — a separate array from `g_npcs` (growing `PC_NPC_MAX` would be a real wire-protocol change; SHANKPIT's own live version made the same call), `server_spawn_giant_bugs`, `server_giant_bug_command_authorized` (the real "Men hold the key" gate, ported verbatim from SHANKPIT's `witness_ai_bug_command_authorized`), `server_tick_giant_bugs` (eats a nearby zombie NPC when authorized). Wired into the real tick/spawn loop. `scripts/build_day.sh` extended. Live-verified against the real running binary (isolated port/save-dir/world-file, real shared worldapi read-only): real log output confirms a spawn and a real eat event with correct strength/speed math on live data. `bazel test //...` 35/35 green; `scripts/build.sh` ASan/UBSan path clean. Real, honest, deliberately not built: bug movement, network broadcast/client visual, eaten-NPC despawn broadcast, TRAPX Rogue Swarm Doctrine. NORTHSTAR.md §14. (sess-20260920-1908-24cb3558)
+
 ## 2026-09-23
 - docs: add GEMINI.md guidance for Gemini / Antigravity pair programming
 - fix(build): fix Bazel C99 build for http_client.h (POSIX timeval/addrinfo feature macros, comment trailing-backslash escape), level_loader.h (__typeof__ macro, static inline), and parena_runtime.h header guards; all 33 bazel tests pass
