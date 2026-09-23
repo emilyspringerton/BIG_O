@@ -35,8 +35,11 @@ int main(void) {
     go(&p, BP_APP_LOADOUT); fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_WEAPON_SWITCH && fx.arg == 0);
     bigo_phone_input(&p, BP_DOWN, 0); fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_NONE);
     p.weapons_owned |= 2; fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_WEAPON_SWITCH && fx.arg == 1);
-    /* wardrobe */
-    go(&p, BP_APP_WARDROBE); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.costume == 1);
+    /* wardrobe -- selecting a different costume raises BP_FX_COSTUME_SET (SECTION 536 follow-up,
+       NORTHSTAR.md §18 Phase A: costume becomes server-authoritative for the first time) */
+    go(&p, BP_APP_WARDROBE); bigo_phone_input(&p, BP_DOWN, 0);
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.costume == 1 && fx.kind == BP_FX_COSTUME_SET && fx.arg == 1);
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_NONE); /* re-selecting the SAME worn costume is a no-op, not a re-send */
     /* lab: splice needs a sample; consumes exactly one; base/trait choice recorded */
     go(&p, BP_APP_LAB); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
     bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 0);

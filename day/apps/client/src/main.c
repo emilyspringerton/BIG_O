@@ -60,6 +60,7 @@
 #include "../../../packages/common/bigo_food_items.h"
 #include "../../../packages/common/bigo_sky.h"
 #include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
+#include "../../../../core/witness_rules.h" /* real, live Decorum band name lookup for STATUS -- see draw_bigo_phone's own BP_APP_STATUS case */
 #include "../../../packages/common/bigo_phone.h"
 /* level_loader.h — SHANKPIT_PAPERCRAFT_UNIFICATION_PLAN.md Phase 1 (S504-10): loads a NOCK-authored
  * SHANKPIT level (walls/spawners/exits) from IDUNA's shankpit_levels registry, as an alternative
@@ -1128,6 +1129,14 @@ static void bp_line(float x, float y, const char *txt, int selected, float dim) 
 static const char *bp_trunc(const char *s, char *out, size_t n, size_t maxc) {
     snprintf(out, n, "%.*s", (int)maxc, s); return out;
 }
+
+/* Real, live Decorum band names (core/witness_rules.h's own BAND_* -- EMILY/BACKLOG.md SECTION
+   536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A). draw_bigo_phone's own STATUS case below used to
+   read "fed by the server (rules core is not linked to this client)" -- that claim was already
+   stale before this change (scripts/build_client.sh has linked core/witness_rules.c since this
+   client was first built), and is now simply wrong: decorum is real, server-authoritative state
+   (PcPlayerState::decorum), just never displayed until this pass. */
+static const char *const BP_BAND_NAMES[4] = { "OK", "SUSPICION", "HYSTERIC", "CANCELLED" };
 static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPlayerState *own,
                             const PcInventorySlot *inv, unsigned int now_ms_v) {
     (void)now_ms_v;
@@ -1258,10 +1267,13 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
             snprintf(line, sizeof(line), "%s  sight %d%%", BP_WEATHER_NAMES[p->wf_weather], p->wf_sight); pc_draw_string(line, x, y - step * 3, 6);
             glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("world: local sim, not server", x, y - step * 4, 4);
         }
-        glColor3f(0.9f, 0.6f, 0.4f);
-        pc_draw_string("decorum / witnesses: not yet", x, y - step * 5.5f, 5);
-        pc_draw_string("fed by the server (rules core", x, y - step * 6.2f, 5);
-        pc_draw_string("is not linked to this client)", x, y - step * 6.9f, 5);
+        {
+            int band = decorum_band(own->decorum);
+            glColor3f(band == BAND_CANCELLED ? 0.95f : 0.75f, band == BAND_OK ? 0.9f : 0.5f, 0.5f);
+            snprintf(line, sizeof(line), "%s  decorum %d  %s", BP_COSTUME_NAMES[own->costume], own->decorum, BP_BAND_NAMES[band]);
+            pc_draw_string(line, x, y - step * 5.5f, 6);
+            if (band == BAND_CANCELLED) { glColor3f(0.9f, 0.3f, 0.2f); pc_draw_string("CANCELLED -- regulator escalation not built yet", x, y - step * 6.5f, 4); }
+        }
         break;
     default: break;
     }
@@ -1568,6 +1580,9 @@ int main(int argc, char **argv) {
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
         else if (fx_.kind == BP_FX_WEAPON_SWITCH) { PcWeaponSwitchPacket rq; memset(&rq, 0, sizeof(rq)); \
             rq.hdr.type = PC_PACKET_WEAPON_SWITCH; rq.hdr.sequence = ++allocate_seq; rq.requested_slot = (unsigned char)fx_.arg; \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
+        else if (fx_.kind == BP_FX_COSTUME_SET) { PcCostumeSetPacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_COSTUME_SET; rq.hdr.sequence = ++allocate_seq; rq.costume = (unsigned char)fx_.arg; \
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
     } while (0)
     BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */

@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <math.h>
 #include <time.h>
 #include <sys/socket.h>
@@ -284,6 +285,19 @@ typedef struct {
        this exact player only, via send_weapon_owned_update, after every switch attempt. Starts
        at PC_WPN_KNIFE (0, memset default), the universal baseline every character has. */
     unsigned char current_weapon;
+
+    /* EMILY/BACKLOG.md SECTION 536 follow-up, live Decorum tracking (BIG_O/NORTHSTAR.md §18 Phase
+     * A). Server-internal bookkeeping only -- not part of PcPlayerState/the wire format, same
+     * "only position/yaw need to cross the wire" precedent vy/on_ground above already set. */
+    int decorum_zone;             /* ZONE_* this player was in as of the last observe check --
+                                      detects zone-ENTRY transitions, same real "observe fires once
+                                      on sim_enter, not every tick" precedent core/sim.c already
+                                      uses. Starts at -1 (no zone yet) so the very first tick always
+                                      counts as an entry. */
+    unsigned int last_quiet_tick_ms; /* real, own v1 passive-regen cadence -- see
+                                      BIGO_DECORUM_QUIET_TICK_MS's own doc comment below */
+    int decorum_cancelled_logged;  /* real, one-time marker so BAND_CANCELLED only logs once per
+                                       episode, not every tick while it stays cancelled */
 } PlayerSlot;
 
 /* Real, "simple but trackable" GTA3-style dropped-item entity -- see packages/common/
@@ -364,6 +378,38 @@ static int g_lab_deliveries = 0;
 #define BIGO_LAB_ZONE_CX 30.0f
 #define BIGO_LAB_ZONE_CZ 0.0f
 #define BIGO_LAB_ZONE_RADIUS 6.0f
+
+/* Live Decorum tracking -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase
+ * A: the QUIET-observation half of the witness system (core/witness_rules.c's own zone_access/
+ * conspicuousness/noticed/decorum_*), wired live for the first time. Only ZONE_PUBLIC and
+ * ZONE_LAB (reusing the wheelbarrow's own existing lab-delivery circle above -- zero new landmark
+ * authoring) are actually placed in this world yet; ZONE_EXEC/ZONE_GENERATOR/ZONE_VAULT have no
+ * live landmark, named and deferred in NORTHSTAR.md §18, not guessed at here. */
+#define BIGO_QUIET_OBSERVE_RADIUS 10.0f /* deliberately tighter than BIGO_WITNESS_DETECTION_RADIUS
+    (25.0) -- noticing an outfit needs real proximity, hearing a zombie scream doesn't */
+#define BIGO_DECORUM_QUIET_TICK_MS 10000u /* real, own, v1 passive-regen cadence (not spec'd
+    anywhere else) -- core/sim.c's own sim_tick applies DA_QUIET_TICK every ABSTRACT scenario
+    turn; this maps that to a real, named, retunable real-time cadence instead: +1 decorum every
+    10 real seconds a player spends NOT currently in violation. */
+
+/* Real, seeded xorshift32 server RNG -- same shape core/sim.c's own roll100/SHANKPIT's
+ * food_pickup.c own lnf_roll_item already use -- feeds noticed()'s own pre-rolled 0..99 input.
+ * The live day server had no RNG of any kind before this (every other system here is
+ * deterministic), so this is a new, small, real addition, not a reuse. */
+static uint32_t g_decorum_rng = 0x9E3779B9u;
+static int server_roll100(void) {
+    g_decorum_rng ^= g_decorum_rng << 13;
+    g_decorum_rng ^= g_decorum_rng >> 17;
+    g_decorum_rng ^= g_decorum_rng << 5;
+    return (int)(g_decorum_rng % 100u);
+}
+
+/* server_player_zone -- real, minimal zone lookup for this world's own two live-placed zones. */
+static int server_player_zone(const PlayerSlot *s) {
+    float dx = s->state.x - BIGO_LAB_ZONE_CX, dz = s->state.z - BIGO_LAB_ZONE_CZ;
+    if (dx * dx + dz * dz <= BIGO_LAB_ZONE_RADIUS * BIGO_LAB_ZONE_RADIUS) return ZONE_LAB;
+    return ZONE_PUBLIC;
+}
 
 /* g_pheromones -- S504-PHEROMONE real command-point state (bigo_pheromone.h). Global rather than
  * per-crew: this v0 has exactly one shared crew/world (NORTHSTAR.md §7's own "one crew, one
@@ -758,6 +804,60 @@ static void server_tick_wheelbarrow(void) {
     }
 }
 
+static const char *BAND_NAMES[] = {"OK", "SUSPICION", "HYSTERIC", "CANCELLED"};
+
+/* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A:
+ * the QUIET-observation half of the witness system, live for the first time. Real, deliberate
+ * design choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per
+ * zone-ENTRY transition (matching core/sim.c's own sim_enter-drives-sim_observe precedent, not a
+ * continuous per-tick re-roll, which would crash Decorum in under a second at 20Hz); gear/token
+ * are real, honest 0s (no live field-gear-carry flag or vault-token mechanic exists yet, so only
+ * DA_WRONG_COSTUME can ever fire from this pass); witnesses are real, active Citizen/The-Men NPCs
+ * within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real npc_brain_effective_vigilance. */
+static void server_tick_decorum(unsigned int now_ms) {
+    for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+        PlayerSlot *s = &g_slots[i];
+        if (!s->active) continue;
+
+        int zone = server_player_zone(s);
+        if (zone != s->decorum_zone) {
+            s->decorum_zone = zone;
+            int allowed = zone_access(s->state.costume, zone, 0 /* no live vault-token mechanic yet */);
+            int cons = conspicuousness(allowed, 0 /* no live field-gear-carry flag yet */);
+            if (cons > 0) {
+                int seen = 0;
+                for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                    ServerNpc *n = &g_npcs[ni];
+                    if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
+                    if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_QUIET_OBSERVE_RADIUS)) continue;
+                    int vig = npc_brain_effective_vigilance(&n->brain);
+                    if (noticed(vig, cons, server_roll100())) seen++;
+                }
+                if (seen > 0) {
+                    int before = s->state.decorum;
+                    s->state.decorum = decorum_after(before, DA_WRONG_COSTUME);
+                    int band = decorum_band(s->state.decorum);
+                    printf("S536-DECORUM: player%d noticed in zone%d (wrong costume, seen_by=%d) decorum %d -> %d (%s)\n",
+                           i, zone, seen, before, s->state.decorum, BAND_NAMES[band]);
+                    if (band == BAND_CANCELLED && !s->decorum_cancelled_logged) {
+                        s->decorum_cancelled_logged = 1;
+                        printf("S536-DECORUM: player%d CANCELLED -- Regulator escalation is Phase B, not built yet (BIG_O/NORTHSTAR.md §18)\n", i);
+                    } else if (band != BAND_CANCELLED) {
+                        s->decorum_cancelled_logged = 0;
+                    }
+                }
+            }
+        }
+
+        if (now_ms - s->last_quiet_tick_ms >= BIGO_DECORUM_QUIET_TICK_MS) {
+            s->last_quiet_tick_ms = now_ms;
+            if (decorum_band(s->state.decorum) != BAND_CANCELLED) {
+                s->state.decorum = decorum_after(s->state.decorum, DA_QUIET_TICK);
+            }
+        }
+    }
+}
+
 /* g_shutdown_requested: set by a real SIGINT/SIGTERM handler -- lets a deliberate server restart
    (not just a crash) flush every real active player's own current state to disk before exiting,
    the real reason "persistence across a restart" needs more than just the periodic autosave
@@ -1094,6 +1194,11 @@ static int fetch_city_world(const char *worldapi_host, int worldapi_port) {
    read failure (missing/corrupt) -- not a hardcoded Y either way. */
 static void spawn_player(PlayerSlot *s) {
     memset(&s->state, 0, sizeof(s->state));
+    s->state.costume = COS_SUIT; /* real default, matches BP_COSTUME_NAMES[0] "CIVILIAN SUIT" */
+    s->state.decorum = decorum_start();
+    s->decorum_zone = -1; /* no zone yet -- next server_tick_decorum call always counts as an entry */
+    s->last_quiet_tick_ms = 0;
+    s->decorum_cancelled_logged = 0;
 
     /* Real, live bug found and fixed during TYLER-phone-mechanics live verification (2026-08-30):
        g_slots[] is a static array reused across occupants (a timed-out or gracefully-freed slot
@@ -1729,6 +1834,26 @@ int main(int argc, char **argv) {
                     send_weapon_owned_update(sock, s);
                     break;
                 }
+            } else if (hdr.type == PC_PACKET_COSTUME_SET && (size_t)n >= sizeof(PcCostumeSetPacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A -- the
+                   first time costume becomes server-authoritative. No mod gate needed (unlike
+                   weapon switch, which needs "has this player actually found it" -- any costume
+                   in the real, fixed COS_* roster is always wearable, the real consequence is
+                   zone_access/conspicuousness reacting to it, not an ownership check here). */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcCostumeSetPacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    if (req.costume <= COS_STREET) {
+                        s->state.costume = req.costume;
+                        printf("Player slot %d set costume to %d.\n", i, s->state.costume);
+                    }
+                    break;
+                }
             } else if (hdr.type == PC_PACKET_INTERACT && (size_t)n >= sizeof(PcInteractPacket)) {
                 /* Real "punch/interact" -- the minimal real input needed to exercise the already-
                    built Paper Engine live, without inventing a real combat system this sandbox
@@ -1935,6 +2060,7 @@ int main(int argc, char **argv) {
             server_tick_wheelbarrow();
             server_tick_witness();
             server_tick_dispatch(now);
+            server_tick_decorum(now);
 
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 PlayerSlot *s = &g_slots[i];

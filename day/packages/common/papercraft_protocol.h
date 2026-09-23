@@ -37,6 +37,10 @@
     port phase 4 ("wheelbarrow"), brought back from SHANKPIT's own witness_ai.c carry mechanic --
     picks up the nearest carryable Citizen/Zombie NPC within reach, or drops whatever this same
     player is currently carrying. See PcWheelbarrowTogglePacket below. */
+#define PC_PACKET_COSTUME_SET      16 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §18 Phase A -- sent when Wardrobe's phone SELECT changes the worn costume,
+    the first time costume becomes server-authoritative instead of purely a client-local phone UI
+    field. See PcCostumeSetPacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -170,6 +174,14 @@ typedef struct {
     int xp_to_next;
     int unspent_points;
     int ability[PC_ABILITY_COUNT]; /* real construct talent ranks -- see PC_ABILITY_* above */
+    /* EMILY/BACKLOG.md SECTION 536 follow-up, live Decorum tracking (BIG_O/NORTHSTAR.md §18 Phase
+     * A, 2026-09-23): real, server-authoritative costume + Decorum meter, driving the QUIET-
+     * observation half of the witness system (core/witness_rules.c's own zone_access/
+     * conspicuousness/noticed/decorum_*), live for the first time. costume matches
+     * core/witness_rules.h's own COS_* enum (0=SUIT default); decorum starts at decorum_start()
+     * (80), clamped 0..decorum_cap() (100) by decorum_after(). */
+    int costume;
+    int decorum;
 } PcPlayerState;
 
 /* PC_WPN_*: real weapon-slot constants -- must match PARENA/stdlib/papercraft/weapon_mod.prn's
@@ -264,6 +276,14 @@ typedef struct {
 typedef struct {
     PcHeader hdr;
 } PcWheelbarrowTogglePacket;
+
+/* PcCostumeSetPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A.
+ * Sender is resolved from the packet's own source address, same convention
+ * PcWheelbarrowTogglePacket's own doc comment above already establishes. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char costume; /* COS_* (core/witness_rules.h), 0..3 */
+} PcCostumeSetPacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

@@ -51,6 +51,15 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > doesn't make the zombie itself stop being witnessable, so a still-active zombie can reopen the same hunt on the
 > very next tick — no zombie-elimination/LOS-loss resolution path is wired yet. See `NORTHSTAR.md` §11 for the
 > full account and what's deferred.
+> The QUIET-observation half of the witness system — costume/zone-based noticing, driving the player's own
+> Decorum meter — is now live too, not just the loud zombie-event path above. Costume (Wardrobe's phone screen)
+> is server-authoritative for the first time; standing in the wrong costume for a zone (2 of the rules module's
+> 5 zones are actually placed so far: public + the lab) where a real nearby Citizen/The Men NPC notices you drops
+> Decorum, using the exact same tested `core/witness_rules.c` math the loud path already uses. Reaching the
+> CANCELLED band logs it honestly rather than faking a consequence — what CANCELLED actually does (Regulator
+> dispatch, a real player-kill/respawn mechanic, a Bio-Slurry economy) is scoped but deliberately not built yet.
+> See `NORTHSTAR.md` §18 for the full account, the founder's own real design decision on what CANCELLED means,
+> and what's deferred.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

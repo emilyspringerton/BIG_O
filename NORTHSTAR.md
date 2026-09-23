@@ -726,3 +726,112 @@ witness path live in `day/` first (a real, separate, already-named gap, not new)
 blocked on the same two things phase 5 already named, not on "the client has no phone UI" (it does).
 
 session: sess-20260923-1030-4a526255.
+
+## 18. Live quiet-observation (Decorum) + the real CANCELLED consequence (2026-09-23, EMILY/BACKLOG.md SECTION 536
+follow-up)
+
+§17 named the quiet-observation path (costume/zone-based noticing, driving the player's own Decorum meter) as
+the biggest remaining gap in this whole reverse-port thread, and correctly declined to guess at what CANCELLED
+should actually DO in a live persistent multiplayer world before founder input, since "cancelled = fail state"
+is this game's own stated core loop, not a side mechanic. Per Principle 19 this section scopes it properly
+before writing code.
+
+**Design decision (founder, real-time, 2026-09-23):** "the regulators are called in - the uberplumbers and they
+delete you with acid and foam." Checked against the existing design docs first, per this repo's own established
+discipline -- this is NOT a new invention, it matches real, already-written canon almost exactly:
+`docs/DESIGN_DIGEST.md` §11 already specifies **"at maximum heat replace 'police' with a Corporate Service
+Call: silent, John-Wick-lethal Regulators who 'cap the line.'"** Regulators are a real, already-named The Men
+sub-type (the "blue-collar cleanup crew" -- plumbers/electricians/engineers/regulators, §11's own roster) whose
+memory-wipe spray already resolves the LOUD zombie-witness path (`resolved=1` in `core/sim.c`/`npc_next_state`,
+live in `day/` since S504-DISPATCH). Death resolution is ALSO already canonical, not invented here: TYLER
+crossover lore (`docs/DESIGN_DIGEST.md` §11) establishes a **somatic-clone germline restore-point** --
+Regulators/Plumbers clean the scene, the basement lab prints a new body, cost = Bio-Slurry. This maps onto
+BIG_O's own already-live `BP_APP_LAB` clone-splicing menu (`clones[]`/`clone_count` in `bigo_phone.h`) as the
+real, natural mechanism -- a player death is a respawn-with-cost in this persistent world, not a hard
+disconnect/game-over, consistent with every other stat in this repo being persistent rather than session-scoped.
+
+**Real scope: this is two genuinely separate systems, not one.** Phase A (below, built this pass) is live
+Decorum tracking -- costume/zone/witness math, entirely reusing already-tested pure decision functions.
+Phase B (named, NOT built this pass) is Regulator dispatch + a real player-kill mechanic + clone respawn +
+Bio-Slurry economy -- each a genuinely new subsystem (BIG_O currently has zero player damage/death of any kind,
+confirmed back in phase 5; zero Regulator NPC type; zero Bio-Slurry resource anywhere in code). Building both in
+one pass would repeat the exact "big, unscoped ask" mistake Principle 19 exists to prevent. Phase B needs its
+own real investigation pass (what makes a Regulator dispatch-eligible vs. The Men's existing hunt-dispatch
+logic; what a "kill" even resets in a shared persistent world multiple players occupy; where Bio-Slurry is
+earned) before any code -- queued below, not guessed at.
+
+### Phase A: live Decorum tracking (built, verified this pass)
+
+All the hard logic already existed, tested, and compiled into the live `day/` binary -- `core/witness_rules.c`
+(generated from `PARENA/stdlib/big_o/witness_rules.prn`) has real `zone_access`/`conspicuousness`/`noticed`/
+`decorum_delta`/`decorum_after`/`decorum_band`/`decorum_start`/`decorum_cap` functions, already linked via
+`scripts/build_day.sh`'s own `../core/witness_rules.c`, just never called from `day/apps/server/src/main.c`.
+This phase is real wiring, not new rules logic.
+
+- `PcPlayerState` -- two new server-authoritative fields, `costume` (COS_* value, default `COS_SUIT`) and
+  `decorum` (default `decorum_start()`=80). Synced in the existing snapshot broadcast like every other player
+  stat (no new packet type needed for the read side).
+- New packet `PC_PACKET_COSTUME_SET` (16, client -> server): sent when Wardrobe's phone SELECT changes the
+  worn costume. New `bigo_phone.h` effect kind `BP_FX_COSTUME_SET` (arg = new costume index) -- the phone
+  already tracked `p->costume` locally for the UI; this is the first time it tells the server.
+  `day/apps/client/src/main.c` sends the packet on receiving the effect.
+- Real, minimal ZONE mapping for `day/`'s live world -- only 2 of the 5 rules-module zones are actually placed
+  yet: `ZONE_PUBLIC` (everywhere by default) and `ZONE_LAB` (reuses phase 4's own existing lab-delivery circle,
+  `BIGO_LAB_ZONE_CX/CZ/RADIUS` -- zero new landmark authoring, same "hardcoded circle, no LevelZone/JSON"
+  precedent used 3 times already in this repo). `ZONE_EXEC`/`ZONE_GENERATOR`/`ZONE_VAULT` have no live
+  landmark yet -- named, not guessed at (Vault also needs a real "stolen token" mechanic `zone_access` already
+  models but nothing here grants yet).
+- `server_tick_decorum` -- fires the real "observe" check ONCE per zone-entry transition per player (not every
+  tick -- matches `core/sim.c`'s own real `sim_enter`-drives-`sim_observe` precedent exactly, since re-rolling a
+  noticing check 20 times a second per player would crash Decorum instantly and doesn't match the abstract
+  scenario-sim's own turn-based semantics). `gear`/token are real, honest 0s -- no live field-gear-carry flag or
+  vault-token mechanic exists yet, so only `DA_WRONG_COSTUME` can ever fire from this pass, never
+  `DA_CARRY_GEAR`. Witnesses are real, active Citizen/The-Men NPCs (never zombies) within a new
+  `BIGO_QUIET_OBSERVE_RADIUS` (10.0 units -- deliberately tighter than the 25-unit loud-event detection radius;
+  noticing an outfit needs real proximity, hearing a zombie scream doesn't), using each NPC's own real
+  `npc_brain_effective_vigilance`. A real, seeded xorshift32 RNG (`server_roll100`, same precedent
+  `core/sim.c`'s own `roll100`/SHANKPIT's `food_pickup.c` `lnf_roll_item` already use) supplies `noticed()`'s
+  roll. On a hit: `decorum_delta(DA_WRONG_COSTUME)` -> `decorum_after` -> `decorum_band`, logged
+  (`S536-DECORUM: ...`). Real, own, v1 passive-regen cadence (not spec'd anywhere else, named and retunable):
+  `DA_QUIET_TICK` (+1) once per real 10 real-world seconds while not currently in violation, matching
+  `core/sim.c`'s own `sim_tick`-applies-`DA_QUIET_TICK`-every-abstract-tick shape at a real-time cadence instead
+  of an abstract-turn one.
+- Reaching `BAND_CANCELLED` logs a real, honest, one-time marker
+  (`S536-DECORUM: player%d CANCELLED -- Regulator escalation is Phase B, not built yet`) rather than faking a
+  consequence -- exactly the same "name it, don't fake it" discipline phase 5 already used for eat-to-heal.
+
+**Verified, not just compiled:** `bigo_phone_test` extended (selecting a different Wardrobe costume raises
+`BP_FX_COSTUME_SET` with the right arg; re-selecting the already-worn costume is a real no-op, not a re-send).
+A new scratch integration harness (same `#include main.c` precedent `wheelbarrow_verify.c`/`food_verify.c`
+already established) drives the real, unmodified `spawn_player`/`server_tick_decorum`/`server_player_zone`
+end to end: a player in the wrong costume (`COS_SUIT`, the real default) standing in the real lab zone, with a
+real nearby The Men NPC (`npc_brain_effective_vigilance` >= 60), takes a real, exact `decorum_after`-computed
+hit (80 -> 60); staying in the same zone does NOT re-trigger the check (matches `core/sim.c`'s own
+zone-entry-only semantics); the correct costume (`COS_LAB_SMOCK`) in the same zone causes zero loss (`noticed()`
+never even rolled, since `conspicuousness(allowed=1, gear=0)` is 0); passive `DA_QUIET_TICK` regen fires after
+the real `BIGO_DECORUM_QUIET_TICK_MS` cadence elapses; repeated violations correctly reach the real
+`BAND_CANCELLED` transition with the one-time marker firing exactly once -- 6/6 real assertions pass. Also
+fixed two small, stale doc-comment claims found live while wiring the client STATUS screen: `pc_item_name`'s
+neighbor `PC_ITEM_TABLE` area was already corrected in §17, and STATUS's own old "rules core is not linked to
+this client" line was already false before this pass (`scripts/build_client.sh` has linked
+`core/witness_rules.c` since the client was first built) -- STATUS now shows the real, live costume/decorum/
+band instead of a placeholder. `bazel test //...` 36/36 green (zero regressions); `scripts/build.sh`
+ASan/UBSan path clean; `scripts/build_client.sh` clean; real server binary boot/tick/shutdown re-verified
+against an isolated port/paths.
+
+### Phase B: Regulator dispatch, real player death, clone respawn, Bio-Slurry (queued, real investigation needed
+before any code -- NOT built this pass)
+
+Real, separate open questions, not guessed at:
+1. What makes a Regulator dispatch-eligible versus reusing The Men's existing hunt-dispatch logic wholesale --
+   a new, deadlier `PC_NPC_ROLE_REGULATOR` or a real "The Men, lethal mode" flag on the existing role?
+2. What does a player "kill" actually reset in a shared, persistent, multi-player world other players are still
+   occupying at the same moment -- position only? inventory? samples/clones in the Lab? Real, honest, not
+   assumed here.
+3. Where is Bio-Slurry earned/stored -- a wholly new resource with no current analog anywhere in this repo's
+   code (`bigo_phone.h`'s own `samples[3]` tracks harvested genetic samples, a real, different, already-live
+   concept this would need to compose with, not replace).
+4. Respawn placement and cooldown -- the basement lab is the canonical location per lore; whether that's a real
+   hardcoded point (same precedent every other landmark here uses) is the likely answer, not yet confirmed.
+
+session: sess-20260923-1030-4a526255.

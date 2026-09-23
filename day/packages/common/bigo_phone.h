@@ -24,7 +24,10 @@ typedef enum {
     BP_FX_NONE = 0,
     BP_FX_ALLOCATE_TALENT,  /* arg = ability index 0..4 -> PC_PACKET_ALLOCATE_TALENT */
     BP_FX_WEAPON_SWITCH,    /* arg = weapon slot -> PC_PACKET_WEAPON_SWITCH */
-    BP_FX_TAKE_PHOTO        /* host may grab a screenshot; counter already advanced */
+    BP_FX_TAKE_PHOTO,       /* host may grab a screenshot; counter already advanced */
+    BP_FX_COSTUME_SET       /* arg = new costume index (COS_*) -> PC_PACKET_COSTUME_SET, first
+                                time costume becomes server-authoritative (EMILY/BACKLOG.md
+                                SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A) */
 } BpEffectKind;
 
 typedef struct { BpEffectKind kind; int arg; } BpEffect;
@@ -230,7 +233,11 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         if (a == BP_SELECT && (p->cursor == 0 || (p->weapons_owned & (1 << p->cursor)))) { fx.kind = BP_FX_WEAPON_SWITCH; fx.arg = p->cursor; }
         break;
     case BP_APP_WARDROBE:
-        if (a == BP_SELECT) p->costume = p->cursor;
+        if (a == BP_SELECT && p->cursor != p->costume) {
+            p->costume = p->cursor;
+            fx.kind = BP_FX_COSTUME_SET;
+            fx.arg = p->costume;
+        }
         break;
     default: break;
     }
