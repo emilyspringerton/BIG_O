@@ -2471,6 +2471,27 @@ int main(int argc, char **argv) {
                     snap.npcs[ni].role = g_npcs[ni].role;
                 }
             }
+            /* SECTION 536 reverse-port follow-up: the first client visual for either giant bugs
+               (reverse-port phase 3) or Regulators (Phase B) -- both were real, live, server-only
+               since they landed, same "server logic first, client visual later" precedent every
+               mechanic in this thread has used, now caught up for these two. Position only, same
+               wire-lean discipline as the NPC loop just above. */
+            for (int bi = 0; bi < BIGO_GIANT_BUG_MAX; bi++) {
+                snap.giant_bug_active[bi] = (unsigned char)g_giant_bugs[bi].active;
+                if (g_giant_bugs[bi].active) {
+                    snap.giant_bugs[bi].x = g_giant_bugs[bi].x;
+                    snap.giant_bugs[bi].y = g_giant_bugs[bi].y;
+                    snap.giant_bugs[bi].z = g_giant_bugs[bi].z;
+                }
+            }
+            for (int ri = 0; ri < BIGO_REGULATOR_MAX; ri++) {
+                snap.regulator_active[ri] = (unsigned char)g_regulators[ri].active;
+                if (g_regulators[ri].active) {
+                    snap.regulators[ri].x = g_regulators[ri].x;
+                    snap.regulators[ri].y = g_regulators[ri].y;
+                    snap.regulators[ri].z = g_regulators[ri].z;
+                }
+            }
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 if (!g_slots[i].active) continue;
                 snap.hdr.client_id = (unsigned char)i;

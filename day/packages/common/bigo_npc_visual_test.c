@@ -69,12 +69,71 @@ static void test_facing_rad_known_values(void) {
     printf("PASS: bigo_npc_facing_rad_from_yaw matches the real \"180 - degrees\" formula at 0/90/180 degrees\n");
 }
 
+static void test_giant_bug_reuses_zombie_kit_with_evil_tint(void) {
+    int kit; float color[3]; float zombie_color[3];
+    int ok = bigo_giant_bug_visual_color(9, &kit, color);
+    assert(ok);
+    assert(kit == 9); /* the SAME zombie kit index -- no new art, per SHANKPIT's own precedent */
+    bigo_npc_visual_for_role(PC_NPC_ROLE_ZOMBIE, 5, 9, &kit, zombie_color);
+    /* Genuinely different tint from a regular zombie -- "evil version," not identical. */
+    assert(color[0] != zombie_color[0] || color[1] != zombie_color[1] || color[2] != zombie_color[2]);
+    assert(BIGO_GIANT_BUG_VISUAL_SCALE > 1.0f); /* a real, visible "BIG" scale-up, not a no-op */
+    printf("PASS: giant bugs reuse the zombie kit with a distinct evil tint and a real scale-up\n");
+}
+
+static void test_giant_bug_skips_draw_if_zombie_kit_failed(void) {
+    int kit; float color[3];
+    assert(!bigo_giant_bug_visual_color(-1, &kit, color));
+    printf("PASS: a failed-to-load zombie kit is never handed back for a giant bug to draw\n");
+}
+
+static void test_regulator_reuses_mannequin_kit_with_clinical_tint(void) {
+    int kit; float color[3]; float citizen_color[3]; float men_color[3];
+    int ok = bigo_regulator_visual_color(5, &kit, color);
+    assert(ok);
+    assert(kit == 5); /* the mannequin kit -- corporate enforcer, not a feral kit */
+    bigo_npc_visual_for_role(PC_NPC_ROLE_CITIZEN, 5, 9, &kit, citizen_color);
+    bigo_npc_visual_for_role(PC_NPC_ROLE_THE_MEN, 5, 9, &kit, men_color);
+    /* Distinguishable from every other role already rendered, not just the two closest ones. */
+    assert(color[0] != citizen_color[0] || color[1] != citizen_color[1] || color[2] != citizen_color[2]);
+    assert(color[0] != men_color[0] || color[1] != men_color[1] || color[2] != men_color[2]);
+    printf("PASS: Regulators reuse the mannequin kit with a clinical tint distinct from Citizens/The Men\n");
+}
+
+static void test_regulator_skips_draw_if_mannequin_kit_failed(void) {
+    int kit; float color[3];
+    assert(!bigo_regulator_visual_color(-1, &kit, color));
+    printf("PASS: a failed-to-load mannequin kit is never handed back for a Regulator to draw\n");
+}
+
+static void test_top_regulator_reuses_mannequin_kit_with_pop_star_tint(void) {
+    int kit; float color[3]; float rank_and_file_color[3];
+    int ok = bigo_top_regulator_visual_color(5, &kit, color);
+    assert(ok);
+    assert(kit == 5); /* still the mannequin kit -- no new art, per the doc comment */
+    bigo_regulator_visual_color(5, &kit, rank_and_file_color);
+    assert(color[0] != rank_and_file_color[0] || color[1] != rank_and_file_color[1] || color[2] != rank_and_file_color[2]);
+    printf("PASS: the Top Regulator reuses the mannequin kit with a pop-star tint distinct from rank-and-file\n");
+}
+
+static void test_top_regulator_skips_draw_if_mannequin_kit_failed(void) {
+    int kit; float color[3];
+    assert(!bigo_top_regulator_visual_color(-1, &kit, color));
+    printf("PASS: a failed-to-load mannequin kit is never handed back for the Top Regulator to draw\n");
+}
+
 int main(void) {
     test_citizen_and_the_men_share_mannequin_kit();
     test_zombie_gets_zombie_kit();
     test_failed_kit_skips_draw();
     test_unknown_role_falls_back_to_citizen_look();
     test_facing_rad_known_values();
+    test_giant_bug_reuses_zombie_kit_with_evil_tint();
+    test_giant_bug_skips_draw_if_zombie_kit_failed();
+    test_regulator_reuses_mannequin_kit_with_clinical_tint();
+    test_regulator_skips_draw_if_mannequin_kit_failed();
+    test_top_regulator_reuses_mannequin_kit_with_pop_star_tint();
+    test_top_regulator_skips_draw_if_mannequin_kit_failed();
     printf("\nALL PASS\n");
     return 0;
 }

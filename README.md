@@ -64,6 +64,14 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > a Regulator (server-only so far, same "logic first, visual later" precedent every mechanic here has used), and
 > a respawn cooldown. See `NORTHSTAR.md` §18 for the full account, the founder's own real design decision on
 > what CANCELLED means, and what's deferred.
+> Giant bugs and Regulators are visible on screen for the first time -- both were real, live, server-only
+> mechanics with no client render path until now. Giant bugs reuse the same zombie kit regular zombies use,
+> tinted dark red and scaled 2.5x in place ("evil versions... BIG," no new art). Regulators reuse the mannequin
+> kit tinted stark clinical white -- except the first one (a real, honest, client-only visual convention, not a
+> server-side rank system), who gets a hot-pink tint and the mannequin kit's own already-vendored dance clip: a
+> founder real-time aside ("the top regulator is a pop singer dancing werewolf ninja John Wick") landed as a
+> small, honest flavor nod using zero new art, with the full werewolf/ninja/John-Wick character named as real,
+> asset-blocked future work rather than guessed at. See `NORTHSTAR.md` §19.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

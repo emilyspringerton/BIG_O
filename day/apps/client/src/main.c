@@ -2220,6 +2220,41 @@ int main(int argc, char **argv) {
                 gband_skel_npc_draw(kit, ni, npc->x, npc->y, npc->z, facing_rad, gband_dt_ms,
                                      GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
             }
+
+            /* SECTION 536 reverse-port follow-up: the first client visual for giant bugs
+             * (reverse-port phase 3) and Regulators (Phase B) -- both real, live, server-only
+             * since they landed. Separate slot ranges from PC_NPC_MAX above (gband_skel_npc_draw's
+             * npc_slot is only used as an animation-instance key, so reusing PC_NPC_MAX+i keeps
+             * every slot across all three loops unique, avoiding a collision with a real NPC's
+             * own animation state). No yaw on the wire for either (see PcGiantBugState/
+             * PcRegulatorState's own doc comment) -- facing_rad 0 (a named, honest v0 cut; these
+             * are backgrounded threats, not scrutinized up close like Citizens/The Men). */
+            for (int bi = 0; bi < PC_GIANT_BUG_MAX; bi++) {
+                if (!latest_snap.giant_bug_active[bi]) continue;
+                const PcGiantBugState *bug = &latest_snap.giant_bugs[bi];
+                int kit;
+                if (!bigo_giant_bug_visual_color(g_skel_npc_kit_zombie, &kit, g_gband_current_color)) continue;
+                glPushMatrix();
+                glTranslatef(bug->x, bug->y, bug->z);
+                glScalef(BIGO_GIANT_BUG_VISUAL_SCALE, BIGO_GIANT_BUG_VISUAL_SCALE, BIGO_GIANT_BUG_VISUAL_SCALE);
+                glTranslatef(-bug->x, -bug->y, -bug->z);
+                gband_skel_npc_draw(kit, PC_NPC_MAX + bi, bug->x, bug->y, bug->z, 0.0f, gband_dt_ms,
+                                     GBAND_SKEL_NPC_ANIM_AUTO, &gband_vp, bigo_gband_draw_skinned);
+                glPopMatrix();
+            }
+            for (int ri = 0; ri < PC_REGULATOR_MAX; ri++) {
+                if (!latest_snap.regulator_active[ri]) continue;
+                const PcRegulatorState *reg = &latest_snap.regulators[ri];
+                int kit;
+                int is_top = (ri == BIGO_TOP_REGULATOR_SLOT);
+                int loaded = is_top
+                    ? bigo_top_regulator_visual_color(g_skel_npc_kit_mannequin, &kit, g_gband_current_color)
+                    : bigo_regulator_visual_color(g_skel_npc_kit_mannequin, &kit, g_gband_current_color);
+                if (!loaded) continue;
+                int anim = is_top ? GBAND_SKEL_NPC_ANIM_DANCE : GBAND_SKEL_NPC_ANIM_AUTO;
+                gband_skel_npc_draw(kit, PC_NPC_MAX + PC_GIANT_BUG_MAX + ri, reg->x, reg->y, reg->z, 0.0f,
+                                     gband_dt_ms, anim, &gband_vp, bigo_gband_draw_skinned);
+            }
         }
 
         /* latest_snap is zero-initialized, so world_object_active[] correctly reads as "nothing

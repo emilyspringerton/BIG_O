@@ -879,3 +879,57 @@ visual for a Regulator (no NPC-visual kit, no snapshot broadcast); a respawn coo
 Decorum + position on kill. All named, not silently dropped.
 
 session: sess-20260923-1030-4a526255.
+
+## 19. Reverse-port follow-up: the first client visual for giant bugs and Regulators (2026-09-23,
+EMILY/BACKLOG.md SECTION 536 follow-up)
+
+Founder direction, continued ("continue"). Closed the same real, named gap two separate pieces of this thread
+each deferred on purpose: reverse-port phase 3 (§14, giant zombie bugs) and Phase B above (§18, Regulator
+dispatch) are both real, live, server-only mechanics with zero client visual -- neither ever entered a snapshot
+packet at all. Checked first, not assumed: both `g_giant_bugs[]` and `g_regulators[]` were genuinely absent
+from `PcSnapshotPacket` and from `day/apps/client/src/main.c`'s own NPC render loop.
+
+**What shipped:** `PcGiantBugState`/`PcRegulatorState` (position-only, no yaw/role -- each already has its own
+dedicated array, unlike `PcNpcState`'s 3-role-in-one-array design, which is already at its `PC_NPC_MAX`=8 cap
+with the existing 3 Citizens/1 The Men/4 zombies) added to `PcSnapshotPacket` via `PC_GIANT_BUG_MAX`/
+`PC_REGULATOR_MAX` (mirroring the server's own `BIGO_GIANT_BUG_MAX`/`BIGO_REGULATOR_MAX` exactly -- verified
+equal, not just assumed). `apps/server/src/main.c`'s existing per-tick snapshot-fill loop gained two more real
+copy loops, same shape as the NPC one already there. `bigo_npc_visual.h` gained
+`bigo_giant_bug_visual_color`/`bigo_regulator_visual_color`: giant bugs reuse the exact zombie kit regular
+zombies already use (SHANKPIT's own real precedent, "use the robot rigs... evil versions... BIG," §14's own
+citation) with a dark-red tint and a real `BIGO_GIANT_BUG_VISUAL_SCALE`=2.5x applied via a translate/scale/
+translate-back around the draw call (`gband_skel_npc_draw` has no scale parameter of its own); Regulators reuse
+the mannequin kit tinted stark clinical white -- deliberately the coldest color of any role rendered, matching
+the lore's own "uberplumbers... acid and foam" framing (a cleanup instrument, not a person in a uniform).
+
+**Founder real-time, mid-pass: "and the top regulator is a pop singer dancing werewolf ninja John Wick."**
+Logged (`emily observe`, Apple #20555) before building anything, per Principle 1a. Checked first: no
+werewolf/ninja/John-Wick mesh, rig, or clip exists anywhere in this repo's vendored GOLDENBAND assets -- the
+real, full boss character is asset-blocked, named future work, same "asset-blocked, name it, don't fake it"
+precedent SECTION 536's own queued Los Hermanos Minguinos/Catastrophe Crow items already established. What
+*is* real and already vendored, unused until now: the mannequin kit's own `GBAND_SKEL_NPC_ANIM_DANCE` clip
+(`UAL1_Standard_Dance_Loop`, loaded since S504, never selected by any real call site) -- the honest "pop singer
+dancing" half of the concept, zero new art. `bigo_top_regulator_visual_color` gives array index 0 (a real,
+honest, client-only visual convention -- `ServerRegulator` has no rank/boss field server-side, this is not a
+real boss mechanic) a hot-pink/magenta tint and the real dance clip instead of AUTO idle/walk. Named, not
+glossed: this is a flavor marker for "this one is different," not the werewolf-ninja-John-Wick character
+itself.
+
+**Verified, not just compiled:** `bigo_npc_visual_test.c` gained 6 new assertions (11/11 total) covering: giant
+bugs select the zombie kit with a tint distinct from a regular zombie's, and refuse to draw if that kit failed
+to load; Regulators select the mannequin kit with a tint distinct from both Citizens and The Men, same
+refuse-on-failed-kit contract; the Top Regulator selects the mannequin kit with a tint distinct from
+rank-and-file Regulators, same contract. `bazel test //...` 36/36 green (zero regressions, `bigo_npc_visual_test`
+already wired into the Bazel graph, no new target needed). Real `scripts/build_day.sh` (server) and
+`scripts/build_client.sh` (client) both clean, zero new warnings. `scripts/build.sh` ASan/UBSan path clean.
+**Honest, named limit, same one every visual feature in this thread carries:** the actual on-screen appearance
+(tint, scale-in-place, the dance clip actually playing) was not independently visually re-verified -- no live
+GL driver in this sandbox (`SDL_CreateWindow` fails before reaching any draw code, same limit `bigo_npc_visual.h`'s
+own top doc comment already names for every other role's tint).
+
+**Real, honest, deliberately NOT built here:** the actual werewolf/ninja/John-Wick boss character (asset-blocked);
+any per-instance scale/anim field on the wire (both are client-only conventions this pass); a real rank/boss
+concept server-side; giant bug/Regulator movement facing (both draw at `facing_rad`=0 -- no yaw crosses the
+wire for either, a named v0 cut matching `PcNpcState`'s own "anim deliberately NOT included" precedent).
+
+session: sess-20260923-1030-4a526255.

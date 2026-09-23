@@ -629,6 +629,26 @@ typedef struct {
     unsigned char role; /* PC_NPC_ROLE_* */
 } PcNpcState;
 
+/* PcGiantBugState / PcRegulatorState -- SECTION 536 reverse-port follow-up: the first client
+ * visual for either mechanic. Both are server-only entities (apps/server/src/main.c's own
+ * ServerGiantBug[BIGO_GIANT_BUG_MAX] / ServerRegulator[BIGO_REGULATOR_MAX]) that track only
+ * x/y/z server-side -- no yaw, no role field needed (each has its own dedicated array, unlike
+ * PcNpcState which multiplexes 3 roles into one PC_NPC_MAX-capped array that's already full at
+ * 8/8 live NPCs). Deliberately lean, same "only what the wire needs" discipline PcNpcState's own
+ * doc comment already establishes -- facing is derived client-side from movement, not carried on
+ * the wire (named cut, matches PcNpcState's own "anim deliberately NOT included" precedent). */
+#define PC_GIANT_BUG_MAX 8 /* mirrors apps/server/src/main.c's own BIGO_GIANT_BUG_MAX */
+#define PC_REGULATOR_MAX PC_MAX_PLAYERS /* mirrors apps/server/src/main.c's own BIGO_REGULATOR_MAX
+    (one real hunt per potential player) */
+
+typedef struct {
+    float x, y, z;
+} PcGiantBugState;
+
+typedef struct {
+    float x, y, z;
+} PcRegulatorState;
+
 typedef struct {
     PcHeader hdr;
     unsigned int server_tick;
@@ -644,6 +664,10 @@ typedef struct {
     PcFallingFragment falling[PC_FALLING_FRAGMENTS_MAX];
     unsigned char npc_active[PC_NPC_MAX];
     PcNpcState npcs[PC_NPC_MAX];
+    unsigned char giant_bug_active[PC_GIANT_BUG_MAX];
+    PcGiantBugState giant_bugs[PC_GIANT_BUG_MAX];
+    unsigned char regulator_active[PC_REGULATOR_MAX];
+    PcRegulatorState regulators[PC_REGULATOR_MAX];
     unsigned int echo_cmd_time_ms; /* real ping/RTT support (2026-08-30, founder real-time: "you
         can show the ping at the top of the screen") -- ONE real field, not a real per-player
         array (PC_MAX_PLAYERS * 4 bytes would have real wire-budget consequences worth avoiding
