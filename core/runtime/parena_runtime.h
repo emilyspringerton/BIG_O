@@ -19,7 +19,9 @@
  * tcp_connect_impl to actually gcc-compile -- a plain #include
  * <netdb.h> alone was not enough. 200112L = POSIX.1-2001, the version
  * that defines getaddrinfo. */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200112L
+#endif
 /* _DEFAULT_SOURCE alongside _POSIX_C_SOURCE (both may coexist under glibc,
  * unlike _POSIX_C_SOURCE alone) -- needed for pty_open_impl below:
  * forkpty/openpty are a real glibc/BSD extension declared in <pty.h>, not
@@ -28,7 +30,9 @@
  * actually see forkpty's declaration, the same "define the feature-test
  * macro before any system header, verify by actually compiling" discipline
  * tcp_connect_impl's own header comment above already documents. */
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
 
 #include <stddef.h>
 #include <string.h>

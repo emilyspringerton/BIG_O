@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-23
+- docs: add GEMINI.md guidance for Gemini / Antigravity pair programming
+- fix(build): fix Bazel C99 build for http_client.h (POSIX timeval/addrinfo feature macros, comment trailing-backslash escape), level_loader.h (__typeof__ macro, static inline), and parena_runtime.h header guards; all 33 bazel tests pass
+
 ## 2026-09-20
 - feat: cloning-facility lab equipment simulation (S504-LAB) — `core/lab_sim.c`, a headless pipeline covering centrifuge (spin-time/RPM purity trade-off, over-spin damage), PCR thermocycler (amplification with compounding cycle damage/contamination creep), sequencer (noisy instrument readout, not ground truth), CRISPR splice bench (real SPLICE_SUCCESS/OFF_TARGET_MUTATION/NONSENSE_MEDIATED_DECAY/CRYPTIC_SPLICE_FAILURE/UNSTABLE_LINE outcomes, retrotransposon-style jump side-effect), repressor/kill-switch install (reliability score, not a flag), breeding with one-way genetic drift, embryo incubation viability. 17 statistical tests. Not yet wired into BP_APP_LAB's UI or persisted (NORTHSTAR.md §9)
 - feat: pheromone command tools (S504-PHEROMONE) — new `PC_PACKET_PHEROMONE_THROW` packet (client's G key throws a marker at aim position), `bigo_pheromone.h` pure targeting/steering module (8 tests), server's `g_pheromones[]` array + `server_tick_npcs` now gives zombies a real `has_target` from marker proximity instead of hardcoded 0, steering them toward it. Verified live (raw UDP packet -> real marker log; scratch integration check converges a zombie exactly onto a thrown marker, escalates to FRENZIED). Named, honest finding: `zombie_tick`'s pre-existing ~1s/call drift approximation makes newly-reachable FRENZIED escalation near-instant at 20Hz -- not fixed here, scope discipline (NORTHSTAR.md §10)

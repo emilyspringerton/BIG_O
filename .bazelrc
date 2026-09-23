@@ -3,4 +3,5 @@ build --conlyopt=-std=c99
 build --copt=-O2
 build --copt=-Wall
 build --copt=-Wextra
-build:day --copt=-D_DEFAULT_SOURCE
+build --copt=-D_DEFAULT_SOURCE
+build --copt=-D_POSIX_C_SOURCE=200809L

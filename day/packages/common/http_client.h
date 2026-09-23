@@ -21,6 +21,13 @@
 #ifndef HTTP_CLIENT_H
 #define HTTP_CLIENT_H
 
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200112L
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -251,6 +258,7 @@ static int http_patch_json(const char *host, int port, const char *path,
 #else
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -267,7 +275,7 @@ static int http_patch_json(const char *host, int port, const char *path,
 // cleanly." General verb parameter added 2026-07-31 (REDGARDEN_GUI_NORTHSTAR.md Milestone 4,
 // report_match_result needs a real GET lookup + PATCH credit, not just POST) — http_post_json
 // below is now a thin wrapper, kept so every existing POST call site is untouched.
-static int http_json_request(const char *method, const char *host, int port, const char *path,
+static inline int http_json_request(const char *method, const char *host, int port, const char *path,
                               const char *bearer_token,
                               const char *json_body,
                               char *resp_buf, size_t resp_buf_len,
@@ -393,7 +401,7 @@ static int http_json_request(const char *method, const char *host, int port, con
     return 0;
 }
 
-static int http_post_json(const char *host, int port, const char *path,
+static inline int http_post_json(const char *host, int port, const char *path,
                            const char *bearer_token,
                            const char *json_body,
                            char *resp_buf, size_t resp_buf_len,
@@ -403,7 +411,7 @@ static int http_post_json(const char *host, int port, const char *path,
 }
 
 // http_get_json is http_json_request with method="GET" and no request body.
-static int http_get_json(const char *host, int port, const char *path,
+static inline int http_get_json(const char *host, int port, const char *path,
                           const char *bearer_token,
                           char *resp_buf, size_t resp_buf_len,
                           int *out_status) {
@@ -412,7 +420,7 @@ static int http_get_json(const char *host, int port, const char *path,
 }
 
 // http_patch_json is http_json_request with method="PATCH".
-static int http_patch_json(const char *host, int port, const char *path,
+static inline int http_patch_json(const char *host, int port, const char *path,
                             const char *bearer_token,
                             const char *json_body,
                             char *resp_buf, size_t resp_buf_len,
@@ -431,7 +439,7 @@ static int http_patch_json(const char *host, int port, const char *path,
 // BUGFIX 2026-08-04, found live investigating "no visible auto attacking":
 // this used to just SKIP the backslash on any escape ("single level of
 // backslash escapes skipped rather than decoded") and copy whatever
-// character followed it literally -- correct by accident for \" and \\
+// character followed it literally -- correct by accident for \" and \\ (literal backslash)
 // (the escaped character IS the real character there), silently wrong for
 // \n/\r/\t, where the character after the backslash is a LETTER standing in
 // for a real control byte, not the byte itself. A real response containing
@@ -442,7 +450,7 @@ static int http_patch_json(const char *host, int port, const char *path,
 // (town_mud_command's own line-by-line combat-log/damage-popup parsing)
 // silently saw the entire multi-line response as one unsplittable blob.
 // Real fix: decode the standard JSON escapes to their real bytes.
-static int http_extract_json_string_field(const char *json, const char *field,
+static inline int http_extract_json_string_field(const char *json, const char *field,
                                            char *out, size_t out_len) {
     char needle[128];
     snprintf(needle, sizeof(needle), "\"%s\"", field);
@@ -482,7 +490,7 @@ static int http_extract_json_string_field(const char *json, const char *field,
 // http_extract_json_string_field just above, but for a bare numeric value ("field":123, not
 // "field":"123"). Added 2026-08-02 for /api/v1/chat/messages's own "id" field. Returns 1 and
 // writes *out if found and parseable, 0 otherwise.
-static int http_extract_json_int_field(const char *json, const char *field, long long *out) {
+static inline int http_extract_json_int_field(const char *json, const char *field, long long *out) {
     char needle[128];
     snprintf(needle, sizeof(needle), "\"%s\"", field);
     const char *p = strstr(json, needle);
@@ -502,7 +510,7 @@ static int http_extract_json_int_field(const char *json, const char *field, long
 // floating-point value ("field":1.5 or "field":-3). Added 2026-08-02 for
 // GET /api/v1/characters/:id's own pos_x/pos_y/pos_z (SQL REAL columns, so IDUNA's own encoder
 // can emit either an integer or decimal literal for a whole-number position).
-static int http_extract_json_double_field(const char *json, const char *field, double *out) {
+static inline int http_extract_json_double_field(const char *json, const char *field, double *out) {
     char needle[128];
     snprintf(needle, sizeof(needle), "\"%s\"", field);
     const char *p = strstr(json, needle);
@@ -526,7 +534,7 @@ static int http_extract_json_double_field(const char *json, const char *field, d
 // exactly 256 entries, one 16x16 chunk) and get back how many it actually found. Returns 1 if the
 // field was found at all (even if it read fewer than out_count entries), 0 if the field itself
 // wasn't present.
-static int http_extract_json_uint8_array_field(const char *json, const char *field,
+static inline int http_extract_json_uint8_array_field(const char *json, const char *field,
                                                  unsigned char *out, size_t out_count,
                                                  size_t *out_found) {
     char needle[128];

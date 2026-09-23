@@ -5,6 +5,17 @@
 #ifndef LEVEL_LOADER_H
 #define LEVEL_LOADER_H
 
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#ifndef typeof
+#define typeof __typeof__
+#endif
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -170,7 +181,7 @@ static int json_parse_object_end(JSONParser *p) {
 	return 1;
 }
 
-static int json_parse_key(JSONParser *p, const char *key) {
+static inline int json_parse_key(JSONParser *p, const char *key) {
 	if (!json_match(p, "\"")) return 0;
 	if (!json_match(p, key)) return 0;
 	if (!json_match(p, "\":")) return 0;
