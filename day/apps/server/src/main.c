@@ -643,6 +643,42 @@ static void server_tick_witness(void) {
             hn->witness_state = nx;
         }
     }
+
+    /* LOS-loss/elimination resolution -- EMILY/BACKLOG.md SECTION 536 follow-up,
+     * BIG_O/NORTHSTAR.md §11 item 1, closed. Real, live-found gap: the escalation loop above only
+     * ever raises witness_state, never lowers it -- once a human reaches SILENCING/ENGAGE, the
+     * only way out was The Men's own dispatch loop resolving to DENIAL (resolved=1). If the
+     * underlying zombie itself stops being a witnessable event (mood decays back below HUNTING/
+     * FRENZIED, moves out of range, or is despawned/eaten by a giant bug) while no Man has arrived
+     * yet, the hunt persisted forever with nothing left to witness -- core/sim.c's own
+     * sim_eliminate (resolved=2, "target eliminated/gone") already models exactly this second
+     * resolution path in the offline scenario harness; this closes the same gap live. Generalized
+     * here to "nothing left to witness" rather than literally killed -- the zombie may still be
+     * alive, just no longer a loud event in range. A responder already en route stands down
+     * naturally on its own next tick (server_tick_dispatch's own existing "target resolved some
+     * other way" check, unchanged). */
+    for (int hi = 0; hi < PC_NPC_MAX; hi++) {
+        ServerNpc *hn = &g_npcs[hi];
+        if (!hn->active || hn->role == PC_NPC_ROLE_ZOMBIE) continue;
+        if (hn->witness_state != WS_SILENCING && hn->witness_state != WS_ENGAGE) continue;
+
+        int still_witnessable = 0;
+        for (int zi = 0; zi < PC_NPC_MAX; zi++) {
+            ServerNpc *zn = &g_npcs[zi];
+            if (!zn->active || zn->role != PC_NPC_ROLE_ZOMBIE) continue;
+            if (!bigo_zombie_is_witnessable_event(zn->zombie.mood)) continue;
+            if (bigo_in_range(hn->x, hn->z, zn->x, zn->z, BIGO_WITNESS_DETECTION_RADIUS)) { still_witnessable = 1; break; }
+        }
+        if (still_witnessable) continue;
+
+        int prev = hn->witness_state;
+        int nx = bigo_witness_next_state_for_event(prev, 0, hn->arrogance, 2 /* resolved: nothing left to witness */);
+        if (is_legal_transition(prev, nx) && nx != prev) {
+            hn->witness_state = nx;
+            printf("S536-WITNESS: npc%d witness_state %s -> %s (no witnessable zombie left in range)\n",
+                   hi, WS_NAMES[prev], WS_NAMES[nx]);
+        }
+    }
 }
 
 #define THE_MEN_DISPATCH_SPEED 6.0f /* units/sec -- The Men's own real response pace, tuned

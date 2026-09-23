@@ -46,11 +46,12 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > react to a commanded zombie's presence — that gap is now half-closed (see next): a HUNTING/FRENZIED zombie is a
 > real, live witnessed event, verified live producing real `witness_state` escalation in the server log, and The
 > Men now have a real dispatch/response loop (nearest idle unit travels to a hunt and resolves it to DENIAL on
-> arrival, a real memory-wipe). Honest, live-found limits: the v0 spawn (4 humans total) can't reach the 5-witness
-> SILENCING threshold in practice (verified via tests + a larger scratch harness instead), and resolving a hunt
-> doesn't make the zombie itself stop being witnessable, so a still-active zombie can reopen the same hunt on the
-> very next tick — no zombie-elimination/LOS-loss resolution path is wired yet. See `NORTHSTAR.md` §11 for the
-> full account and what's deferred.
+> arrival, a real memory-wipe). Honest, live-found limit: the v0 spawn (4 humans total) can't reach the 5-witness
+> SILENCING threshold in practice (verified via tests + a larger scratch harness instead). A hunt no longer gets
+> stuck forever if The Men never arrive: the moment no witnessable zombie remains in range (it calms down, wanders
+> off, or despawns), every human who was hunting it resolves back to UNAWARE on its own — the real LOS-loss/
+> elimination resolution path `core/sim.c`'s own offline scenario harness always modeled but this live server
+> never wired until now. See `NORTHSTAR.md` §11/§21 for the full account and what's deferred.
 > The QUIET-observation half of the witness system — costume/zone-based noticing, driving the player's own
 > Decorum meter — is now live too, not just the loud zombie-event path above. Costume (Wardrobe's phone screen)
 > is server-authoritative for the first time; standing in the wrong costume for a zone (2 of the rules module's

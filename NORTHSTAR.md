@@ -389,7 +389,7 @@ exactly this second resolution path, but this pass only wires `resolved=1` (memo
 elimination path is real, separate, deferred work below.
 
 **Deferred, named:**
-1. **No LOS-loss/elimination resolution.** Only `resolved=1` (memory wipe) is wired; a hunt can currently only end
+1. ~~**No LOS-loss/elimination resolution.**~~ **Closed, 2026-09-23, see §21.** Only `resolved=1` (memory wipe) is wired; a hunt can currently only end
    by The Men arriving, never by the zombie itself losing HUNTING/FRENZIED status, leaving range, or being killed —
    the churn behavior described above is the direct, live consequence.
 2. **No Corporate Service Call / Regulator escalation at max heat** (`docs/DESIGN_DIGEST.md` §11) — when every The
@@ -981,5 +981,47 @@ player-damage-source design question §16 originally named); a per-citizen/spati
 ("if the cake gets smashed it flies everywhere" -- the mechanical distraction effect is real and live, the
 particle/prop visual is not, same "server logic first, client visual later" precedent every mechanic in this
 thread has used).
+
+session: sess-20260923-1030-4a526255.
+
+## 21. LOS-loss/elimination resolution -- hunts finally end on their own (2026-09-23, EMILY/BACKLOG.md
+SECTION 536 follow-up, closes §11 item 1)
+
+Founder direction, continued ("continue"). §11's own doc comment named this as a real, live-found gap back on
+2026-09-20: `server_tick_witness` only ever ESCALATES a human NPC's `witness_state` (fresh witnessing ticks),
+never de-escalates it -- once a human reached SILENCING/ENGAGE, the only real way out was The Men's own
+dispatch loop resolving to DENIAL (`resolved=1`, memory wipe). If the underlying zombie de-escalated out of
+HUNTING/FRENZIED, left witness range, or despawned before a Man arrived, the hunt simply persisted forever with
+nothing left to witness -- `core/sim.c`'s own `sim_eliminate` (`resolved=2`, "target eliminated/gone") already
+modeled this exact second resolution path in the offline scenario harness; it was never wired live.
+
+**What shipped:** a second pass inside `server_tick_witness`, after the existing escalation loop: every human
+NPC currently SILENCING/ENGAGE is checked against every currently-active, currently-witnessable zombie (same
+`bigo_zombie_is_witnessable_event`/`bigo_in_range` primitives the escalation loop already uses) within
+`BIGO_WITNESS_DETECTION_RADIUS`. If none qualify, the hunt resolves via `bigo_witness_next_state_for_event(...,
+resolved=2)` -- the exact same real, already-tested `npc_next_state` function, just a call site that was never
+exercised live before. Deliberately generalized beyond literal "killed": mood decay, moving out of range, and
+despawn (e.g. eaten by a giant bug) all resolve the same way, since none of them leave anything left to
+witness. A responder already en route stands down on its own next tick via `server_tick_dispatch`'s own
+pre-existing "target resolved some other way" check -- unchanged, no new coupling needed.
+
+**Verified, not just compiled:** a new scratch integration harness (same `#include main.c` precedent this
+whole thread has used) drives the real, unmodified `server_tick_witness` end to end: 5 citizens reach real
+SILENCING witnessing a real FRENZIED zombie; the hunt correctly persists across a re-tick while the zombie
+stays witnessable (not a false-positive resolution); a real mood de-escalation to AGITATED resolves every
+hunting citizen back to UNAWARE; the zombie moving out of range does the same; the zombie despawning
+(`active=0`) does the same with no crash on the dead slot; and, the real boundary case -- a SECOND, still-
+witnessable zombie in range correctly keeps the hunt alive even after the FIRST one de-escalates, proving this
+checks "anything witnessable in range," not just the original trigger -- 6/6 real assertions pass, ASan/UBSan
+clean. `bazel test //...` 36/36 green (zero regressions). Real `scripts/build_day.sh`/`scripts/build_client.sh`
+both clean, zero new warnings. `scripts/build.sh` ASan/UBSan rules path clean.
+
+**Real, honest, still open (§11's own remaining items 2-6, unchanged by this pass):** no Corporate Service
+Call/Regulator escalation when every The Men unit is already busy (distinct from the Decorum-CANCELLED
+Regulator path §18/§19 already shipped -- that one is per-player Decorum, this one is the LOUD zombie-witness
+path reaching max heat with no responder available); no quiet-observation costume/gear tie-in to THIS specific
+LOUD path (§18 Phase A wired quiet-observation as its own separate system, not merged with this one); no live
+accomplice/compromise mechanic; fixed arrogance=50 for every human NPC; The Men's own pagers (design-only,
+§11 item 6).
 
 session: sess-20260923-1030-4a526255.
