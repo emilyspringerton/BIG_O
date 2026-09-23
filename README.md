@@ -115,7 +115,7 @@ is that people *saw it* and can no longer deny it, and admitting they saw it get
 ## Build
 
 ```bash
-scripts/gen_rules.sh          # regenerate core/witness_rules.c + parity vectors from PARENA/stdlib/big_o/witness_rules.prn
+scripts/gen_rules.sh          # regenerate core/witness_rules.c + parity vectors, and day/packages/simulation/walkie_rules.c, from PARENA/stdlib/big_o/*.prn
 scripts/build.sh              # ASan+UBSan rules tests (oracle + property + parity vectors), crew sim + scenarios
 scripts/build.sh --windows    # + mingw cross-build
 ```

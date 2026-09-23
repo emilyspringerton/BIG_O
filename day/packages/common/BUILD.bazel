@@ -12,6 +12,7 @@ cc_library(
         "bigo_skycfg.h",
         "bigo_npc_visual.h",
         "bigo_pheromone.h",
+        "bigo_walkie_talkie.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",

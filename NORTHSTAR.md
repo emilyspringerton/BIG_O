@@ -420,3 +420,60 @@ elimination path is real, separate, deferred work below.
      phase 7d (the still-undecided `AI_ROLE_*` roster cutover) and phase 7b's own `witness_ai.c` (SHANKPIT's own
      live population/tick loop, which explicitly does not yet have a resolution/memory-wipe loop at all) are the
      real, eventual places this would need to land on the SHANKPIT side — not built or wired there either.
+
+## 12. Reverse port: bringing SHANKPIT's forward work back into BIG_O (2026-09-23, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+§§1-11 above are BIG_O's tech flowing INTO SHANKPIT (phases 1-7e, "BIG_O engine merge"). SHANKPIT kept building on
+its own MODE_STORY after phase 7e landed — full phone-app parity/costumes/The Men, a 17-item food/cargo system
++ cake distraction, a wheelbarrow carry mechanic, giant zombie bugs (TRAPX Rogue Swarm Doctrine), and a
+walkie-talkie channel/hearing primitive (Asterisk-backed) — none of which exist in this repo. This section is the
+reverse direction: checked first per Principle 19 (investigate, cut a real phase 1, phase the rest), not ported
+blind.
+
+**Phase 1 (landed): walkie-talkie channel/hearing decision logic.** `PARENA/stdlib/big_o/walkie_rules.prn`
+(logic identical to SHANKPIT's own `stdlib/shankpit/walkie_rules.prn`, renamed into this repo's own `big-o/`
+module namespace, same "copied, logic identical" precedent §1/§2 above already established in reverse) generates
+`day/packages/simulation/walkie_rules.c`. New `day/packages/common/bigo_walkie_talkie.h` — pure, header-only host
+wrapper (caller owns all state, unlike SHANKPIT's own version which kept a hidden `g_players[]` array — matches
+this repo's own `bigo_pheromone.h` precedent instead). `scripts/gen_rules.sh` extended to regenerate it. 5/5 real
+assertions pass (`bazel test //day/packages/simulation:bigo_walkie_talkie_test`), verified against the real,
+live PARENA-compiled logic, not a mock.
+
+**Real, honest finding, checked before wiring further (bigger than walkie-talkie itself):** BIG_O's v0 has
+exactly ONE shared crew/world (§7's own "one crew, one onboarding" decision) — there is no team/crew concept for
+players at all. Every player would resolve to the same team_id, so `walkie-can-hear` degenerates to "always
+true" and the channel decision is moot. This module is therefore a real, standalone, tested primitive with NO
+LIVE CONSUMER yet — the same "correct primitive, no consumer" pattern this repo's own phases 2/3/5 already
+established (§§ above), just running in the other direction. Real wiring needs a real team/crew-assignment
+system first (PvP teams? Rival cleanup crews? Undecided) — not guessed at here.
+
+**Real, unrelated bug found in the same pass, not fixed (out of scope for this port):**
+`day/packages/common/http_client.h` fails to build (`struct addrinfo`/`struct timeval` used without their
+headers — likely a missing `#include <netdb.h>`/`<sys/socket.h>`) under this sandbox's toolchain, breaking
+`//day/packages/common:http_client_test` and `//day/packages/common:level_loader_test`. Pre-existing (confirmed
+via `git diff --stat` — this file was untouched by this pass), unrelated to walkie-talkie. Logged as a real,
+separate follow-up rather than silently fixed or silently ignored.
+
+**Queued, not started — each needs its own real investigation pass, not a blind port (Principle 19):**
+1. **17-item food/cargo system + cake distraction.** SHANKPIT's `food_pickup.c` hand-places pickups around a
+   hardcoded MODE_STORY VOXWORLD landmark and heals the player via `PlayerState`'s 0..100 health scale. BIG_O's
+   `day/` world is structurally different on both counts: it's a real, persisted single-node world fetched from
+   a live worldapi (chunk grid, map-editor-authored `PcWorldObjectFile`), not hardcoded landmark coordinates —
+   and BIG_O's `PlayerSlot` has no health/HP field anywhere (only destructible world-object fragment HP exists).
+   BIG_O *does* already have a more general, better-fitting item substrate than SHANKPIT's own hand-placed spots
+   (`g_entities[]` + `papercraft_inventory.h`'s real stacking pickup path, currently fed only by GTA3-style drops
+   from destroyed world objects) — the real question is whether food items should drop from destruction (reuse
+   as-is) or need a new hand-authored spawn mechanism (a real map-editor content pass), and "eat for heal" is
+   blocked on a player-health system that doesn't exist yet. Real scoping pass needed before any code.
+2. **Wheelbarrow carry mechanic.** Depends on the same hardcoded lab-trespass-circle delivery target SHANKPIT's
+   version uses — BIG_O has no equivalent authored landmark in its persisted world yet either.
+3. **Giant zombie bugs (TRAPX Rogue Swarm Doctrine).** `giant_bug_values.{h,c}` extends `zombie_values.h`, which
+   BIG_O already has natively (`core/zombie_values.h` — SHANKPIT's own copy was ported FROM this repo), so this
+   is likely the next-best-fitting port after walkie-talkie: same foundation, no world-model mismatch. Not
+   investigated in this pass — queued.
+4. **Full phone-app UI parity + costumes + The Men.** Real, player-visible client rendering work (home grid,
+   Wardrobe screen) — BIG_O's own `bigo_phone.h` already has the same app roster (`BP_APP_CARGO` etc.) but no
+   on-screen UI either; this is a real, separate client-rendering scoping pass on both repos' own already-named
+   gaps, not something to guess at here.
+
+session: sess-20260920-1908-24cb3558.

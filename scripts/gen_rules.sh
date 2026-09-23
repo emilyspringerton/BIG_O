@@ -12,3 +12,7 @@ PRN="$PRN_DIR/witness_rules.prn"
 gcc -std=c99 -Wall -Wextra -Icore -Icore/runtime -DPARENA_NO_GRAPHICS tests/gen_vectors.c core/witness_rules.c -o /tmp/bigo_gen_vectors
 /tmp/bigo_gen_vectors > tests/parity_vectors.txt
 echo "regenerated core/witness_rules.c and tests/parity_vectors.txt ($(wc -l < tests/parity_vectors.txt) vectors)"
+
+# day/ side (live-multiplayer primitives, separate from core/'s headless scenario-sim rules above).
+"$PARENA_BIN" build "$PRN_DIR/walkie_rules.prn" -o day/packages/simulation/walkie_rules.c
+echo "regenerated day/packages/simulation/walkie_rules.c"

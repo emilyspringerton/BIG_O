@@ -245,6 +245,33 @@ cc_test(
     deps = [":inventory"],
 )
 
+# walkie_rules -- the real, PARENA-compiled walkie-talkie channel/hearing decisions. Brought back
+# from SHANKPIT (EMILY/BACKLOG.md SECTION 536 follow-up), where it was built natively, forward of
+# the original BIG_O engine merge. Generated from PARENA/stdlib/big_o/walkie_rules.prn via
+# `parena build`, committed here.
+cc_library(
+    name = "walkie_rules",
+    srcs = ["walkie_rules.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+# bigo_walkie_talkie_test -- real, pure, headless coverage for packages/common/
+# bigo_walkie_talkie.h's own channel/hearing decisions, against the real, live PARENA-compiled
+# :walkie_rules library (not a mock) -- same real cross-package shape papercraft_inventory_test
+# above already establishes. No live consumer yet (see bigo_walkie_talkie.h's own doc comment on
+# BIG_O's single-shared-crew v0 having no team concept) -- standalone primitive, same "correct
+# primitive, no consumer" pattern this repo's own phases 2/3/5 already established.
+cc_test(
+    name = "bigo_walkie_talkie_test",
+    srcs = ["bigo_walkie_talkie_test.c"],
+    deps = [
+        ":walkie_rules",
+        "//day/packages/common:common_headers",
+    ],
+)
+
 # weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
 # weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
 # PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.
