@@ -447,12 +447,13 @@ LIVE CONSUMER yet — the same "correct primitive, no consumer" pattern this rep
 established (§§ above), just running in the other direction. Real wiring needs a real team/crew-assignment
 system first (PvP teams? Rival cleanup crews? Undecided) — not guessed at here.
 
-**Real, unrelated bug found in the same pass, not fixed (out of scope for this port):**
-`day/packages/common/http_client.h` fails to build (`struct addrinfo`/`struct timeval` used without their
-headers — likely a missing `#include <netdb.h>`/`<sys/socket.h>`) under this sandbox's toolchain, breaking
-`//day/packages/common:http_client_test` and `//day/packages/common:level_loader_test`. Pre-existing (confirmed
-via `git diff --stat` — this file was untouched by this pass), unrelated to walkie-talkie. Logged as a real,
-separate follow-up rather than silently fixed or silently ignored.
+**Real, unrelated bug found mid-pass, then independently fixed by a concurrent commit:**
+`day/packages/common/http_client.h` failed to build (`struct addrinfo`/`struct timeval` used without their POSIX
+feature-test macros) under this sandbox's toolchain, breaking `//day/packages/common:http_client_test` and
+`//day/packages/common:level_loader_test`. Pre-existing (confirmed via `git diff --stat` — untouched by this
+pass), unrelated to walkie-talkie. A same-day upstream commit (`4e53e09`, "fix Bazel C99 build") fixed it before
+this port's own commit landed — rebased cleanly onto it; `bazel test //...` is now 34/34 green, including both
+previously-broken targets.
 
 **Queued, not started — each needs its own real investigation pass, not a blind port (Principle 19):**
 1. **17-item food/cargo system + cake distraction.** SHANKPIT's `food_pickup.c` hand-places pickups around a
