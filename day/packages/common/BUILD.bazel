@@ -13,6 +13,7 @@ cc_library(
         "bigo_npc_visual.h",
         "bigo_pheromone.h",
         "bigo_walkie_talkie.h",
+        "bigo_food_items.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",

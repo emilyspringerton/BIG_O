@@ -6,6 +6,8 @@
 #include <math.h>
 
 int inventory_scrap_id();
+int inventory_food_base();
+int inventory_food_count();
 int on_papercraft_inventory_stack_max(int);
 int on_papercraft_inventory_can_stack(int, int);
 
@@ -13,11 +15,23 @@ int inventory_scrap_id(void) {
     return 1;
 }
 
+int inventory_food_base(void) {
+    return 8;
+}
+
+int inventory_food_count(void) {
+    return 17;
+}
+
 int on_papercraft_inventory_stack_max(int item_id __attribute__((unused))) {
     if ((item_id == inventory_scrap_id())) {
     return 99;
     } else {
+    if (((item_id >= inventory_food_base()) && (item_id < (inventory_food_base() + inventory_food_count())))) {
+    return 20;
+    } else {
     return 0;
+    }
     }
 }
 

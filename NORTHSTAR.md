@@ -602,4 +602,74 @@ version already made:**
    correctly (stands down, same as a disconnected carrier), verified by the scratch harness's own disconnect
    case exercising the identical code path.
 
-session: sess-20260920-1908-24cb3558.
+## 16. Reverse port phase 5: the 17-item food/cargo system (real cargo, no heal yet) (2026-09-23, EMILY/BACKLOG.md
+SECTION 536 follow-up)
+
+§12 queued this as item 1, blocked on two named gaps: BIG_O's `day/` world is a real, persisted worldapi-backed
+grid (not SHANKPIT's hardcoded MODE_STORY landmarks), and `PlayerSlot` has no health field at all. Re-investigated
+before writing code, per Principle 19.
+
+**The real finding: the health gap is bigger than originally scoped.** It isn't just "no health field" (a
+10-line fix) -- there is no player DAMAGE SOURCE anywhere in this repo (checked directly: only destructible
+world-object fragment HP exists; giant bugs eat zombie NPCs, never players; no PvP, no fall damage, no zombie
+attack on a player). Adding a health field and an "eat to heal" packet would be real code with zero observable
+effect -- health would sit at its max forever. Forcing a fake self-damage debug command just to demo it would not
+be a real feature. A real damage-source design decision (giant bugs attacking players? zombie NPC aggression?
+PvP?) is genuinely undecided and out of scope for this pass -- named, not guessed at.
+
+**What IS real and landed:** the "cargo" half of "food/cargo system" -- 17 real, pickable, stackable food items,
+reusing BIG_O's EXISTING GTA3-style destruction-drop pipeline as-is (§12 item 1's own named option, not a new
+hand-authored spawn mechanism). WOOD-material world-object destruction (a real, previously-named "no drop yet"
+gap -- the papercraft item_drop_mod.prn's own doc comment already called this out) now drops one of 17 real food
+items.
+
+- `day/packages/common/bigo_food_items.h` (NEW) -- byte-for-byte port of SHANKPIT's own
+  `packages/common/food_items.h`: 17 real items (8 classic Pac-Man fruits + Ms. Pac-Man's 3 + 5 BIG_O-original +
+  the founder-requested BIRTHDAY CAKE), names/points/derived heal-formula all unchanged. Pure data, no PARENA
+  involved (matches SHANKPIT's own choice -- it's a table, not a decision function).
+- `PARENA/stdlib/big_o/item_drop_mod.prn` (NEW) -- forked from `stdlib/papercraft/item_drop_mod.prn`, NOT a
+  shared edit (same "renamed into this repo's own module namespace" precedent walkie_rules.prn/
+  giant_bug_brain.prn already set) -- editing the shared PAPERCRAFT copy in place would have silently made
+  PAPERCRAFT's own world start dropping food items too. PAPER/METAL branches unchanged (scrap/shotgun). Real,
+  small, justified ABI extension: `on-papercraft-item-for-object-destroyed` now takes a second input, the
+  destroyed object's own stable world-index -- `object-index mod 17` picks which food item drops, deterministic
+  variety with no RNG.
+- `PARENA/stdlib/big_o/inventory_mod.prn` (NEW) -- forked from `stdlib/papercraft/inventory_mod.prn` for the
+  same reason. Gives food item ids (`PC_ITEM_FOOD_BASE`=8..24) a real 20-per-slot stack cap -- without it every
+  pickup would burn its own whole slot out of `PC_INVENTORY_SLOTS`' real 8-slot ceiling. `can-stack` unchanged
+  (already fully generic).
+- `day/packages/common/papercraft_protocol.h` -- new `PC_ITEM_FOOD_BASE` (8), doc comment names the real
+  "pickable cargo today, no heal consumer yet" scope explicitly.
+- `day/apps/server/src/main.c` -- `on_papercraft_item_for_object_destroyed` call site now passes the destroyed
+  object's own `target` index as the second arg; drop log names the food item by string when applicable
+  (`S536-FOOD: ...`). No other host change -- the existing GTA3-style pickup-on-walkover path
+  (`try_add_item_to_inventory`) is already item-id-agnostic and needed zero changes.
+- `scripts/gen_rules.sh` extended to regenerate both forked mods from `PARENA/stdlib/big_o/`.
+
+**Verified, not just compiled:** `item_drop_mod_test`/`inventory_mod_test` extended with real assertions for the
+new material/id ranges (including the mod-17 wraparound); new `bigo_food_items_test` (7 assertions on the ported
+data table). A new scratch harness (same `#include main.c` real-function precedent `wheelbarrow_verify.c`
+established in phase 4) drove the real, unmodified `on_papercraft_item_for_object_destroyed` +
+`try_add_item_to_inventory` end to end: WOOD destruction at world-index 5 deterministically drops PEAR,
+lands in a real inventory slot, a second identical pickup stacks (doesn't burn a second slot), a different food
+item takes its own slot, PAPER/METAL drops unchanged -- 5/5 pass. `bazel test //...` 36/36 green (3 new real
+tests, zero regressions). `scripts/build.sh` ASan/UBSan clean. Live-verified booting the real server binary
+against an isolated port/paths against the real worldapi -- clean boot (world load, NPC/giant-bug spawn, real
+bug-eats-zombie event still fires), clean signal-shutdown, no lingering process.
+
+**Real, honest, deliberately NOT built here:**
+1. **Eat-to-heal.** Blocked on the real, bigger gap named above (no player health field, no damage source of any
+   kind to make healing observable). `food_item_heal()` is ported and tested but has no live caller -- same
+   "standalone primitive, no live consumer yet" precedent `bigo_walkie_talkie.h` already established in phase 1.
+2. **Full 17-item Lost-and-Found-style restock landmark.** Not needed for this pass -- the `object-index mod 17`
+   trick already gives real variety through the existing drop pipeline without a new hand-authored spot system.
+   A real, separate landmark (SHANKPIT's own "office" flavor) remains a possible future add, not required.
+3. **Cake distraction/party-event behavior.** Checked directly against SHANKPIT's own `food_items.h` doc
+   comment: SHANKPIT itself never built this either -- BIRTHDAY CAKE is just item #17 in the same data table,
+   with the actual party/wedding NPC-choreography ask named as its own separate, unscoped, un-built future
+   follow-up there too. Nothing deferred here that SHANKPIT itself actually has.
+
+**Remaining queued from §12:** full phone-app UI parity + costumes + The Men (real client-rendering work in
+`day/apps/client`, a different domain than every phase 1-5 change so far, all server-side).
+
+session: sess-20260923-1030-4a526255.

@@ -212,8 +212,10 @@ cc_test(
 )
 
 # item_drop -- the real, PARENA-compiled item-drop decision for PAPERCRAFT's own GTA3-style
-# "stuff drops and you can pick it up" system. Generated from
-# PARENA/stdlib/papercraft/item_drop_mod.prn via `parena build`, committed here.
+# "stuff drops and you can pick it up" system. Generated from BIG_O's own
+# PARENA/stdlib/big_o/item_drop_mod.prn (forked from papercraft/item_drop_mod.prn, EMILY/
+# BACKLOG.md SECTION 536 reverse-port phase 5, 2026-09-23 -- adds real WOOD-material food-item
+# drops without touching PAPERCRAFT's own shared copy) via `parena build`, committed here.
 cc_library(
     name = "item_drop",
     srcs = ["item_drop_mod.c"],
@@ -229,8 +231,9 @@ cc_test(
 )
 
 # inventory -- the real, PARENA-compiled inventory-slot decisions (stack-max, can-stack) for
-# PAPERCRAFT's own FFXI-style list inventory. Generated from
-# PARENA/stdlib/papercraft/inventory_mod.prn via `parena build`, committed here.
+# PAPERCRAFT's own FFXI-style list inventory. Generated from BIG_O's own
+# PARENA/stdlib/big_o/inventory_mod.prn (forked from papercraft/inventory_mod.prn, same phase-5
+# reverse-port -- adds a real 20-stack cap for food items) via `parena build`, committed here.
 cc_library(
     name = "inventory",
     srcs = ["inventory_mod.c"],
@@ -243,6 +246,16 @@ cc_test(
     name = "inventory_mod_test",
     srcs = ["inventory_mod_test.c"],
     deps = [":inventory"],
+)
+
+# bigo_food_items_test -- real, standalone coverage for bigo_food_items.h's own pure data table
+# (17 real food items, reverse-ported from SHANKPIT, EMILY/BACKLOG.md SECTION 536 phase 5,
+# 2026-09-23). No PARENA involved -- same "plain C header, not a decision function" shape
+# SHANKPIT's own food_items.h already used.
+cc_test(
+    name = "bigo_food_items_test",
+    srcs = ["bigo_food_items_test.c"],
+    deps = ["//day/packages/common:common_headers"],
 )
 
 # walkie_rules -- the real, PARENA-compiled walkie-talkie channel/hearing decisions. Brought back

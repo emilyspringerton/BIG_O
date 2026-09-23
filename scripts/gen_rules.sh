@@ -17,3 +17,6 @@ echo "regenerated core/witness_rules.c and tests/parity_vectors.txt ($(wc -l < t
 # day/ side (live-multiplayer primitives, separate from core/'s headless scenario-sim rules above).
 "$PARENA_BIN" build "$PRN_DIR/walkie_rules.prn" -o day/packages/simulation/walkie_rules.c
 echo "regenerated day/packages/simulation/walkie_rules.c"
+"$PARENA_BIN" build "$PRN_DIR/item_drop_mod.prn" -o day/packages/simulation/item_drop_mod.c
+"$PARENA_BIN" build "$PRN_DIR/inventory_mod.prn" -o day/packages/simulation/inventory_mod.c
+echo "regenerated day/packages/simulation/item_drop_mod.c, inventory_mod.c (big_o's own forked mods, not papercraft's shared ones)"

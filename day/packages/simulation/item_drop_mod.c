@@ -6,13 +6,20 @@
 #include <math.h>
 
 int material_paper();
+int material_wood();
 int material_metal();
 int item_drop_scrap_id();
 int item_drop_shotgun_id();
-int on_papercraft_item_for_object_destroyed(int);
+int item_drop_food_base();
+int item_drop_food_count();
+int on_papercraft_item_for_object_destroyed(int, int);
 
 int material_paper(void) {
     return 0;
+}
+
+int material_wood(void) {
+    return 1;
 }
 
 int material_metal(void) {
@@ -27,14 +34,26 @@ int item_drop_shotgun_id(void) {
     return 5;
 }
 
-int on_papercraft_item_for_object_destroyed(int material __attribute__((unused))) {
+int item_drop_food_base(void) {
+    return 8;
+}
+
+int item_drop_food_count(void) {
+    return 17;
+}
+
+int on_papercraft_item_for_object_destroyed(int material __attribute__((unused)), int object_index __attribute__((unused))) {
     if ((material == material_paper())) {
     return item_drop_scrap_id();
     } else {
     if ((material == material_metal())) {
     return item_drop_shotgun_id();
     } else {
+    if ((material == material_wood())) {
+    return (item_drop_food_base() + (object_index % item_drop_food_count()));
+    } else {
     return 0;
+    }
     }
     }
 }

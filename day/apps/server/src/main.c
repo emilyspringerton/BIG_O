@@ -45,6 +45,7 @@
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/papercraft_persist.h"
 #include "../../../packages/common/bigo_pheromone.h"
+#include "../../../packages/common/bigo_food_items.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -664,7 +665,7 @@ int on_papercraft_move_speed_boost_permille(int move_rank);
 int on_papercraft_slide_jump_boost_permille(int speed_milli);
 int on_papercraft_xp_for_object_destroyed(void);
 int on_papercraft_phone_message_for_event(int event_type);
-int on_papercraft_item_for_object_destroyed(int material);
+int on_papercraft_item_for_object_destroyed(int material, int object_index);
 int on_papercraft_inventory_stack_max(int item_id);
 int on_papercraft_inventory_can_stack(int existing_item_id, int incoming_item_id);
 int on_papercraft_pickup_radius_millis(void);
@@ -1870,7 +1871,7 @@ int main(int argc, char **argv) {
                                    "mod decides, host applies" split as both real mods above. A
                                    real 0 (PC_ITEM_NONE) means no drop, matching every other
                                    material this sandbox has no real item for yet. */
-                                int drop_item = on_papercraft_item_for_object_destroyed(g_wo_file.objects[target].material);
+                                int drop_item = on_papercraft_item_for_object_destroyed(g_wo_file.objects[target].material, target);
                                 if (drop_item != PC_ITEM_NONE) {
                                     int slot_id = -1;
                                     for (int e = 0; e < PC_ENTITY_MAX; e++) {
@@ -1885,8 +1886,14 @@ int main(int argc, char **argv) {
                                         g_entities[slot_id].y = g_wo_file.objects[target].y;
                                         g_entities[slot_id].z = g_wo_file.objects[target].z;
                                         broadcast_entity_spawn(sock, slot_id);
-                                        printf("Real item drop -- entity %d, item_id=%d, at (%.1f,%.1f,%.1f).\n",
-                                               slot_id, drop_item, g_entities[slot_id].x, g_entities[slot_id].y, g_entities[slot_id].z);
+                                        if (drop_item >= PC_ITEM_FOOD_BASE && drop_item < PC_ITEM_FOOD_BASE + FOOD_ITEM_COUNT) {
+                                            printf("S536-FOOD: real item drop -- entity %d, %s (item_id=%d), at (%.1f,%.1f,%.1f).\n",
+                                                   slot_id, food_item_name(drop_item - PC_ITEM_FOOD_BASE), drop_item,
+                                                   g_entities[slot_id].x, g_entities[slot_id].y, g_entities[slot_id].z);
+                                        } else {
+                                            printf("Real item drop -- entity %d, item_id=%d, at (%.1f,%.1f,%.1f).\n",
+                                                   slot_id, drop_item, g_entities[slot_id].x, g_entities[slot_id].y, g_entities[slot_id].z);
+                                        }
                                     }
                                 }
                             }
