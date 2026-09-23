@@ -9,6 +9,7 @@ PRN="$PRN_DIR/witness_rules.prn"
 "$PARENA_BIN" build "$PRN" -o core/witness_rules.c
 "$PARENA_BIN" build "$PRN_DIR/world_rules.prn" -o core/world_rules.c
 "$PARENA_BIN" build "$PRN_DIR/world_alerts_mod.prn" -o core/world_alerts.c
+"$PARENA_BIN" build "$PRN_DIR/giant_bug_brain.prn" -o core/giant_bug_brain.c
 gcc -std=c99 -Wall -Wextra -Icore -Icore/runtime -DPARENA_NO_GRAPHICS tests/gen_vectors.c core/witness_rules.c -o /tmp/bigo_gen_vectors
 /tmp/bigo_gen_vectors > tests/parity_vectors.txt
 echo "regenerated core/witness_rules.c and tests/parity_vectors.txt ($(wc -l < tests/parity_vectors.txt) vectors)"

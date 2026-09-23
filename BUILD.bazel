@@ -117,3 +117,36 @@ cc_test(
     deps = [":witness_rules", ":zombie_values"],
     copts = COPTS,
 )
+
+# giant_bug_brain -- the real, PARENA-compiled Giant Zombie Bug decision network (EMILY/
+# BACKLOG.md SECTION 536 reverse-port phase 2, "bring SHANKPIT stuff back into BIG_O" -- brought
+# back from SHANKPIT, where it was built natively, forward of the original BIG_O engine merge).
+# Generated from PARENA/stdlib/big_o/giant_bug_brain.prn via `parena build`, committed here.
+# Same "own include path for parena_runtime.h" shape :witness_rules already establishes.
+cc_library(
+    name = "giant_bug_brain",
+    srcs = ["core/giant_bug_brain.c"],
+    includes = ["core", "core/runtime"],
+    copts = COPTS,
+    textual_hdrs = glob(["core/runtime/*"]),
+)
+
+# giant_bug_values -- Giant Zombie Bug's own alien value system (state/tick/eat), deliberately NOT
+# a variant of zombie_values.h's own hunger/aggression/decay vocabulary -- see
+# core/giant_bug_values.h's own top doc comment for why. Depends on :zombie_values for
+# giant_bug_eat_zombie's own real prey type + zombie_reaction_delay_ms, and :giant_bug_brain for
+# the real PARENA-computed decision outputs.
+cc_library(
+    name = "giant_bug_values",
+    srcs = ["core/giant_bug_values.c"],
+    hdrs = ["core/giant_bug_values.h"],
+    deps = [":zombie_values", ":giant_bug_brain"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "giant_bug_values_test",
+    srcs = ["core/giant_bug_values_test.c"],
+    deps = [":giant_bug_values"],
+    copts = COPTS,
+)

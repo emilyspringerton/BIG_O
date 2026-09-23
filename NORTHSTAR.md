@@ -478,3 +478,33 @@ previously-broken targets.
    gaps, not something to guess at here.
 
 session: sess-20260920-1908-24cb3558.
+
+## 13. Reverse port phase 2: giant zombie bugs (2026-09-23, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+§12 named giant zombie bugs as the next-best-fitting reverse-port candidate after walkie-talkie, since
+`giant_bug_values.c` extends `zombie_values.h` (BIG_O's own field, SHANKPIT's copy was ported FROM this repo in
+§3) rather than something BIG_O's own world model has diverged from. Confirmed live: field-for-field identical
+`ZombieState` in both repos, so this ported with zero adaptation.
+
+**Landed:** `PARENA/stdlib/big_o/giant_bug_brain.prn` (logic identical to SHANKPIT's own, renamed into this
+repo's own `big-o/` module namespace) generates `core/giant_bug_brain.c` — the real "8 inputs × 8 hidden units =
+64 hand-picked weights" feedforward net (see the `.prn` file's own doc comment for the honest scope of "64 layer
+hand written llm"). New `core/giant_bug_values.{h,c}` — alien sense-vocabulary state (hunger, swarm_density,
+heat_scent, molt_pressure, ground_vibration, pain, hive_signal, light_aversion) sharing nothing with
+`humanness.h`/`zombie_values.h`'s own vocabularies, plus real, permanent strength/speed growth on
+`giant_bug_eat_zombie` (aggression → strength proxy, inverse `zombie_reaction_delay_ms` → speed proxy, both
+already-live `zombie_values.h` fields, not invented). `scripts/gen_rules.sh` extended to regenerate the brain.
+6/6 real assertions pass (`bazel test //:giant_bug_values_test`); full suite `bazel test //...` is 35/35 green
+with zero regressions.
+
+**Real, honest finding, checked before wiring further:** no live consumer yet, same pattern §12's walkie-talkie
+established — but for a different, more concrete reason here. BIG_O's live `day/apps/server` `ServerNpc` array
+is `PC_NPC_MAX=8`, already fully populated by `server_spawn_npcs` (3 Citizens, 1 The Men, 4 zombies) — there is
+no free slot for a 4th role without growing that array. SHANKPIT's own live version also names a real,
+analogous gate not built here either: `witness_ai_bug_command_authorized` ("Men hold the key" — a spawned bug
+only hunts/eats while ≥1 live The Men NPC is active, TRAPX Rogue Swarm Doctrine) and the leela-kit-reused
+2.5×-scaled-and-tinted visual. All real, separate, named follow-up work for a phase 3 (grow `PC_NPC_MAX`,
+add `PC_NPC_ROLE_GIANT_BUG`, wire the spawn/tick/eat loop and the Men-hold-the-key gate into
+`server_tick_npcs`) — not guessed at or half-built here.
+
+session: sess-20260920-1908-24cb3558.
