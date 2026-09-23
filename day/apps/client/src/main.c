@@ -57,6 +57,7 @@
 #include "../../../packages/common/paper_mesh.h"
 #include "../../../packages/common/hud_text.h"
 #include "../../../packages/common/bigo_phone.h"
+#include "../../../packages/common/bigo_food_items.h"
 #include "../../../packages/common/bigo_sky.h"
 #include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
 #include "../../../packages/common/bigo_phone.h"
@@ -1018,14 +1019,28 @@ static void draw_phone_notification(int win_w, int win_h, unsigned char msg_id) 
    packages/common/papercraft_protocol.h's own PC_ITEM_* values byte-for-byte (same real
    "shared, hardcoded table keyed by a wire id" convention PC_PHONE_MESSAGE_TABLE already uses).
    Index 0 (PC_ITEM_NONE) is a real, honest "empty slot" label, never actually spawned as a real
-   world entity. */
+   world entity. Real, honest, found-live gap fixed in the same pass as the food-item reverse port
+   (EMILY/BACKLOG.md SECTION 536 phase 6, 2026-09-23): PC_ITEM_WPN_* (2..7) fell through to
+   "Unknown Item" before this fix too -- pre-existing, not caused by the food-item addition, fixed
+   here since it's the exact same table. Food item ids (PC_ITEM_FOOD_BASE..+16) are NOT listed
+   here -- they're handled by pc_item_name's own real bigo_food_items.h lookup below instead of
+   growing this table by 17 more entries that would need to stay in sync by hand. */
 static const char *PC_ITEM_TABLE[] = {
-    "-- empty --",  /* 0: PC_ITEM_NONE */
-    "Scrap",        /* 1: PC_ITEM_SCRAP */
+    "-- empty --",     /* 0: PC_ITEM_NONE */
+    "Scrap",           /* 1: PC_ITEM_SCRAP */
+    "Knife",           /* 2: PC_ITEM_WPN_KNIFE */
+    "Magnum",          /* 3: PC_ITEM_WPN_MAGNUM */
+    "Assault Rifle",   /* 4: PC_ITEM_WPN_AR */
+    "Shotgun",         /* 5: PC_ITEM_WPN_SHOTGUN */
+    "Sniper Rifle",    /* 6: PC_ITEM_WPN_SNIPER */
+    "Katana",          /* 7: PC_ITEM_WPN_KATANA */
 };
 #define PC_ITEM_TABLE_COUNT (sizeof(PC_ITEM_TABLE) / sizeof(PC_ITEM_TABLE[0]))
 
 static const char *pc_item_name(unsigned char item_id) {
+    if (item_id >= PC_ITEM_FOOD_BASE && item_id < PC_ITEM_FOOD_BASE + FOOD_ITEM_COUNT) {
+        return food_item_name(item_id - PC_ITEM_FOOD_BASE);
+    }
     return (item_id < PC_ITEM_TABLE_COUNT) ? PC_ITEM_TABLE[item_id] : "Unknown Item";
 }
 
@@ -1036,8 +1051,10 @@ static const char *pc_item_name(unsigned char item_id) {
    below. Real, gentle vertical bob (a plain sine of wall-clock time) so a drop reads as "alive"/
    pickup-able at a glance, distinct from the static Paper Engine geometry around it. */
 static void draw_entity_marker(float x, float y, float z, unsigned char item_id) {
-    (void)item_id; /* only one real item exists yet (PC_ITEM_SCRAP) -- a real per-item color/model
-                       table is later, easy work once there's more than one to tell apart. */
+    (void)item_id; /* real, honest, still-true gap even now that weapons + 17 food items exist
+                       (PC_ITEM_TABLE/bigo_food_items.h): every dropped entity still renders as
+                       the same plain brown box -- a real per-item color/model table is later,
+                       easy work once there's real art to key it to. */
     float bob = 0.12f * sinf((float)now_ms() / 350.0f);
     glPushMatrix();
     glTranslatef(x, y + 0.35f + bob, z);

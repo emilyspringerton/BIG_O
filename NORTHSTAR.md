@@ -673,3 +673,56 @@ bug-eats-zombie event still fires), clean signal-shutdown, no lingering process.
 `day/apps/client`, a different domain than every phase 1-5 change so far, all server-side).
 
 session: sess-20260923-1030-4a526255.
+
+## 17. Two corrections and a real, small fix found investigating phone-app parity (2026-09-23, EMILY/BACKLOG.md
+SECTION 536 follow-up)
+
+Before starting §12 item 4 ("full phone-app UI parity"), re-checked its own premise against the actual live
+code, per Principle 19. Two of this section's own earlier claims turned out wrong -- corrected here, not
+silently overwritten, same discipline §12's own http_client.h correction already used.
+
+**Correction 1 -- BIG_O already has a full, rendered phone UI.** §12 item 4 claimed "no on-screen UI either."
+False: `draw_bigo_phone` (`day/apps/client/src/main.c`, landed in `c25f81e`, 2026-09-20 -- part of the ORIGINAL
+BIG_O engine merge, predating this whole reverse-port thread) already renders every one of the 11 apps
+(Messages/Contacts/Map/Camera/Notes/Lab/Cargo/Skills/Loadout/Wardrobe/Status), including Wardrobe's own real
+costume list. The phone-app roster and its rendering are NOT a gap.
+
+**Correction 2 -- SHANKPIT DID build a cake distraction mechanic.** Phase 5's own NORTHSTAR/BACKLOG entries
+claimed "SHANKPIT itself never built this either." False -- checked directly this time: SHANKPIT's
+`packages/simulation/witness_ai.c` has a real `witness_ai_smash_cake(now_ms)` that halves nearby witness
+vigilance for a real duration (`witness_ai_tick`'s own `if (distracted) vig /= 2` block), triggered by
+`packages/common/phone.h`'s own real `BP_FX_SMASH_CAKE` effect (raised when FOOD_CAKE is selected in CARGO,
+wired live in `apps/lobby/src/main.c`). Real, honest reason this ISN'T ported here either: it needs the
+QUIET-observation half of the witness system (costume/decorum-based noticing) live in `day/`'s real server --
+`core/witness_live.h`'s own doc comment already names this as a genuinely separate, not-yet-built gap (only the
+LOUD-event half, a hunting/frenzied zombie, is wired into the live day server today). Same real blocker, just
+now correctly attributed -- not a SHANKPIT gap, a BIG_O one.
+
+**What eat-to-heal actually looks like in SHANKPIT, checked directly (confirms phase 5's blocker was correctly
+scoped):** `apps/lobby/src/main.c`'s real handling of `BP_FX_EAT_FOOD` (`hero->health += fx.arg`, clamped to
+100) targets SHANKPIT's own MODE_STORY `PlayerState.health` field -- a real field BIG_O's `PcPlayerState` still
+does not have -- and it's explicitly CLIENT-LOCAL, not server-authoritative (`food_pickup.h`'s own doc comment:
+"client-local only, no server-authoritative story yet"). Copying that shape into BIG_O verbatim would be a real
+regression against every other stat here (XP/level/inventory/position are all server-authoritative) -- phase
+5's own "needs a real damage-source design decision, not guessed at" conclusion stands.
+
+**Real, small, honest gap found and fixed while re-checking this (not the parity claim itself, a real
+pre-existing display bug adjacent to it):** `day/apps/client/src/main.c`'s own `PC_ITEM_TABLE` (backing the
+CARGO screen's item names) only had entries for `PC_ITEM_NONE`/`PC_ITEM_SCRAP` -- every `PC_ITEM_WPN_*` (found
+weapons) already fell through to "Unknown Item" BEFORE this reverse-port thread touched anything, and the new
+food items from phase 5 would have hit the same fallback. Fixed: `PC_ITEM_TABLE` now lists all 6 real weapon
+names; food items (`PC_ITEM_FOOD_BASE..+16`) are handled by a real `pc_item_name()` branch into
+`bigo_food_items.h`'s own `food_item_name()` instead of hand-duplicating all 17 names into a second table.
+Verified live against the real, unmodified `pc_item_name()` (a scratch `#include main.c` harness, same
+precedent phase 4/5's own scratch harnesses used, adapted for the client binary this time -- 7/7 assertions
+pass). `scripts/build_client.sh` clean (SDL2/GL linked, real binary produced); `bazel test //...` 36/36 green,
+zero regressions.
+
+**Net result: §12 item 4 ("full phone-app UI parity") is now MUCH closer to done than scoped** -- the
+rendering and app roster already exist; the real remaining gaps are narrower and specific: CARGO has no
+SELECT-to-eat interaction wired (`bigo_phone.h`'s own `BpEffectKind` has no `BP_FX_EAT_FOOD` yet, and
+correctly so -- there is still nothing for it to do), and the cake-smash distraction needs the QUIET-decorum
+witness path live in `day/` first (a real, separate, already-named gap, not new). Both are still correctly
+blocked on the same two things phase 5 already named, not on "the client has no phone UI" (it does).
+
+session: sess-20260923-1030-4a526255.
