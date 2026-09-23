@@ -341,6 +341,13 @@ typedef struct {
        into this same g_npcs[] array) this The Men unit is currently travelling to go resolve. */
     int has_dispatch_target;
     int dispatch_target_npc;
+
+    /* SECTION 536 follow-up (2026-09-23, NORTHSTAR.md §11 item 6, "the men carry pagers"): valid
+       when has_dispatch_target is set. pager_buzz_until_ms is the real assignment-to-response
+       delay -- a Man is assigned but does NOT move until this clock elapses, replacing the old
+       instant assignment. 0 means not currently buzzing (either idle, or already past the buzz
+       and actively responding). */
+    unsigned int pager_buzz_until_ms;
 } ServerNpc;
 static ServerNpc g_npcs[PC_NPC_MAX];
 
@@ -496,6 +503,7 @@ static void server_spawn_npcs(unsigned int now_ms) {
                 server_tick_decorum already uses gives each NPC a genuine, individual personality
                 instead. */
             n->has_dispatch_target = 0;
+            n->pager_buzz_until_ms = 0;
         }
     }
     printf("S504: spawned %d real NPCs (3 citizen, 1 the_men, 4 zombie) on a 10-unit circle around origin.\n", PC_NPC_MAX);
@@ -691,15 +699,22 @@ static void server_tick_witness(void) {
 #define THE_MEN_DISPATCH_SPEED 6.0f /* units/sec -- The Men's own real response pace, tuned
     separately from PHEROMONE_ZOMBIE_SPEED on purpose (they're professionals responding to a
     call, not a commanded predator closing in) */
+#define BIGO_PAGER_LATENCY_MS 3000u /* NORTHSTAR.md §11 item 6: "message sent -> Man notices the
+    buzz -> responds" -- a real, deliberately short v1 delay (the same rough order of magnitude
+    as BIGO_DISTRACTION_MS's own 8000ms) before an assigned Man actually starts moving toward a
+    hunt, replacing the old instant assignment-equals-movement behavior */
 
 /* server_tick_dispatch -- S504-DISPATCH: The Men's own real dispatch/sanitize decision loop
  * (NORTHSTAR.md §8e item 3). Any Citizen/The Men NPC currently SILENCING/ENGAGE is an active hunt
  * needing a response; an idle The Men NPC (no current assignment) is dispatched to the NEAREST
- * one, travels there (bigo_pheromone.h's own pheromone_step_toward, reused verbatim -- steering
- * toward a point is steering toward a point, human or zombie), and on arrival resolves the hunt
- * (resolved=1 -> DENIAL, docs/DESIGN_DIGEST.md §11's own "memory-wipe spray"). A hunt that
- * resolves some OTHER way first (or whose target NPC goes inactive) makes its responder stand
- * down instead of arriving to nothing. */
+ * one. SECTION 536 follow-up (NORTHSTAR.md §11 item 6, "the men carry pagers"): assignment no
+ * longer means instant movement -- a real BIGO_PAGER_LATENCY_MS buzz delay stands in for "message
+ * sent -> Man notices the buzz -> responds" before the Man starts travelling (bigo_pheromone.h's
+ * own pheromone_step_toward, reused verbatim -- steering toward a point is steering toward a
+ * point, human or zombie). On arrival, resolves the hunt (resolved=1 -> DENIAL, docs/
+ * DESIGN_DIGEST.md §11's own "memory-wipe spray"). A hunt that resolves some OTHER way first (or
+ * whose target NPC goes inactive), including mid-buzz before the Man ever moves, makes its
+ * responder stand down instead of arriving to nothing. */
 static void server_tick_dispatch(unsigned int now_ms) {
     static unsigned int last_dispatch_tick_ms = 0;
     float dt_sec = (last_dispatch_tick_ms == 0) ? 0.0f : (float)(now_ms - last_dispatch_tick_ms) / 1000.0f;
@@ -737,8 +752,9 @@ static void server_tick_dispatch(unsigned int now_ms) {
 
         g_npcs[responder].has_dispatch_target = 1;
         g_npcs[responder].dispatch_target_npc = hi;
-        printf("S504-DISPATCH: The Men npc%d dispatched to npc%d's hunt (%s)\n",
-               responder, hi, WS_NAMES[hn->witness_state]);
+        g_npcs[responder].pager_buzz_until_ms = now_ms + BIGO_PAGER_LATENCY_MS;
+        printf("S536-PAGER: The Men npc%d's pager buzzes -- dispatched to npc%d's hunt (%s), "
+               "responding in %ums\n", responder, hi, WS_NAMES[hn->witness_state], BIGO_PAGER_LATENCY_MS);
     }
 
     for (int mi = 0; mi < PC_NPC_MAX; mi++) {
@@ -747,7 +763,14 @@ static void server_tick_dispatch(unsigned int now_ms) {
         ServerNpc *target = &g_npcs[mn->dispatch_target_npc];
         if (!target->active || (target->witness_state != WS_SILENCING && target->witness_state != WS_ENGAGE)) {
             mn->has_dispatch_target = 0; /* resolved some other way, or target gone -- stand down */
+            mn->pager_buzz_until_ms = 0;
             continue;
+        }
+        if (mn->pager_buzz_until_ms != 0) {
+            if (now_ms < mn->pager_buzz_until_ms) continue; /* still buzzing -- not moving yet */
+            mn->pager_buzz_until_ms = 0; /* latency elapsed -- Man is now actively responding */
+            printf("S536-PAGER: The Men npc%d done buzzing, now responding to npc%d\n",
+                   mi, mn->dispatch_target_npc);
         }
         if (dt_sec > 0.0f) {
             pheromone_step_toward(&mn->x, &mn->z, target->x, target->z, THE_MEN_DISPATCH_SPEED, dt_sec);

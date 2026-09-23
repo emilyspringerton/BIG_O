@@ -403,17 +403,17 @@ elimination path is real, separate, deferred work below.
 5. ~~**Fixed arrogance (50 for every human NPC).**~~ **Closed, 2026-09-23, see §22.** Real per-NPC arrogance variety — needed for ENGAGE to ever fire
    live without every witness sharing the exact same threshold behavior — is deferred, same category as §8e item 6.
 6. **The Men carry pagers** (founder real-time, 2026-09-22: "the men cary pagers"). Real, named design direction
-   for the dispatch mechanic above, not built. `server_tick_dispatch`'s own current "nearest idle The Men NPC
-   assigned" step is instant and omniscient — no in-fiction justification, no player-visible signal. A pager is
+   for the dispatch mechanic above. `server_tick_dispatch`'s own current "nearest idle The Men NPC
+   assigned" step was instant and omniscient — no in-fiction justification, no player-visible signal. A pager is
    the real, concrete answer to "how does a Man know to respond," and the exact insertion point: it wraps that
-   existing nearest-idle-Man selection, it does not replace it. What this opens, none of it scoped or built yet:
-   - **Real dispatch latency.** A gap between a hunt escalating (SILENCING/ENGAGE) and the assigned Man actually
-     starting to move — an actual pager's real "message sent → Man notices the buzz → responds" delay, replacing
-     today's instant assignment.
-   - **A real, world-observable cue.** A buzz/beep, a lit pager on a Man's belt — something a sharp player could
-     actually notice as a tell that a hunt was just dispatched toward them. This is a direct, on-theme extension
-     of the signature Attention/Heat framing ("if they don't see it, it isn't real") — a pager going off IS a
-     real thing that can be seen, unlike the current invisible server-side assignment.
+   existing nearest-idle-Man selection, it does not replace it. What this opened:
+   - ~~**Real dispatch latency.**~~ **Closed, 2026-09-23, see §23.** A gap between a hunt escalating
+     (SILENCING/ENGAGE) and the assigned Man actually starting to move — an actual pager's real "message sent →
+     Man notices the buzz → responds" delay, replacing the old instant assignment.
+   - **A real, world-observable cue — still only a server log line, not a player-visible one.** §23 landed a
+     real `S536-PAGER` log marker at buzz-start and buzz-end, but that's an operator/debug signal, not the
+     originally-named "buzz/beep, a lit pager on a Man's belt" a player could actually notice in the world — no
+     snapshot field, no client rendering, no sound. Still real, separate, unbuilt work.
    - **A possible future interaction surface** — intercepting, jamming, or stealing a pager. Named as the natural
      next question this mechanic raises, not scoped or committed to.
    - Where this reconciles with the SHANKPIT engine merge: `SHANKPIT/docs2/specs/BIGO_ENGINE_MERGE_NORTHSTAR.md`
@@ -1059,5 +1059,54 @@ warnings. `scripts/build.sh` ASan/UBSan rules path clean.
 reaching `WS_ENGAGE` is now real and reachable, but nothing live consumes it into an actual combat/death
 outcome yet, same "logic reachable, consequence not built" shape several other gaps in this thread have. §11's
 remaining items 2, 4, 6 are all still open, unaffected by this pass.
+
+session: sess-20260923-1030-4a526255.
+
+## 23. "The Men carry pagers" -- real dispatch latency (2026-09-23, EMILY/BACKLOG.md SECTION 536 follow-up,
+closes §11 item 6's dispatch-latency bullet)
+
+Founder direction, continued ("continue"). §11 item 6 (2026-09-22) named the pager mechanic's exact insertion
+point but left it entirely unbuilt: `server_tick_dispatch`'s own "nearest idle The Men NPC assigned" step
+was instant and omniscient -- a Man got a target and started closing distance the very same tick, no
+in-fiction "the message has to reach him first" delay of any kind. Of the mechanic's three named opens
+(dispatch latency, a world-observable cue, a future intercept surface), this pass closes the first honestly,
+gives the second a real-but-partial answer, and leaves the third untouched.
+
+**What shipped:** `ServerNpc` gained `pager_buzz_until_ms` (valid only while `has_dispatch_target` is set).
+On assignment, `server_tick_dispatch` now sets `pager_buzz_until_ms = now_ms + BIGO_PAGER_LATENCY_MS` (a real,
+new 3000ms constant) instead of letting the Man move that same tick. The Man's own per-tick loop checks this
+first: while still buzzing, `pheromone_step_toward` is never called at all -- the Man stands still, pager
+buzzing, target un-approached. Once `now_ms` passes the buzz deadline, the timer clears to 0 and movement
+begins exactly like before this pass. A hunt that resolves some other way (LOS-loss/§21's own resolution path,
+The Men's own existing "target gone" check, a player's Decorum recovering) while a Man is still mid-buzz
+correctly clears `pager_buzz_until_ms` alongside `has_dispatch_target` -- no stale timer survives a stand-down.
+`server_spawn_npcs` explicitly zeroes the new field per NPC on spawn, matching `has_dispatch_target`'s own
+existing init line.
+
+**Real, honest, partial answer on the "world-observable cue" bullet:** a `S536-PAGER` log line fires once at
+buzz-start (naming the responder, the target, and the exact latency) and once at buzz-end (responder now
+moving) -- a real signal, but only to the server operator/log, not to any player in the world. No snapshot
+field carries buzz state to the wire, no client renders a lit pager or plays a buzz sound. The originally-named
+"something a sharp player could actually notice" is still real, separate, unbuilt work -- named here rather
+than conflated with the log line above, since the log line does not satisfy it.
+
+**Verified, not just compiled:** a new scratch `#include main.c` integration harness (same precedent this
+whole thread has used) drives the real, unmodified `server_spawn_npcs`/`server_tick_dispatch` end to end:
+assignment sets a real, correctly-valued `pager_buzz_until_ms` rather than dispatching instantly; mid-buzz, the
+Man's position is provably unchanged tick over tick; once the latency elapses, the timer clears and the Man is
+provably moving; and a second, independently-constructed hunt (v0's real roster only has one The Men NPC, so a
+real zombie slot was repurposed into a second one for this boundary case, same construction precedent
+`arrogance_verify.c` already used) that resolves to `WS_UNAWARE` mid-buzz correctly clears both
+`has_dispatch_target` and `pager_buzz_until_ms` together -- 5/5 real assertions pass, ASan/UBSan clean.
+`bazel test //...` 36/36 green (zero regressions). Real `scripts/build_day.sh`/`scripts/build_client.sh` both
+clean, zero new warnings (one pre-existing, unrelated `strncpy` truncation warning in `load_mods_manifest`
+predates this pass). `scripts/build.sh` ASan/UBSan rules path clean. No README change -- this is an internal
+dispatch-timing correctness fix with no prior README claim naming instant dispatch to correct (checked).
+
+**Real, honest, still open (§11's own remaining items 2, 4, and the rest of item 6):** no Corporate Service
+Call/Regulator-at-max-heat escalation when every The Men unit is busy (item 2 -- note §18 Phase B's own
+Decorum-triggered Regulator dispatch is a real but DIFFERENT mechanism, not this one); no live accomplice/
+compromise mechanic (item 4); no player-visible pager cue or intercept/jam/steal interaction (the rest of
+item 6, named above).
 
 session: sess-20260923-1030-4a526255.
