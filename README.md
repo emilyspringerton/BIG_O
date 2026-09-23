@@ -72,6 +72,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > founder real-time aside ("the top regulator is a pop singer dancing werewolf ninja John Wick") landed as a
 > small, honest flavor nod using zero new art, with the full werewolf/ninja/John-Wick character named as real,
 > asset-blocked future work rather than guessed at. See `NORTHSTAR.md` §19.
+> The Cargo phone app finally does something: selecting an item now consumes it, and smashing the cake
+> triggers the real cake-smash distraction (halves nearby Citizen/The Men vigilance for 8 seconds) --
+> re-investigated its old "blocked on zone landmarks" note and found the real blocker (no live
+> QUIET-observation witness path) already resolved by §18. Every other food item is eaten with no effect yet
+> -- eat-to-heal is still real, deliberately unbuilt (no player HP/damage pool exists). See `NORTHSTAR.md` §20.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

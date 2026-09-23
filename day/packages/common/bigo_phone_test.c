@@ -40,6 +40,12 @@ int main(void) {
     go(&p, BP_APP_WARDROBE); bigo_phone_input(&p, BP_DOWN, 0);
     fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.costume == 1 && fx.kind == BP_FX_COSTUME_SET && fx.arg == 1);
     fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_NONE); /* re-selecting the SAME worn costume is a no-op, not a re-send */
+    /* cargo -- SELECT fires BP_FX_ITEM_USE with the current cursor as arg (SECTION 536 follow-up,
+       NORTHSTAR.md §20: Cargo's first real behavior of any kind, was a dead app before this). The
+       real server is the only real validator (no local inventory copy lives in BigoPhone), so
+       this fires unconditionally regardless of cursor position. */
+    go(&p, BP_APP_CARGO); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_ITEM_USE && fx.arg == 2);
     /* lab: splice needs a sample; consumes exactly one; base/trait choice recorded */
     go(&p, BP_APP_LAB); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
     bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 0);

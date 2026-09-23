@@ -404,6 +404,28 @@ static int server_roll100(void) {
     return (int)(g_decorum_rng % 100u);
 }
 
+/* Cake-smash distraction -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §20.
+ * Faithful port of SHANKPIT's own witness_ai_smash_cake/witness_ai_distraction_active (packages/
+ * simulation/witness_ai.c) -- a global, non-spatial "is any distraction active right now" flag,
+ * not a per-citizen/per-location mechanic (matching that file's own doc comment: "a true
+ * distraction-target mechanic would need [more]," not attempted here either). Halves every
+ * nearby NPC's effective vigilance in server_tick_decorum's own noticed() check below for
+ * BIGO_DISTRACTION_MS -- this is the real reason cake-smash was previously misattributed as
+ * blocked on zones EXEC/GENERATOR/VAULT (NORTHSTAR.md §17's own correction): the real blocker was
+ * the QUIET-observation half of the witness system not being live at all, which Phase A (§18)
+ * already resolved -- this pass finally closes the loop. */
+#define BIGO_DISTRACTION_MS 8000u /* mirrors SHANKPIT's own WITNESS_AI_DISTRACTION_MS exactly */
+static unsigned int g_distraction_until_ms = 0;
+
+static void server_smash_cake(unsigned int now_ms) {
+    g_distraction_until_ms = now_ms + BIGO_DISTRACTION_MS;
+    printf("S536-CAKE: smashed -- distraction active for %ums\n", BIGO_DISTRACTION_MS);
+}
+
+static int server_distraction_active(unsigned int now_ms) {
+    return now_ms < g_distraction_until_ms;
+}
+
 /* server_player_zone -- real, minimal zone lookup for this world's own two live-placed zones. */
 static int server_player_zone(const PlayerSlot *s) {
     float dx = s->state.x - BIGO_LAB_ZONE_CX, dz = s->state.z - BIGO_LAB_ZONE_CZ;
@@ -945,6 +967,7 @@ static void server_tick_decorum(unsigned int now_ms) {
                     if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
                     if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_QUIET_OBSERVE_RADIUS)) continue;
                     int vig = npc_brain_effective_vigilance(&n->brain);
+                    if (server_distraction_active(now_ms)) vig /= 2; /* cake-smash, see server_smash_cake's own doc comment */
                     if (noticed(vig, cons, server_roll100())) seen++;
                 }
                 if (seen > 0) {
@@ -1966,6 +1989,39 @@ int main(int argc, char **argv) {
                     if (req.costume <= COS_STREET) {
                         s->state.costume = req.costume;
                         printf("Player slot %d set costume to %d.\n", i, s->state.costume);
+                    }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_ITEM_USE && (size_t)n >= sizeof(PcItemUsePacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §20 -- Cargo's
+                   SELECT finally does something. Only food items are consumable here (weapons/
+                   scrap have no defined "use" behavior via Cargo -- they're equipped via
+                   Loadout, not eaten -- so a non-food slot is a real, honest no-op, not a silent
+                   item loss). Only FOOD_CAKE has a real effect (the cake-smash distraction);
+                   every other food item is consumed with no effect yet -- eat-to-heal is still
+                   real, separate, deliberately not built (see bigo_food_items.h's own doc
+                   comment: no player HP/damage pool exists beyond the Regulator kill binary). */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcItemUsePacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    if (req.slot < PC_INVENTORY_SLOTS) {
+                        int item_id = s->inventory[req.slot].item_id;
+                        if (item_id >= PC_ITEM_FOOD_BASE && item_id < PC_ITEM_FOOD_BASE + FOOD_ITEM_COUNT) {
+                            int consumed = pc_try_remove_item_from_inventory(s->inventory, req.slot);
+                            if (consumed == PC_ITEM_FOOD_BASE + FOOD_CAKE) {
+                                server_smash_cake(now_ms());
+                                printf("S536-CAKE: player%d smashed the cake\n", i);
+                            } else if (consumed != PC_ITEM_NONE) {
+                                printf("S536-ITEM: player%d ate %s -- no heal system yet, named gap\n",
+                                       i, food_item_name(consumed - PC_ITEM_FOOD_BASE));
+                            }
+                            send_inventory_update(sock, s);
+                        }
                     }
                     break;
                 }

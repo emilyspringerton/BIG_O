@@ -25,9 +25,16 @@ typedef enum {
     BP_FX_ALLOCATE_TALENT,  /* arg = ability index 0..4 -> PC_PACKET_ALLOCATE_TALENT */
     BP_FX_WEAPON_SWITCH,    /* arg = weapon slot -> PC_PACKET_WEAPON_SWITCH */
     BP_FX_TAKE_PHOTO,       /* host may grab a screenshot; counter already advanced */
-    BP_FX_COSTUME_SET       /* arg = new costume index (COS_*) -> PC_PACKET_COSTUME_SET, first
+    BP_FX_COSTUME_SET,      /* arg = new costume index (COS_*) -> PC_PACKET_COSTUME_SET, first
                                 time costume becomes server-authoritative (EMILY/BACKLOG.md
                                 SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A) */
+    BP_FX_ITEM_USE          /* arg = inventory slot index -> PC_PACKET_ITEM_USE, first time Cargo
+                                does anything at all (EMILY/BACKLOG.md SECTION 536 follow-up,
+                                BIG_O/NORTHSTAR.md §20). Fired unconditionally on SELECT -- this
+                                struct carries no local inventory copy to validate against (only
+                                the host's separate g_inventory does), so the server is the real,
+                                only validator, same "server decides" split every other real
+                                system in this file already follows. */
 } BpEffectKind;
 
 typedef struct { BpEffectKind kind; int arg; } BpEffect;
@@ -238,6 +245,9 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
             fx.kind = BP_FX_COSTUME_SET;
             fx.arg = p->costume;
         }
+        break;
+    case BP_APP_CARGO:
+        if (a == BP_SELECT) { fx.kind = BP_FX_ITEM_USE; fx.arg = p->cursor; }
         break;
     default: break;
     }

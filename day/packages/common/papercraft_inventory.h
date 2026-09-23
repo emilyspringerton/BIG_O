@@ -53,4 +53,23 @@ static inline int pc_try_add_item_to_inventory(PcInventorySlot *slots, int item_
     return 0;
 }
 
+/* pc_try_remove_item_from_inventory -- SECTION 536 follow-up (BIG_O/NORTHSTAR.md §20), Cargo's
+ * SELECT-to-use real consumer. Real, symmetric counterpart to pc_try_add_item_to_inventory above:
+ * decrements the given slot's count by 1, clearing it back to PC_ITEM_NONE/0 the moment it hits
+ * 0 (never leaves a real "count 0" ghost slot for a stale item_id to linger in). Returns the item
+ * id that was consumed (so a caller can decide what USING it means, e.g. FOOD_CAKE's real
+ * distraction effect), or PC_ITEM_NONE if the slot index is out of range or was already empty --
+ * a real, honest no-op, never a crash on a stale/adversarial slot index from the wire. */
+static inline int pc_try_remove_item_from_inventory(PcInventorySlot *slots, int slot) {
+    if (slot < 0 || slot >= PC_INVENTORY_SLOTS) return PC_ITEM_NONE;
+    if (slots[slot].item_id == PC_ITEM_NONE || slots[slot].count <= 0) return PC_ITEM_NONE;
+    int item_id = slots[slot].item_id;
+    slots[slot].count--;
+    if (slots[slot].count <= 0) {
+        slots[slot].item_id = PC_ITEM_NONE;
+        slots[slot].count = 0;
+    }
+    return item_id;
+}
+
 #endif

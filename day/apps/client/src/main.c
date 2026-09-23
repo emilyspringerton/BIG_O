@@ -1584,6 +1584,9 @@ int main(int argc, char **argv) {
         else if (fx_.kind == BP_FX_COSTUME_SET) { PcCostumeSetPacket rq; memset(&rq, 0, sizeof(rq)); \
             rq.hdr.type = PC_PACKET_COSTUME_SET; rq.hdr.sequence = ++allocate_seq; rq.costume = (unsigned char)fx_.arg; \
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
+        else if (fx_.kind == BP_FX_ITEM_USE) { PcItemUsePacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_ITEM_USE; rq.hdr.sequence = ++allocate_seq; rq.slot = (unsigned char)fx_.arg; \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
     } while (0)
     BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */
 

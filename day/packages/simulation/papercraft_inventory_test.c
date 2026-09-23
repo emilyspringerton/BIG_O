@@ -60,6 +60,19 @@ int main(void) {
     check(pc_try_add_item_to_inventory(slots, 200) == 1, "a second unrecognized item of the same id succeeds again");
     check(slots[1].item_id == 200 && slots[1].count == 1, "unrecognized items never merge (stack_max 0) -- second one opens slot 1, not slot 0 count 2");
 
+    /* Real remove path (SECTION 536 follow-up, §20) -- decrementing a stacked slot leaves the
+       real item_id in place until the last one is gone. */
+    memset(slots, 0, sizeof(slots));
+    slots[3].item_id = PC_ITEM_SCRAP;
+    slots[3].count = 2;
+    check(pc_try_remove_item_from_inventory(slots, 3) == PC_ITEM_SCRAP, "removing from a real stacked slot returns the consumed item id");
+    check(slots[3].item_id == PC_ITEM_SCRAP && slots[3].count == 1, "a real stacked slot's count drops by 1, item_id unchanged");
+    check(pc_try_remove_item_from_inventory(slots, 3) == PC_ITEM_SCRAP, "removing the real last item in a slot still returns its id");
+    check(slots[3].item_id == PC_ITEM_NONE && slots[3].count == 0, "a real slot clears back to PC_ITEM_NONE/0 the moment count hits 0, not a ghost entry");
+    check(pc_try_remove_item_from_inventory(slots, 3) == PC_ITEM_NONE, "removing from a real, already-empty slot is a real, honest no-op");
+    check(pc_try_remove_item_from_inventory(slots, -1) == PC_ITEM_NONE, "an out-of-range negative slot index never crashes, just no-ops");
+    check(pc_try_remove_item_from_inventory(slots, PC_INVENTORY_SLOTS) == PC_ITEM_NONE, "an out-of-range high slot index never crashes, just no-ops");
+
     if (g_failures == 0) {
         printf("papercraft_inventory_test: all assertions passed\n");
         return 0;

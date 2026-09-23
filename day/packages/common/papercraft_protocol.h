@@ -41,6 +41,14 @@
     BIG_O/NORTHSTAR.md §18 Phase A -- sent when Wardrobe's phone SELECT changes the worn costume,
     the first time costume becomes server-authoritative instead of purely a client-local phone UI
     field. See PcCostumeSetPacket below. */
+#define PC_PACKET_ITEM_USE         17 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §20 -- sent when Cargo's phone SELECT is pressed on an inventory slot, the
+    first time the Cargo app does anything at all (previously no case in bigo_phone_input's own
+    switch). Server validates the slot really holds an item; only the FOOD_CAKE item currently has
+    a real effect (the cake-smash distraction). Every other food item is consumed with no effect
+    yet -- eat-to-heal is still real, separate, deliberately not built (no player HP/damage pool
+    exists beyond the Regulator kill/respawn binary, see NORTHSTAR.md §18 Phase B), named, not
+    faked. See PcItemUsePacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -284,6 +292,14 @@ typedef struct {
     PcHeader hdr;
     unsigned char costume; /* COS_* (core/witness_rules.h), 0..3 */
 } PcCostumeSetPacket;
+
+/* PcItemUsePacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §20. Sender is
+ * resolved from the packet's own source address, same convention PcCostumeSetPacket/
+ * PcWheelbarrowTogglePacket above already establish. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char slot; /* index into this player's own server-side inventory[], 0..PC_INVENTORY_SLOTS-1 */
+} PcItemUsePacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

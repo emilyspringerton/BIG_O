@@ -933,3 +933,53 @@ concept server-side; giant bug/Regulator movement facing (both draw at `facing_r
 wire for either, a named v0 cut matching `PcNpcState`'s own "anim deliberately NOT included" precedent).
 
 session: sess-20260923-1030-4a526255.
+
+## 20. Cargo finally does something: cake-smash distraction goes live (2026-09-23, EMILY/BACKLOG.md
+SECTION 536 follow-up)
+
+Founder direction, continued ("continue"). Checked BP_APP_CARGO's own real switch statement first, not
+assumed: it had no `case` at all -- SELECT on the Cargo app has done literally nothing since the phone was
+first built. Re-investigated the "cake-smash distraction (blocked)" note this thread's own §17 correction and
+§18 README status left standing, and found the real blocker already resolved: it was never really the missing
+EXEC/GENERATOR/VAULT zone landmarks (SHANKPIT's own `witness_ai_smash_cake` doesn't touch zones at all, checked
+directly) -- it was that BIG_O's live day server had no QUIET-observation witness path at all, which §18 Phase
+A already fixed. This pass closes the loop.
+
+**What shipped:** `BP_FX_ITEM_USE` (arg = inventory slot) fires from Cargo's SELECT -- the first real
+behavior that app has ever had. New `PC_PACKET_ITEM_USE`/`PcItemUsePacket` (client -> server, same
+"sender resolved from source address" convention `PcCostumeSetPacket`/`PcWheelbarrowTogglePacket` already
+use). `papercraft_inventory.h` gained `pc_try_remove_item_from_inventory` -- a real, symmetric counterpart to
+the existing `pc_try_add_item_to_inventory`, decrementing a stacked slot and clearing it back to
+`PC_ITEM_NONE`/0 the moment it hits zero, never a "count 0" ghost entry. The server handler only acts on food
+items (`item_id` in `[PC_ITEM_FOOD_BASE, PC_ITEM_FOOD_BASE+FOOD_ITEM_COUNT)`) -- a non-food slot (weapons,
+scrap) is a real, honest no-op, since Cargo has no defined "use" behavior for gear that's equipped via Loadout
+instead. `server_smash_cake`/`server_distraction_active` are a faithful, verbatim port of SHANKPIT's own
+`witness_ai_smash_cake`/`witness_ai_distraction_active` (packages/simulation/witness_ai.c) -- a global,
+non-spatial "is a distraction active right now" flag (not per-citizen/per-location, same real scope limit that
+file's own doc comment already names), halving every nearby NPC's effective vigilance in
+`server_tick_decorum`'s own `noticed()` check for `BIGO_DISTRACTION_MS` (8000ms, matching SHANKPIT's constant
+exactly). Every other food item (cherry through synth-meat) is consumed with a real, honest log line and no
+effect -- eat-to-heal remains real, separate, deliberately not built (no player HP/damage pool exists beyond
+the Regulator kill/respawn binary, `bigo_food_items.h`'s own doc comment already names this).
+
+**Verified, not just compiled:** `papercraft_inventory_test.c` gained 7 new assertions covering the real
+remove path (stacked decrement, clears to `PC_ITEM_NONE` at 0, no-ops on an already-empty or out-of-range
+slot). `bigo_phone_test.c` gained a real Cargo assertion (`BP_FX_ITEM_USE` fires with the cursor as `arg`). A
+new scratch integration harness (same `#include main.c` precedent this whole thread has used) drives the real,
+unmodified `server_smash_cake`/`server_distraction_active`/`pc_try_remove_item_from_inventory` against a real
+player inventory and a real The Men NPC: smashing the real cake consumes it and activates a real,
+time-bounded distraction; the distraction genuinely halves the real NPC's effective vigilance value; a
+non-cake food item is consumed without triggering it; a non-food item slot is correctly left untouched;
+out-of-range slot indices never crash -- 7/7 real assertions pass, ASan/UBSan clean. `bazel test //...` 36/36
+green (zero regressions, `papercraft_inventory_test` already wired into the Bazel graph). Real
+`scripts/build_day.sh`/`scripts/build_client.sh` both clean, zero new warnings. `scripts/build.sh` ASan/UBSan
+path clean.
+
+**Real, honest, deliberately NOT built here:** eat-to-heal (still genuinely blocked on the same undecided
+player-damage-source design question §16 originally named); a per-citizen/spatial distraction-target mechanic
+(SHANKPIT's own original doesn't have one either); any client-side visual for the cake actually flying apart
+("if the cake gets smashed it flies everywhere" -- the mechanical distraction effect is real and live, the
+particle/prop visual is not, same "server logic first, client visual later" precedent every mechanic in this
+thread has used).
+
+session: sess-20260923-1030-4a526255.
