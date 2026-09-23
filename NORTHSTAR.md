@@ -819,19 +819,63 @@ band instead of a placeholder. `bazel test //...` 36/36 green (zero regressions)
 ASan/UBSan path clean; `scripts/build_client.sh` clean; real server binary boot/tick/shutdown re-verified
 against an isolated port/paths.
 
-### Phase B: Regulator dispatch, real player death, clone respawn, Bio-Slurry (queued, real investigation needed
-before any code -- NOT built this pass)
+### Phase B: Regulator dispatch, real player death, clone respawn (built, verified this pass -- Bio-Slurry
+economy still deliberately not built)
 
-Real, separate open questions, not guessed at:
-1. What makes a Regulator dispatch-eligible versus reusing The Men's existing hunt-dispatch logic wholesale --
-   a new, deadlier `PC_NPC_ROLE_REGULATOR` or a real "The Men, lethal mode" flag on the existing role?
-2. What does a player "kill" actually reset in a shared, persistent, multi-player world other players are still
-   occupying at the same moment -- position only? inventory? samples/clones in the Lab? Real, honest, not
-   assumed here.
-3. Where is Bio-Slurry earned/stored -- a wholly new resource with no current analog anywhere in this repo's
-   code (`bigo_phone.h`'s own `samples[3]` tracks harvested genetic samples, a real, different, already-live
-   concept this would need to compose with, not replace).
-4. Respawn placement and cooldown -- the basement lab is the canonical location per lore; whether that's a real
-   hardcoded point (same precedent every other landmark here uses) is the likely answer, not yet confirmed.
+Landed in the same "continue" cycle as Phase A above. The four open questions this section originally posed are
+answered here, each with the real reasoning, not guessed at:
+
+1. **Regulator dispatch-eligibility: a new, separate `ServerRegulator[]` array, not a `PC_NPC_ROLE_REGULATOR`.**
+   Same real "growing `PC_NPC_MAX` is a wire-protocol change" reasoning `g_giant_bugs[]` already established in
+   phase 3 -- Regulators target a PLAYER slot, not another NPC, so they don't fit The Men's own
+   `dispatch_target_npc` shape anyway. Real, honest v1 scope: Regulators are NOT broadcast in any snapshot yet,
+   so they're real and live server-side but invisible to clients -- same "server logic first, client visual
+   later" precedent every phase in this thread has used (giant bugs, wheelbarrow).
+2. **What a kill resets: Decorum only, this pass.** Position moves to the real lab-zone respawn point and
+   Decorum resets to a clean `decorum_start()` -- both real, deliberate, matching the lore ("new body, clean
+   slate") and avoiding an immediate CANCELLED-respawn-CANCELLED loop a same-Decorum respawn would cause.
+   XP/level/inventory/samples/clones are explicitly NOT touched -- a real, honest, named v1 scope cut ("what
+   else a kill should reset" stays real, separate, undecided design space), not an oversight.
+3. **Bio-Slurry: still not built, on purpose.** No earning mechanism exists anywhere in this repo (checked
+   again before writing this) -- `bigo_phone.h`'s own `samples[3]` is a real, different, already-live concept
+   (harvested genetic samples) this would need to compose with, not replace, and inventing a whole new economy
+   unilaterally would repeat exactly the mistake Principle 19 exists to prevent. The clone-restore in this pass
+   is real but currently free -- `server_kill_player`'s own log line says so explicitly every time
+   (`"Bio-Slurry cost NOT charged (economy not built yet)"`), so this gap stays visible in the server log, not
+   silently dropped.
+4. **Respawn placement: the real, existing lab-zone circle** (`BIGO_LAB_ZONE_CX/CZ`, the same landmark
+   wheelbarrow delivery and the live ZONE_LAB decorum check already use) -- zero new landmark authoring, matches
+   the lore's own "the basement prints a new body" directly. No respawn cooldown built -- a real, honest,
+   deliberately small v1 (nothing currently needs one; the immediate `decorum_zone = -1` reset means a killed
+   player re-triggers a real observe check the moment they move, same as any fresh spawn).
+
+**What shipped:** `ServerRegulator[BIGO_REGULATOR_MAX]` (= `PC_MAX_PLAYERS`, one real hunt per potential player).
+`server_dispatch_regulator` fires exactly once, from `server_tick_decorum`'s own existing one-time
+`decorum_cancelled_logged` marker (real reuse, not a new hook) -- a real, honest, double-dispatch guard skips if
+that player already has an active hunt. Regulators spawn from a real, arbitrary v1 dispatch point
+(`BIGO_REGULATOR_DISPATCH_X/Z`, same "no real landmark exists yet, name it and move on" precedent the giant-bug
+spawn point already set) and chase the target's own LIVE position (`pheromone_step_toward`, the exact same
+reuse The Men's own dispatch loop already established) at `BIGO_REGULATOR_SPEED` (9.0 units/sec -- real,
+deliberately faster than The Men's own 6.0, matching "silent, John-Wick-lethal" versus "professionals responding
+to a call"). `server_kill_player` is the real, first player damage/death mechanic of any kind in this repo --
+the exact gap phase 5's eat-to-heal named as a blocker, now resolved by Decorum getting there first instead of
+food. A real, deliberate mercy: a hunt stands down safely (no kill) if the target's Decorum recovers back out of
+`BAND_CANCELLED` before arrival, or if the target disconnects mid-hunt -- same "resolved some other way, stand
+down" precedent The Men's own zombie-hunt dispatch loop already uses.
+
+**Verified, not just compiled:** a new scratch integration harness (same `#include main.c` precedent this whole
+thread has used) drives the real, unmodified `server_dispatch_regulator`/`server_tick_regulators`/
+`server_kill_player`/`server_tick_decorum` end to end: reaching real `BAND_CANCELLED` dispatches exactly one
+Regulator targeting the right player; a second CANCELLED tick does not double-dispatch; the Regulator closes
+real distance over real, bounded time steps and arrives; the resulting kill respawns the player at the real lab
+zone with a clean, reset decorum; a target whose decorum recovers before arrival is left alone; a disconnected
+target's hunt stands down safely with no crash on the freed slot -- 7/7 real assertions pass. `bazel test //...`
+36/36 green (zero regressions); `scripts/build.sh` ASan/UBSan clean; `scripts/build_client.sh` clean (no client
+changes needed, per the real, honest "server-only, no client visual yet" scope above); real server binary
+boot/tick/shutdown re-verified against an isolated port/paths.
+
+**Real, honest, deliberately NOT built here:** the Bio-Slurry economy (see point 3 above); any client-side
+visual for a Regulator (no NPC-visual kit, no snapshot broadcast); a respawn cooldown; any consequence beyond
+Decorum + position on kill. All named, not silently dropped.
 
 session: sess-20260923-1030-4a526255.

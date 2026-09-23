@@ -56,10 +56,14 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > is server-authoritative for the first time; standing in the wrong costume for a zone (2 of the rules module's
 > 5 zones are actually placed so far: public + the lab) where a real nearby Citizen/The Men NPC notices you drops
 > Decorum, using the exact same tested `core/witness_rules.c` math the loud path already uses. Reaching the
-> CANCELLED band logs it honestly rather than faking a consequence — what CANCELLED actually does (Regulator
-> dispatch, a real player-kill/respawn mechanic, a Bio-Slurry economy) is scoped but deliberately not built yet.
-> See `NORTHSTAR.md` §18 for the full account, the founder's own real design decision on what CANCELLED means,
-> and what's deferred.
+> CANCELLED band now has a real consequence: a Regulator is dispatched, chases the player's live position, and
+> on arrival kills them — respawning them at the real lab zone (the lore's own "the basement prints a new body")
+> with Decorum reset to a clean slate. This is the first real player damage/death mechanic in this repo. Real,
+> honest, still not built: the Bio-Slurry cost that lore names for the respawn (no earning mechanism exists
+> anywhere yet, so it's currently free and says so in its own server log every time), any client-side visual for
+> a Regulator (server-only so far, same "logic first, visual later" precedent every mechanic here has used), and
+> a respawn cooldown. See `NORTHSTAR.md` §18 for the full account, the founder's own real design decision on
+> what CANCELLED means, and what's deferred.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

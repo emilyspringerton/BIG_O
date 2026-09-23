@@ -806,6 +806,120 @@ static void server_tick_wheelbarrow(void) {
 
 static const char *BAND_NAMES[] = {"OK", "SUSPICION", "HYSTERIC", "CANCELLED"};
 
+/* Regulator dispatch + real player kill/respawn -- EMILY/BACKLOG.md SECTION 536 follow-up,
+ * BIG_O/NORTHSTAR.md §18 Phase B. Founder, real-time, on what CANCELLED actually does: "the
+ * regulators are called in - the uberplumbers and they delete you with acid and foam" -- checked
+ * against and confirmed matching docs/DESIGN_DIGEST.md §11's own existing canon (a Corporate
+ * Service Call of lethal Regulators at max heat, plus a somatic-clone respawn). This is BIG_O's
+ * first player damage/death mechanic of any kind (the real, named blocker phase 5's eat-to-heal
+ * ran into) -- resolved here by giving Decorum, not food, the first real consequence.
+ *
+ * Real, honest v1 scope, named: a SEPARATE array from g_npcs (same "growing PC_NPC_MAX is a real
+ * wire-protocol change" precedent g_giant_bugs[] already established) -- Regulators are NOT
+ * broadcast in any snapshot yet, so they are real and live server-side but invisible to clients,
+ * same "server logic first, client visual later" precedent every phase in this reverse-port
+ * thread has used. No Bio-Slurry charge on respawn -- that real economy does not exist anywhere
+ * in this repo yet (no earning mechanism designed), so the clone-restore is currently free,
+ * logged as an honest gap rather than invented on the spot. */
+#define BIGO_REGULATOR_MAX PC_MAX_PLAYERS /* one real, sensible upper bound -- at most one active
+    hunt per connected player (NORTHSTAR.md §7's own co-op cap) */
+#define BIGO_REGULATOR_SPEED 9.0f /* units/sec -- real, deliberately faster than
+    THE_MEN_DISPATCH_SPEED (6.0), matching "silent, John-Wick-lethal" (docs/DESIGN_DIGEST.md §11)
+    versus The Men's own "professionals responding to a call" pace */
+#define BIGO_REGULATOR_KILL_RADIUS 2.5f /* same value as BIGO_DISPATCH_ARRIVAL_RADIUS, own named
+    constant per this repo's own "each mechanic gets its own named radius" convention */
+/* Real, arbitrary v1 dispatch origin -- no "corporate district" landmark exists in this world
+   yet, same honest placement precedent g_giant_bugs[]'s own spawn point already set. Well clear
+   of the NPC spawn circle (~10 units around origin), the giant-bug spawn (-9,0,1), and the lab
+   zone (30,0) itself. */
+#define BIGO_REGULATOR_DISPATCH_X 50.0f
+#define BIGO_REGULATOR_DISPATCH_Z -20.0f
+
+typedef struct {
+    int active;
+    float x, y, z;
+    int target_slot; /* -1 = no target, else a real PC_MAX_PLAYERS index being hunted */
+} ServerRegulator;
+static ServerRegulator g_regulators[BIGO_REGULATOR_MAX];
+
+/* server_dispatch_regulator -- called once, exactly when a player's Decorum first crosses into
+ * BAND_CANCELLED (server_tick_decorum's own one-time marker below). A no-op if that player
+ * already has an active hunt (real, honest guard against a double-dispatch if decorum somehow
+ * re-triggers CANCELLED before the first Regulator arrives). */
+static void server_dispatch_regulator(int target_slot) {
+    for (int i = 0; i < BIGO_REGULATOR_MAX; i++) {
+        if (g_regulators[i].active && g_regulators[i].target_slot == target_slot) return;
+    }
+    for (int i = 0; i < BIGO_REGULATOR_MAX; i++) {
+        if (g_regulators[i].active) continue;
+        g_regulators[i].active = 1;
+        g_regulators[i].x = BIGO_REGULATOR_DISPATCH_X;
+        g_regulators[i].y = 0.0f;
+        g_regulators[i].z = BIGO_REGULATOR_DISPATCH_Z;
+        g_regulators[i].target_slot = target_slot;
+        printf("S536-REGULATOR: regulator%d dispatched from (%.1f,%.1f) after player%d\n",
+               i, BIGO_REGULATOR_DISPATCH_X, BIGO_REGULATOR_DISPATCH_Z, target_slot);
+        return;
+    }
+    printf("S536-REGULATOR: dispatch suppressed -- BIGO_REGULATOR_MAX (%d) already full\n", BIGO_REGULATOR_MAX);
+}
+
+/* server_kill_player -- the real, first-ever player death in this repo. Respawns at the real lab
+ * zone (docs/DESIGN_DIGEST.md §11's own "the basement prints a new body"), same ground-height
+ * lookup precedent spawn_player's own default-spawn branch already uses. Decorum resets to a
+ * clean decorum_start() -- a real, deliberate "new body, clean slate" choice, matching the lore
+ * rather than leaving a killed player's Decorum wherever it was (which would just re-trigger
+ * CANCELLED and an immediate re-dispatch, a real loop this choice avoids). Position/XP/inventory
+ * are NOT reset (real, honest v1 scope -- "what a kill resets" beyond Decorum itself is real,
+ * separate, undecided design space, not guessed at here; NORTHSTAR.md §18 names it). */
+static void server_kill_player(int slot) {
+    PlayerSlot *s = &g_slots[slot];
+    int ground_y;
+    if (pw_world_ground_height_at(&g_world, (int)BIGO_LAB_ZONE_CX, (int)BIGO_LAB_ZONE_CZ, &ground_y)) {
+        s->state.y = (float)ground_y;
+    } else {
+        s->state.y = 0.0f;
+    }
+    s->state.x = BIGO_LAB_ZONE_CX;
+    s->state.z = BIGO_LAB_ZONE_CZ;
+    s->state.decorum = decorum_start();
+    s->decorum_zone = -1; /* forces a real re-observe on the next tick, same as a fresh spawn */
+    s->decorum_cancelled_logged = 0;
+    printf("S536-REGULATOR: player%d DELETED (acid and foam) -- respawned at the lab (%.1f,%.1f,%.1f), decorum reset to %d. Bio-Slurry cost NOT charged (economy not built yet, BIG_O/NORTHSTAR.md §18 Phase B).\n",
+           slot, s->state.x, s->state.y, s->state.z, s->state.decorum);
+}
+
+/* server_tick_regulators -- chases each active Regulator's own live target position (the
+ * player's current x/z, not a fixed point -- same "steering toward a point" reuse of
+ * pheromone_step_toward The Men's own dispatch loop already established). Stands down safely if
+ * the target disconnects, or if the target's own Decorum recovers back out of BAND_CANCELLED
+ * before arrival (a real, deliberate mercy -- matches The Men's own "resolved some other way,
+ * stand down" precedent for zombie hunts). */
+static void server_tick_regulators(unsigned int now_ms) {
+    static unsigned int last_tick_ms = 0;
+    float dt_sec = (last_tick_ms == 0) ? 0.0f : (float)(now_ms - last_tick_ms) / 1000.0f;
+    if (dt_sec > 0.5f) dt_sec = 0.5f;
+    last_tick_ms = now_ms;
+
+    for (int i = 0; i < BIGO_REGULATOR_MAX; i++) {
+        ServerRegulator *r = &g_regulators[i];
+        if (!r->active) continue;
+        PlayerSlot *target = &g_slots[r->target_slot];
+        if (!target->active || decorum_band(target->state.decorum) != BAND_CANCELLED) {
+            printf("S536-REGULATOR: regulator%d stands down -- player%d no longer a valid target\n", i, r->target_slot);
+            r->active = 0;
+            continue;
+        }
+        if (dt_sec > 0.0f) {
+            pheromone_step_toward(&r->x, &r->z, target->state.x, target->state.z, BIGO_REGULATOR_SPEED, dt_sec);
+        }
+        if (bigo_in_range(r->x, r->z, target->state.x, target->state.z, BIGO_REGULATOR_KILL_RADIUS)) {
+            server_kill_player(r->target_slot);
+            r->active = 0;
+        }
+    }
+}
+
 /* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A:
  * the QUIET-observation half of the witness system, live for the first time. Real, deliberate
  * design choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per
@@ -841,7 +955,8 @@ static void server_tick_decorum(unsigned int now_ms) {
                            i, zone, seen, before, s->state.decorum, BAND_NAMES[band]);
                     if (band == BAND_CANCELLED && !s->decorum_cancelled_logged) {
                         s->decorum_cancelled_logged = 1;
-                        printf("S536-DECORUM: player%d CANCELLED -- Regulator escalation is Phase B, not built yet (BIG_O/NORTHSTAR.md §18)\n", i);
+                        printf("S536-DECORUM: player%d CANCELLED -- dispatching a Regulator (BIG_O/NORTHSTAR.md §18 Phase B)\n", i);
+                        server_dispatch_regulator(i);
                     } else if (band != BAND_CANCELLED) {
                         s->decorum_cancelled_logged = 0;
                     }
@@ -2061,6 +2176,7 @@ int main(int argc, char **argv) {
             server_tick_witness();
             server_tick_dispatch(now);
             server_tick_decorum(now);
+            server_tick_regulators(now);
 
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 PlayerSlot *s = &g_slots[i];
