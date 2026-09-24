@@ -1298,14 +1298,14 @@ in-session-only state).
 
 ### Queued, investigated but NOT built this pass (the rest of the six-message burst)
 
-1. **SSH key generation.** Checked PITVIPER's own `internal/sshkey/sshkey.go` first, expecting a stub to
-   replace -- it is NOT a stub, it's a real, complete Ed25519 keygen (on-device generation, PEM-encoded
-   private key saved locally, public `authorized_keys` line returned for display, private key never
-   transmitted). PITVIPER already has this. The founder's ask lands here instead: BIG_O has no Ed25519 (or
-   any elliptic-curve) primitive anywhere -- `day/packages/common/hmac_sha256.h` is real but is SHA-256/HMAC
-   only, no signature scheme. A from-scratch pure-C99 Ed25519 implementation (or an FFI bind to an external
-   crypto lib, which this repo has never done) is a real, separate, nontrivial cryptography unit of work, not
-   a small addition alongside a wire-protocol feature -- not started, real scope not yet cut.
+1. ~~**SSH key generation.**~~ **Closed, 2026-09-24, see §29.** Checked PITVIPER's own
+   `internal/sshkey/sshkey.go` first, expecting a stub to replace -- it is NOT a stub, it's a real, complete
+   Ed25519 keygen (on-device generation, PEM-encoded private key saved locally, public `authorized_keys` line
+   returned for display, private key never transmitted). PITVIPER already has this. The founder's ask
+   escalated mid-thread to real post-quantum crypto ("upgrade to quantum safe encryption" -> "scope a real
+   ML-DSA/Dilithium implementation" -> "write it in PARENA") -- §29 landed a real, working, verified
+   ML-DSA-44 keygen/sign/verify primitive in `PARENA/stdlib/crypto/mldsa.prn`, with no live SSH-auth consumer
+   anywhere yet (a real, honest, named gap, not silently dropped).
 2. **The IDUNA app (from IDUNA.GAME).** IDUNA.GAME's own real login flow (honor code display + real IDUNA
    device-auth: `/auth/device/start` -> poll -> exchange) talks to IDUNA over real HTTP(S) REST calls, not
    UDP. BIG_O's C/SDL2 client has never had an HTTP client of any kind in its own gameplay loop (there IS a
@@ -1580,5 +1580,74 @@ publish for walkie events (same "log-only, no subscriber yet" gap this whole thr
 already carries in multiple other places). The real Asterisk/SIP voice-transport gap this module's own doc
 comment has named since 2026-09-23 is unaffected and still real. The player-side "no team concept" gap is
 unaffected and still open -- this pass never needed to solve it, and didn't.
+
+session: sess-20260923-1030-4a526255.
+
+## 29. Post-quantum crypto primitive -- real ML-DSA-44, no consumer yet (2026-09-24, closes §25 queued item 1)
+
+Founder real-time, continued from §25's own queued "SSH key generation" item: "add real SSH key generation" ->
+"upgrade to quantum safe encryption" -> "scope a real ML-DSA/Dilithium implementation" -> "write it in
+PARENA." Checked first, per Principle 19, at every step rather than building blind:
+
+- **GFD's real SSH server has no post-quantum public-key AUTH algorithm at all.** Checked
+  `GoblinFoxDragon/apps2/mud/ssh_listener.go` directly: Go's `golang.org/x/crypto/ssh` v0.24.0 (the pinned
+  version) has zero post-quantum public-key algorithms registered for authentication -- confirmed via a real
+  grep across every `.go` file in that package for `sntrup`/`kyber`/`dilithium`/`mlkem`/`mldsa`, zero matches.
+  A real, honest, named consequence, not glossed over: whatever gets built cannot authenticate against GFD's
+  real server today, regardless of how it's implemented.
+- **PARENA's own STDLIB.md already has a standing policy directly on point**: "hand-rolled crypto is a
+  well-known way to introduce real, serious vulnerabilities, so this explicitly does not attempt it" --
+  crypto packages are meant to be FFI-bound to a real, established implementation, never reimplemented from
+  scratch. This independently validated the same judgment before any code was written: a real ML-DSA
+  (Dilithium) implementation means vendoring the official reference, not writing lattice arithmetic by hand.
+- **"write it in PARENA" is not in tension with that policy** -- it means the FFI-binding itself lives in
+  PARENA (a real `.prn` stdlib module calling into vendored C via `#target inline-c`), the same shape
+  `net/tls.prn`'s own real mbedTLS binding already established, not that the cryptographic primitives
+  themselves get reimplemented in PARENA.
+
+**What shipped (in PARENA, not this repo -- see `PARENA/NORTHSTAR.md`/`PARENA/STDLIB.md` for the full
+account):** `PARENA/runtime/mldsa/` -- the official `pq-crystals/dilithium` reference implementation
+(CC0/public domain), vendored byte-for-byte for ML-DSA-44 (Dilithium mode 2, FIPS 204), verified multiple
+independent ways (a pristine-vs-vendored self-test equivalence check, an independent SHAKE128/SHAKE256
+cross-check against Python's own OpenSSL-backed `hashlib`, one real, harmless upstream `_GNU_SOURCE`-ordering
+bug found and fixed). `PARENA/stdlib/crypto/mldsa.prn` -- a new, real, **actually-working** PARENA crypto
+binding (`mldsa-keygen`/`mldsa-sign`/`mldsa-verify`), gated behind a new `PARENA_WITH_MLDSA` opt-in (matching
+`PARENA_WITH_TLS`'s own established shape). `PARENA/stdlib/bytes.prn` gained `bytes-slice`, a small, real,
+additive primitive this module needed to split ML-DSA keygen's single concatenated `pubkey||seckey` output
+into a real `KeyPair` struct. **Real, checked, not-assumed finding along the way:** `crypto/ed25519.prn`
+(same PARENA directory) turned out to be a non-working stub -- its `#target` body calls a C function
+(`sodium_ed25519_keygen`) never implemented anywhere in that repo, and its own shape violates the real
+`#target` scalar/String/Bytes-only rule `pty.prn`'s own 2026-08-26 rewrite established. `crypto/mldsa.prn` is
+PARENA's first real, actually-working crypto binding, designed correctly from the start to avoid repeating
+that exact class of bug.
+
+**Verified end to end, not just compiled:** `PARENA/tests/test_mldsa.c` (`make test-mldsa`) drives
+`mldsa-keygen`/`mldsa-sign`/`mldsa-verify` through the real, generated PARENA call chain -- correctly-sized,
+non-degenerate keys; sign->verify roundtrip; tampered-signature rejection; tampered-message rejection;
+cross-key rejection; hedged/randomized-signing non-determinism (two signatures over the same message are
+never byte-identical, both still verify independently). Clean under `gcc -Wall -Wextra -Werror
+-fsanitize=address,undefined` -- zero warnings, zero memory errors.
+
+**Real, honest, deliberately NOT built here:**
+1. **No live consumer.** This is a real, working, verified primitive with nothing in BIG_O (or anywhere else)
+   calling it yet -- the "correct primitive, no consumer" pattern this whole SECTION 536 thread has already
+   used honestly more than once (walkie-talkie's own reverse-port, giant-bug-brain's initial landing).
+2. **No SSH authentication anywhere.** Not against GFD (no server-side PQ algorithm exists, see above), and
+   BIG_O itself has no SSH server/client of its own at all -- there is no "BIG_O SSH" to secure. The real,
+   honest answer to the founder's original "add real SSH key generation" ask is: a real ML-DSA-44 keypair/
+   sign/verify primitive now exists and is verified working, with no SSH transport anywhere in this
+   monorepo that can carry it yet.
+3. **No display/registration UI.** A future consumer (a BIG_O phone app? a CLI tool?) that wants to show a
+   generated public key to a player still needs its own display format decision (the original scratch
+   `bigo_mldsa.h` prototype had a working RFC 4648 base64 encoder for this, since deleted along with that
+   file once the PARENA pivot superseded it -- not yet re-added anywhere, real, separate, not guessed at).
+4. **No NIST ACVP official KAT byte-vector cross-check.** This sandbox has no OpenSSL dev headers (no root
+   access to install them), so the official `PQCgenKAT_sign.c` generator couldn't be built. The vendored
+   code was verified via alternative, still-rigorous means instead (see `PARENA/stdlib/crypto/mldsa.prn` and
+   `PARENA/runtime/mldsa/`'s own attribution headers for the full methodology) -- a real, honestly-named gap,
+   not silently treated as fully certified.
+
+The other two items §25 queued alongside SSH keygen (the IDUNA phone app, GFD/BIG_O over HTTPS) are
+unaffected and still open.
 
 session: sess-20260923-1030-4a526255.
