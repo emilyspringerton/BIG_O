@@ -14,6 +14,7 @@ cc_library(
         "bigo_party.h",
         "bigo_chat.h",
         "bigo_hoverboard.h",
+        "bigo_awareness.h",
         "bigo_gfd_bridge.h",
         "bigo_pheromone.h",
         "bigo_walkie_talkie.h",
@@ -89,6 +90,15 @@ cc_test(
     name = "papercraft_falling_test",
     srcs = ["papercraft_falling_test.c"],
     deps = [":common_headers"],
+)
+
+# bigo_awareness_test -- real, direct coverage for bigo_awareness.h's own direction/compass/
+# intensity math (EMILY/BACKLOG.md SECTION 536 follow-up queued item 4, BIG_O/NORTHSTAR.md §35).
+# Pure math (sqrtf/atan2f), needs -lm same as paper_mesh_test's own identical real reason.
+cc_test(
+    name = "bigo_awareness_test",
+    srcs = ["bigo_awareness_test.c", "bigo_awareness.h"],
+    linkopts = ["-lm"],
 )
 
 cc_test(

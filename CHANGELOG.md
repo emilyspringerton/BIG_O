@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2026-09-24 (4)
+- feat(day): awareness vectors -- real "you've been noticed" feedback (EMILY/BACKLOG.md SECTION 536 follow-up
+  queued item 4, BIG_O/NORTHSTAR.md §35). Founder real-time (queued 2026-09-22): "every agent in the system,
+  including the player, can 'feel' when an agent notices them via uniquely tracked awareness vectors." New
+  `day/packages/common/bigo_awareness.h` (pure direction-normalize/8-point-compass/intensity math, a new,
+  first-of-its-kind compass convention for this repo since none existed to match). New `PC_PACKET_AWARENESS_PING`
+  (26): `server_tick_decorum` now names the nearest real noticing NPC and sends one real packet to the noticed
+  player (an event, not a stream). New bottom-left HUD element (`draw_awareness_indicator`, the one corner the
+  other five HUD elements don't claim), 3-second severity-colored "! NOTICED (compass) intensity%" readout.
+  `bazel test //...` 42/42 green (15 new assertions), `scripts/build_day.sh`/`build_client.sh`/`build.sh` (ASan/UBSan
+  core path) all clean. A real, live UDP round trip (scratch harness, not committed) confirmed the actual wire
+  path end to end: dir=(1.000,0.000), compass=E, intensity=40, matching the unit test's own math exactly for the
+  same inputs, real Decorum penalty firing alongside it. Real, honest, not built: player-only (not every agent --
+  no NPC has a HUD/reaction system yet to feel noticed itself), no screen-space directional arrow (needs real
+  camera-projection math, no live GL driver in this sandbox), loud/zombie-event noticing untouched (already has
+  its own separate feedback). (sess-20260923-1030-4a526255)
+
 ## 2026-09-24 (3)
 - feat(phone): BP_APP_LAB is finally the real thing -- closes §30's own named client-wiring gap. The old
   entirely-client-local "base/trait/SPLICE/clone list" mockup (a different, never-built breeding concept, zero

@@ -92,6 +92,14 @@
     already establishes) and after every real mutation. See PcLabUpdatePacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
+#define PC_PACKET_AWARENESS_PING   26 /* server -> the one noticed player only: EMILY/BACKLOG.md
+    SECTION 536 follow-up queued item 4 ("every agent... can 'feel' when an agent notices them via
+    uniquely tracked awareness vectors"), BIG_O/NORTHSTAR.md §35. Sent once per real "just noticed"
+    event -- the same zone-entry-driven server_tick_decorum transition that already drives the
+    decorum penalty, not a continuous per-tick spam -- naming the NEAREST noticing NPC: a
+    normalized 2D direction vector (player -> NPC, this server's own x/z world axes) plus a real
+    0..100 intensity derived from conspicuousness/witness-count (bigo_awareness.h), not a
+    placeholder. See PcAwarenessPingPacket below. */
 
 /* Connect-ticket auth -- direct port of racer_protocol.h's own RC_TICKET_* wire format. Minted
  * by IDUNA's PapercraftTicketHandler (internal/http/handlers/papercraft_ticket.go) from a real
@@ -409,6 +417,17 @@ typedef struct {
     unsigned char sample_count;
     PcLabSampleWire samples[BIGO_LAB_SAMPLE_MAX_WIRE];
 } PcLabUpdatePacket;
+
+/* PcAwarenessPingPacket -- EMILY/BACKLOG.md SECTION 536 follow-up queued item 4, BIG_O/
+ * NORTHSTAR.md §35. dir_x/dir_z are a real, already-normalized unit vector (bigo_awareness.h's
+ * own bigo_awareness_direction) from the noticed player toward the nearest noticing NPC, using
+ * this server's own existing x/z world-position axes -- no new coordinate system. intensity is a
+ * real 0..100 score (bigo_awareness_intensity), not a flat/placeholder value. */
+typedef struct {
+    PcHeader hdr;
+    float dir_x, dir_z;
+    unsigned char intensity;
+} PcAwarenessPingPacket;
 
 /* PcChatSayPacket/PcChatRecvPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md
  * §24. Deliberate departure from PcPhoneMessagePacket's own fixed-id-table convention: chat is

@@ -72,6 +72,10 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > a Regulator (server-only so far, same "logic first, visual later" precedent every mechanic here has used), and
 > a respawn cooldown. See `NORTHSTAR.md` §18 for the full account, the founder's own real design decision on
 > what CANCELLED means, and what's deferred.
+> Getting noticed now has a real, on-screen feel, not just a silent Decorum drop: the moment a real NPC spots you
+> (the same quiet-observation check above), a HUD readout in the bottom-left corner names which direction it's
+> coming from (an 8-point compass) and how bad it is (a real 0..100 intensity), for a few real seconds. Player-only
+> for now — no NPC has a HUD of its own to "feel" being watched back yet. See `NORTHSTAR.md` §35.
 > Giant bugs and Regulators are visible on screen for the first time -- both were real, live, server-only
 > mechanics with no client render path until now. Giant bugs reuse the same zombie kit regular zombies use,
 > tinted dark red and scaled 2.5x in place ("evil versions... BIG," no new art). Regulators reuse the mannequin

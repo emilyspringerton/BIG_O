@@ -53,6 +53,7 @@
 #include "../../../packages/common/bigo_gfd_bridge.h"
 #include "../../../packages/common/bigo_walkie_talkie.h"
 #include "../../../packages/common/bigo_lab.h"
+#include "../../../packages/common/bigo_awareness.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -1126,7 +1127,7 @@ static int find_player_party(int slot) {
  * are real, honest 0s (no live field-gear-carry flag or vault-token mechanic exists yet, so only
  * DA_WRONG_COSTUME can ever fire from this pass); witnesses are real, active Citizen/The-Men NPCs
  * within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real npc_brain_effective_vigilance. */
-static void server_tick_decorum(unsigned int now_ms) {
+static void server_tick_decorum(int sock, unsigned int now_ms) {
     for (int i = 0; i < PC_MAX_PLAYERS; i++) {
         PlayerSlot *s = &g_slots[i];
         if (!s->active) continue;
@@ -1138,15 +1139,36 @@ static void server_tick_decorum(unsigned int now_ms) {
             int cons = conspicuousness(allowed, 0 /* no live field-gear-carry flag yet */);
             if (cons > 0) {
                 int seen = 0;
+                float nearest_dist2 = -1.0f, nearest_dx = 0.0f, nearest_dz = 0.0f;
                 for (int ni = 0; ni < PC_NPC_MAX; ni++) {
                     ServerNpc *n = &g_npcs[ni];
                     if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
                     if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_QUIET_OBSERVE_RADIUS)) continue;
                     int vig = npc_brain_effective_vigilance(&n->brain);
                     if (server_distraction_active(now_ms)) vig /= 2; /* cake-smash, see server_smash_cake's own doc comment */
-                    if (noticed(vig, cons, server_roll100())) seen++;
+                    if (noticed(vig, cons, server_roll100())) {
+                        seen++;
+                        /* EMILY/BACKLOG.md SECTION 536 follow-up queued item 4, BIG_O/NORTHSTAR.md
+                           §35: track the NEAREST real noticing NPC -- the single most legible
+                           signal to point a player's "you're being watched" feedback at, same
+                           judgment BP_FX_ITEM_USE's own "one real, narrow slice" precedent used. */
+                        float dx = n->x - s->state.x, dz = n->z - s->state.z;
+                        float dist2 = dx * dx + dz * dz;
+                        if (nearest_dist2 < 0.0f || dist2 < nearest_dist2) {
+                            nearest_dist2 = dist2; nearest_dx = dx; nearest_dz = dz;
+                        }
+                    }
                 }
                 if (seen > 0) {
+                    /* Real "you were just noticed" feedback -- BIG_O/NORTHSTAR.md §35. Sent once,
+                       on this same zone-entry-driven observe transition the decorum penalty below
+                       already fires on, not a continuous per-tick spam. */
+                    PcAwarenessPingPacket aw; memset(&aw, 0, sizeof(aw));
+                    aw.hdr.type = PC_PACKET_AWARENESS_PING;
+                    bigo_awareness_direction(nearest_dx, nearest_dz, &aw.dir_x, &aw.dir_z);
+                    aw.intensity = (unsigned char)bigo_awareness_intensity(cons, seen);
+                    sendto(sock, &aw, sizeof(aw), 0, (struct sockaddr *)&s->addr, s->addr_len);
+
                     int before = s->state.decorum;
                     s->state.decorum = decorum_after(before, DA_WRONG_COSTUME);
                     int band = decorum_band(s->state.decorum);
@@ -2684,7 +2706,7 @@ int main(int argc, char **argv) {
             server_tick_wheelbarrow();
             server_tick_witness();
             server_tick_dispatch(now);
-            server_tick_decorum(now);
+            server_tick_decorum(sock, now);
             server_tick_regulators(now);
             server_tick_gfd_bridge(sock);
 

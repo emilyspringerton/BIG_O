@@ -1943,3 +1943,64 @@ lab screen.
    already-honest list -- this pass closed the client-UI gap specifically, nothing else.
 
 session: sess-20260923-1030-4a526255.
+
+## 35. Awareness vectors -- real "you've been noticed" feedback (2026-09-24, closes SECTION 536 follow-up queued item 4)
+
+Founder real-time (queued 2026-09-22, one of four asks logged via `emily observe` per Principle 19 rather than
+built blind): "every agent in the system, including the player, can 'feel' when an agent notices them via uniquely
+tracked awareness vectors." Checked first, not guessed at: `server_tick_decorum` (§18 Phase A, closed §8e items 1/3
+in §11) already decides WHETHER a player was just seen (`noticed()`/`conspicuousness()`) and applies a silent Decorum
+penalty -- but nothing told the player WHO noticed them or from which direction. This closes that gap for the player
+side (the wishlist's own "including the player" case); a generic per-NPC "feel" for every agent is a real, separate,
+bigger design (would need every NPC to have its own HUD/consumer, which none currently do) -- named, not silently
+folded in.
+
+### What shipped
+
+- **`day/packages/common/bigo_awareness.h`** (new, pure, no network/GL): `bigo_awareness_direction` (normalizes a
+  raw dx/dz, degrades a zero-length input to north rather than dividing by zero), `bigo_awareness_compass` (8-point
+  N/NE/E/SE/S/SW/W/NW label from a direction -- a real, new, first-of-its-kind compass convention for this repo,
+  checked first that none existed to match: +Z is north, clockwise), `bigo_awareness_intensity` (real 0..100 score,
+  conspicuousness scaled up 15% per extra real witness, capped at 100).
+- **Wire protocol**: `PC_PACKET_AWARENESS_PING` (26, server -> the one noticed player only), `PcAwarenessPingPacket
+  { hdr, dir_x, dir_z, intensity }`.
+- **`day/apps/server/src/main.c`**: `server_tick_decorum` now takes `sock` (matching `server_tick_gfd_bridge`'s own
+  existing convention) and, within the same real zone-entry-driven observe branch that already computes `seen`,
+  tracks the NEAREST real noticing NPC (smallest real distance among everyone who passed `noticed()`) and sends one
+  real `PcAwarenessPingPacket` to that exact player -- an event, not a per-tick stream, same discipline
+  `send_weapon_owned_update` already established.
+- **`day/apps/client/src/main.c`**: new `draw_awareness_indicator` HUD element, bottom-left corner -- the one screen
+  corner none of the existing five HUD elements claim (top-left/top-center/top-right/bottom-right/bottom-center).
+  Shows `! NOTICED (<compass>)  <intensity>%` for 3 real seconds after a real ping arrives, severity-colored (same
+  spirit `draw_ping_indicator`'s own threshold coloring uses, inverted). Incoming-packet switch gained a
+  `PC_PACKET_AWARENESS_PING` case storing `g_awareness_dir_x/z`/`g_awareness_intensity`/`g_awareness_since_ms`.
+
+### Verified, not just compiled
+
+- `bazel test //day/packages/common:bigo_awareness_test` -- 15 real assertions: direction normalization (including
+  the zero-length degenerate case), all 8 compass directions land exactly where the doc comment says, intensity
+  bounds-checking/scaling/capping. `bazel test //...` 42/42 green (up from 41).
+- `scripts/build_day.sh`/`scripts/build_client.sh` both clean.
+- `scripts/build.sh` (the ASan/UBSan `core/` scenario path) unaffected and still clean.
+- **A real, live UDP round trip** (scratch harness, same `#include main.c` + real socket-pair precedent
+  `lab_verify.c`/`hoverboard_verify.c` already used, ASan/UBSan clean, not committed): a real player inside the lab
+  zone in the wrong costume, a real `PC_NPC_ROLE_THE_MEN` NPC 10 units due east, a real `server_tick_decorum` call
+  produced a real `PcAwarenessPingPacket` over an actual loopback socket -- `dir=(1.000, 0.000)`, `compass=E`,
+  `intensity=40` (exactly matching the pure unit test's own math for the same inputs), and the real Decorum penalty
+  fired alongside it, confirming the new feedback path didn't disturb the existing one.
+
+### Real, honest, deliberately NOT built here
+
+1. **Player-only, not "every agent."** The wishlist's literal ask covers every agent in the system; this pass closes
+   the player-facing half, which is the half that actually needs a HUD. NPCs "feeling" noticed has no real, named
+   consumer yet (no NPC has a HUD or a reaction system keyed on this signal) -- a real, separate, bigger design.
+2. **No screen-space directional arrow/3D indicator.** The compass label is text, not a rendered arrow pointing at
+   the actual noticing NPC in view space -- would need real camera/view-matrix projection math, unverifiable without
+   a live GL driver in this sandbox (the same standing limitation every prior BIG_O client change already carries).
+3. **No live GL screenshot** of the new HUD element itself, same standing sandbox limitation.
+4. **Loud (zombie-event) noticing is untouched.** This pass is scoped to the QUIET-observation path
+   (`server_tick_decorum`) only, matching where the founder's own "feel when noticed" framing sits alongside the
+   Attention/Heat system's own quiet-observation half -- the LOUD zombie path (`server_tick_witness`) has its own
+   separate, already-live feedback (a zombie visibly hunting you), not duplicated here.
+
+session: sess-20260923-1030-4a526255.

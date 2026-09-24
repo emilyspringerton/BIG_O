@@ -58,6 +58,7 @@
 #include "../../../packages/common/hud_text.h"
 #include "../../../packages/common/bigo_phone.h"
 #include "../../../packages/common/bigo_food_items.h"
+#include "../../../packages/common/bigo_awareness.h"
 #include "../../../packages/common/bigo_sky.h"
 #include "../../../../core/world.h" /* interim local world sim feeding the phone; see bigo_world_step */
 #include "../../../../core/witness_rules.h" /* real, live Decorum band name lookup for STATUS -- see draw_bigo_phone's own BP_APP_STATUS case */
@@ -1110,6 +1111,38 @@ static void draw_weapon_hud(int win_w, int win_h, unsigned char current_weapon, 
     pc_draw_string(line, (float)win_w - 200.0f, 30.0f, 8);
 }
 
+/* draw_awareness_indicator -- real "you've been noticed" feedback, bottom-left corner (EMILY/
+   BACKLOG.md SECTION 536 follow-up queued item 4, BIG_O/NORTHSTAR.md §35: "every agent... can
+   'feel' when an agent notices them via uniquely tracked awareness vectors"). The one remaining
+   free screen corner -- draw_progression_hud (top-left), draw_weak_connection_indicator
+   (top-center), draw_ping_indicator (top-right), draw_weapon_hud (bottom-right), and
+   draw_phone_notification (bottom-center) already claim the other five. Shown for
+   BIGO_AWARENESS_HUD_MS after a real PC_PACKET_AWARENESS_PING arrives (same timed-then-clear
+   discipline draw_phone_notification's own msg_id already uses), naming the real compass
+   direction (bigo_awareness_compass, shared with the server so the label can never drift from
+   what actually decided it) and intensity the server computed -- never a made-up value. */
+#define BIGO_AWARENESS_HUD_MS 3000
+static void draw_awareness_indicator(int win_w, int win_h, float dir_x, float dir_z, int intensity, unsigned int since_ms, unsigned int now_ms) {
+    if (since_ms == 0 || now_ms - since_ms >= BIGO_AWARENESS_HUD_MS) return;
+
+    glDisable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, win_w, 0, win_h, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    int compass = bigo_awareness_compass(dir_x, dir_z);
+    char line[48];
+    snprintf(line, sizeof(line), "! NOTICED (%s)  %d%%", BIGO_COMPASS_NAMES[compass], intensity);
+    /* Real, simple severity coloring -- same 0..100 intensity band spirit draw_ping_indicator's
+       own ping thresholds already use, just inverted (higher = worse here). */
+    if (intensity < 40) glColor3f(0.95f, 0.85f, 0.3f);
+    else if (intensity < 75) glColor3f(0.95f, 0.65f, 0.25f);
+    else glColor3f(0.95f, 0.35f, 0.3f);
+    pc_draw_string(line, 20.0f, 60.0f, 8);
+}
+
 /* PC_PHONE_MESSAGE_TABLE -- real, hardcoded handle+text lookup keyed by message_id, must match
    packages/common/papercraft_protocol.h's own PC_PHONE_MESSAGE_* values byte-for-byte (see
    PcPhoneMessagePacket's own doc comment for why this is a shared table instead of the source
@@ -1845,6 +1878,15 @@ int main(int argc, char **argv) {
     unsigned int g_weapons_owned = 0;
     unsigned char g_current_weapon = PC_WPN_KNIFE; /* real, server-confirmed, see PC_PACKET_WEAPON_OWNED */
 
+    /* Real "you've been noticed" state, EMILY/BACKLOG.md SECTION 536 follow-up queued item 4,
+       BIG_O/NORTHSTAR.md §35 -- set once per real PC_PACKET_AWARENESS_PING arrival,
+       draw_awareness_indicator clears itself BIGO_AWARENESS_HUD_MS later (see its own doc
+       comment); g_awareness_since_ms starting at 0 means "never shown yet", same "not measured
+       yet" honesty draw_ping_indicator's own echo_cmd_time_ms != 0 guard already establishes. */
+    float g_awareness_dir_x = 0.0f, g_awareness_dir_z = 1.0f;
+    int g_awareness_intensity = 0;
+    unsigned int g_awareness_since_ms = 0;
+
     /* Real, basic SDL_GameController support (founder real-time, repeated for emphasis: "so we
        also support controller and support controller") -- opens the first real, currently
        connected controller if one exists; a session with none just leaves `pad` NULL and every
@@ -2322,6 +2364,11 @@ int main(int argc, char **argv) {
                     phone.lab_generation[i] = lu.samples[i].generation;
                     phone.lab_genetic_drift[i] = lu.samples[i].genetic_drift;
                 }
+            } else if (hdr.type == PC_PACKET_AWARENESS_PING && (size_t)n >= sizeof(PcAwarenessPingPacket)) {
+                PcAwarenessPingPacket aw; memcpy(&aw, buf, sizeof(aw));
+                g_awareness_dir_x = aw.dir_x; g_awareness_dir_z = aw.dir_z;
+                g_awareness_intensity = aw.intensity;
+                g_awareness_since_ms = now;
             }
         }
 
@@ -2702,6 +2749,7 @@ int main(int argc, char **argv) {
                 draw_ping_indicator(win_w, win_h, now - latest_snap.echo_cmd_time_ms);
             }
             draw_weapon_hud(win_w, win_h, g_current_weapon, g_weapons_owned);
+            draw_awareness_indicator(win_w, win_h, g_awareness_dir_x, g_awareness_dir_z, g_awareness_intensity, g_awareness_since_ms, now);
         }
         /* Sticky warning: appears only after weak_ms of silence, then stays until snapshots clearly resume (gap < 1.5s) and it
            has been up at least 4s, so bursty mobile links can't make it flash on and off. */
