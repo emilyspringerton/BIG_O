@@ -1453,6 +1453,25 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         default: break;
         }
         break;
+    case BP_APP_ARPANET:
+        /* Read-only archive terminal, EMILY/BACKLOG.md SECTION 539 follow-up, BIG_O/NORTHSTAR.md
+           §33: same list<->detail pattern as BP_APP_MESSAGES above, but the body text carries its
+           own authored '\n' line breaks (static content, not word-wrapped at render time). */
+        if (p->detail) {
+            glColor3f(0.6f, 0.95f, 0.6f); pc_draw_string(BP_ARPANET_TITLES[p->cursor], x, y, 6);
+            const char *t = BP_ARPANET_BODIES[p->cursor]; int row = 1;
+            while (*t && row < 14) {
+                const char *nl = strchr(t, '\n');
+                int n = nl ? (int)(nl - t) : (int)strlen(t);
+                snprintf(line, sizeof(line), "%.*s", n, t);
+                glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y - step * (float)row, 5);
+                t += n; if (*t == '\n') t++; row++;
+            }
+            break;
+        }
+        for (int i = 0; i < BP_ARPANET_NODES; i++) bp_line(x, y - step * (float)i, BP_ARPANET_TITLES[i], i == p->cursor, 1.0f);
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("read-only -- SELECT to open a node", x, y - step * (float)(BP_ARPANET_NODES + 1), 4);
+        break;
     default: break;
     }
     glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("esc: back", px + 10, py + 12, 4);

@@ -1849,3 +1849,32 @@ caught by actually running the test rather than assuming the edited numbers were
 and `scripts/build_client.sh` both rebuild clean.
 
 session: sess-20260923-1030-4a526255.
+
+## 33. The ARPANET -- a read-only retro terminal app on the phone (2026-09-24)
+
+Founder real-time: "add the arpanet to big_o." Genuinely unscoped as given -- could have meant a lore reference,
+a world prop, a literal networking mechanic, or a phone app. Asked directly rather than guessed: confirmed "a
+retro terminal/BBS app on the phone."
+
+**Real, scoped slice:** `BP_APP_ARPANET`, a 12th phone app, reusing two patterns that already exist rather than
+inventing new ones. Content shape: `BP_APP_NOTES`'s static-string-table precedent (`BP_ARPANET_TITLES`/
+`BP_ARPANET_BODIES`, `day/packages/common/bigo_phone.h`) -- 5 fixed nodes, numbered like the real historical
+ARPANET's own IMP host numbers, not a literal directory. Navigation shape: `BP_APP_MESSAGES`'s own list<->detail
+toggle, reusing the exact same `p->detail` flag and the same BACK-closes-detail-first UX (`bp_wrap`/cursor
+machinery untouched). Deliberately NOT `BP_APP_GFD`'s free-text live chat -- ARPANET is archival, read-only, no
+server round trip, no new wire packet.
+
+Content leans on lore this repo already carries (the Notes app's own pre-populated "the archive is not where you
+think it is" Eastwind Owls briefing, `BP_CONTACT_HANDLES`'s EASTWIND OWL/EMILY OS entries) -- old, pre-corporate
+research-network traffic, unattributed. One node quietly nods to TYLER's own new same-session character (The
+Auditor, `TYLER/characters/the_auditor.md`) without requiring the player to know that canon to make sense on its
+own: a grid-harmonics anomaly log entry, and a mailing-list fragment ending "bring soup, it is always better when
+someone brings soup."
+
+**Real, honest, unchanged limitation:** no Xvfb/real-GL click-through screenshot -- same standing limitation
+every prior BIG_O client change in this repo already carries (no real GL driver in this sandbox). Verified via
+`bigo_phone_test.c`'s extended coverage (list state, SELECT opens detail, BACK closes detail before exiting the
+app -- the exact same three-assertion shape `BP_APP_MESSAGES`'s own test block already uses) and a clean
+`scripts/build_day.sh`/`scripts/build_client.sh` compile, not a rendered frame.
+
+session: sess-20260923-1030-4a526255.

@@ -64,6 +64,11 @@ int main(void) {
     bigo_phone_input(&p, BP_BACK, 0); CHECK(!p.detail && p.app == BP_APP_MESSAGES);   /* first back closes the detail */
     bigo_phone_input(&p, BP_BACK, 0); CHECK(p.app == -1);
     go(&p, BP_APP_CONTACTS); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.trust[1] == 1);   /* Thorne replies work */
+    /* ARPANET: same list<->detail pattern as MESSAGES, static content, no live network state */
+    go(&p, BP_APP_ARPANET); CHECK(!p.detail && p.cursor == 0);
+    bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.detail);
+    bigo_phone_input(&p, BP_BACK, 0); CHECK(!p.detail && p.app == BP_APP_ARPANET);   /* first back closes the detail */
+    bigo_phone_input(&p, BP_BACK, 0); CHECK(p.app == -1);
     printf(fails ? "PHONE TEST FAILED\n" : "PHONE TEST OK\n");
     return fails != 0;
 }

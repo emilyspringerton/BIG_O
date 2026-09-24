@@ -118,6 +118,10 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > actually worked against SQLite — see `IDUNA/CHANGELOG.md`) — fixed and tested, but not yet deployed to
 > the live server, so a full live "linked" round trip is still unverified end to end. See `NORTHSTAR.md`
 > §31.
+> The phone has a thirteenth app, ARPANET — a read-only archive of 5 static text nodes, styled after the
+> real historical ARPANET's own IMP host numbering. Browse the list, SELECT a node to read it in full
+> (reuses `BP_APP_MESSAGES`'s own list↔detail pattern) — deliberately not live networking like the GFD app,
+> this is archival. See `NORTHSTAR.md` §33.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

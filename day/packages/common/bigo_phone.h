@@ -28,6 +28,14 @@ typedef enum {
                      flow IDUNA.GAME's own prompt already walks a player through, reached here as
                      a phone app instead of a standalone terminal screen. Real, honest v0: SELECT
                      drives each step by hand (start, then poll) -- no automatic timed polling. */
+    BP_APP_ARPANET, /* EMILY/BACKLOG.md SECTION 539 follow-up, BIG_O/NORTHSTAR.md §33, founder
+                        real-time: "add the arpanet to big_o," clarified as "a retro terminal/BBS
+                        app on the phone." A read-only, pre-seeded network of BP_ARPANET_NODES
+                        static text nodes (BP_ARPANET_TITLES/BP_ARPANET_BODIES below) -- browse the
+                        list, SELECT a node to read it in full, same list<->detail pattern
+                        BP_APP_MESSAGES already established (reused via the same p->detail flag),
+                        deliberately NOT the free-text live networking BP_APP_GFD already does --
+                        this is archival, not a chat. */
     BP_APP_COUNT
 } BpApp;
 
@@ -89,13 +97,14 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
                                  by bigo_chat_test.c's own _Static_assert. */
 #define BP_TERM_LINES 6
 #define BP_TERM_LINE_LEN 80
+#define BP_ARPANET_NODES 5
 
 static const char *const BP_PHASE_NAMES[4] = { "DAWN", "DAY", "DUSK", "NIGHT" };
 static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "STORM" };
 #define BP_MSG_THORNE_BRIEF 6   /* client message table id: Dr. Thorne's A1M1 reprimand; unlocks him in Contacts */
 
 static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
-    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD", "IDUNA"
+    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD", "IDUNA", "ARPANET"
 };
 
 /* BP_IDUNA_*: real device-auth flow stages (BIG_O/NORTHSTAR.md §31) -- IDLE (nothing started
@@ -124,6 +133,21 @@ static const char *const BP_COSTUME_NAMES[BP_COSTUMES] = { "CIVILIAN SUIT", "LAB
 /* Lab terminal: isolate -> align -> splice, base vector x trait, consuming one sample per splice. */
 static const char *const BP_BASES[3] = { "SCAVENGER", "HOUND", "BRUTE" };
 static const char *const BP_TRAITS[3] = { "SPEED", "ARMOR", "SCENT" };
+
+/* ARPANET terminal (BP_APP_ARPANET): a read-only, pre-seeded archive of old, pre-corporate
+   research-network traffic -- the archive the Notes app's own pre-populated Eastwind Owls
+   briefing already hints exists ("the archive is not where you think it is"). Five static nodes,
+   numbered like the real historical ARPANET's own IMP host numbers, not a literal directory. */
+static const char *const BP_ARPANET_TITLES[BP_ARPANET_NODES] = {
+    "NODE 00 :: ROOT", "NODE 04 :: GRID LAB", "NODE 11 :: ARCHIVE", "NODE 19 :: MAILING LIST", "NODE 23 :: SIGN-OFF"
+};
+static const char *const BP_ARPANET_BODIES[BP_ARPANET_NODES] = {
+    "5 HOSTS ONLINE. THIS NETWORK PREDATES\nTHE COMPANY. NOBODY HAS TURNED IT OFF\nBECAUSE NOBODY REMEMBERS IT EXISTS.",
+    "HARMONIC LOG, YEAR 3: A RECURRING\nANOMALY ON THE GRID, SAME FEW\nFREQUENCIES, EVERY TIME. WE DID NOT\nHAVE A NAME FOR IT. WE KEPT LOGGING\nANYWAY. THAT WAS THE WHOLE METHOD.",
+    "THE ARCHIVE IS NOT A PLACE. IT IS A\nHABIT SOME PEOPLE NEVER STOPPED\nHAVING. UNCOMPROMISED, THEY CALLED\nTHEMSELVES. NOT A THREAT. A HABIT.",
+    "RE: RE: RE: FUNDING\n> THEY WILL NOT KEEP GIVING US ROOMS.\nTHEN WE MEET WHEREVER THE NEXT ROOM\nIS. BRING SOUP. IT IS ALWAYS BETTER\nWHEN SOMEONE BRINGS SOUP.",
+    "IF YOU ARE READING THIS THE NETWORK\nSTILL WORKS. THAT WAS THE POINT.\nLEAVE IT RUNNING FOR THE NEXT PERSON\nWHO FINDS IT BY ACCIDENT, LIKE YOU DID."
+};
 
 typedef struct {
     int open;
@@ -201,6 +225,7 @@ static inline int bp_rows(const BigoPhone *p) {
     case BP_APP_WARDROBE: return BP_COSTUMES;
     case BP_APP_GFD: return p->term_line_count > 0 ? p->term_line_count : 1;
     case BP_APP_IDUNA: return 1;   /* a status screen, not a list */
+    case BP_APP_ARPANET: return BP_ARPANET_NODES;
     default: return 1;
     }
 }
@@ -334,7 +359,7 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         return fx;
     }
 
-    if (a == BP_BACK) { if (p->app == BP_APP_MESSAGES && p->detail) p->detail = 0; else p->app = -1; return fx; }
+    if (a == BP_BACK) { if ((p->app == BP_APP_MESSAGES || p->app == BP_APP_ARPANET) && p->detail) p->detail = 0; else p->app = -1; return fx; }
     int n = bp_rows(p);
     if (a == BP_UP) { p->cursor = bp_wrap(p->cursor - 1, n); return fx; }
     if (a == BP_DOWN) { p->cursor = bp_wrap(p->cursor + 1, n); return fx; }
@@ -394,6 +419,9 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
             else if (p->iduna_stage == BP_IDUNA_PENDING) fx.kind = BP_FX_IDUNA_POLL;
             /* BP_IDUNA_LINKED: already linked, SELECT is a real, honest no-op here. */
         }
+        break;
+    case BP_APP_ARPANET:
+        if (a == BP_SELECT) p->detail = !p->detail;
         break;
     default: break;
     }
