@@ -47,6 +47,7 @@
 #include "../../../packages/common/papercraft_persist.h"
 #include "../../../packages/common/bigo_pheromone.h"
 #include "../../../packages/common/bigo_food_items.h"
+#include "../../../packages/common/bigo_party.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -922,6 +923,11 @@ static const char *BAND_NAMES[] = {"OK", "SUSPICION", "HYSTERIC", "CANCELLED"};
    zone (30,0) itself. */
 #define BIGO_REGULATOR_DISPATCH_X 50.0f
 #define BIGO_REGULATOR_DISPATCH_Z -20.0f
+#define BIGO_PARTY_XP_RANGE_UNITS 40.0f /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/
+    NORTHSTAR.md §24 -- GFD's own party.go XPSplit rangeLimit, made concrete for BIG_O's own world
+    scale. A real, own, v1 tuning value (not spec'd anywhere else, retunable): matches
+    PHEROMONE_DETECTION_RADIUS (40.0f), this world's own existing largest real detection radius,
+    rather than inventing a new, unrelated scale. */
 
 typedef struct {
     int active;
@@ -1006,6 +1012,28 @@ static void server_tick_regulators(unsigned int now_ms) {
             r->active = 0;
         }
     }
+}
+
+/* g_parties -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24 ("add full party
+ * system parity use the GFD server subsystems" -> "PARENA POWER EVERYTHING"). One real party slot
+ * per potential leader (index == the leader's own PC_MAX_PLAYERS slot when active), same "one real
+ * X per potential player" convention g_regulators/ServerRegulator above already established --
+ * g_parties[i] is only ever meaningful once some player at slot i has formed a party by inviting
+ * someone. Roster mutation lives in bigo_party.h; the pure invite/kick eligibility and XP-split
+ * math are the real, generated PARENA decisions in day/packages/simulation/party_rules.c
+ * (PARENA/stdlib/big_o/party_rules.prn). */
+static BigoParty g_parties[PC_MAX_PLAYERS];
+
+/* find_player_party -- real, linear scan (PC_MAX_PLAYERS is small, same "obviously fine" bar
+ * PC_PACKET_INTERACT's own nearest-object pick already uses) for the party slot containing player
+ * slot. Returns the party's own index into g_parties (== its leader's original slot, but callers
+ * should not assume that never changes -- leadership can transfer via bigo_party_leave), or -1 if
+ * slot is not in any active party. */
+static int find_player_party(int slot) {
+    for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+        if (g_parties[i].active && bigo_party_has(&g_parties[i], slot)) return i;
+    }
+    return -1;
 }
 
 /* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A:
@@ -2091,6 +2119,79 @@ int main(int argc, char **argv) {
                     }
                     break;
                 }
+            } else if (hdr.type == PC_PACKET_PARTY_INVITE && (size_t)n >= sizeof(PcPartyTargetPacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24 -- reverse-ported
+                   from GoblinFoxDragon's own real server/party/party.go. Direct invite-add, no
+                   accept/consent step (matches party.go's own pure Invite() semantics exactly --
+                   GFD's MUD layers a real accept-prompt on top of it in apps2/mud/main.go, a real,
+                   separate, not-yet-built client affordance here). */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcPartyTargetPacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    int target = req.target_slot;
+                    if (target < 0 || target >= PC_MAX_PLAYERS || !g_slots[target].active || target == i) {
+                        printf("S536-PARTY: player%d invite to invalid/inactive/self slot %d rejected\n", i, target);
+                        break;
+                    }
+                    int pid = find_player_party(i);
+                    int party_slot = (pid != -1) ? pid : i; /* forming a new one uses the caller's own slot */
+                    int rc = bigo_party_invite(&g_parties[party_slot], i, target);
+                    if (rc == party_ok()) {
+                        printf("S536-PARTY: player%d invited player%d -- party%d now %d/%d\n",
+                               i, target, party_slot, bigo_party_size(&g_parties[party_slot]), party_max_size());
+                    } else {
+                        printf("S536-PARTY: player%d could not invite player%d (rc=%d)\n", i, target, rc);
+                    }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_PARTY_KICK && (size_t)n >= sizeof(PcPartyTargetPacket)) {
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcPartyTargetPacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    int pid = find_player_party(i);
+                    if (pid == -1) {
+                        printf("S536-PARTY: player%d is not in a party, kick ignored\n", i);
+                        break;
+                    }
+                    int rc = bigo_party_kick(&g_parties[pid], i, req.target_slot);
+                    if (rc == party_ok()) {
+                        printf("S536-PARTY: player%d kicked player%d from party%d\n", i, req.target_slot, pid);
+                    } else {
+                        printf("S536-PARTY: player%d could not kick player%d (rc=%d)\n", i, req.target_slot, rc);
+                    }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_PARTY_LEAVE && (size_t)n >= sizeof(PcHeader)) {
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    int pid = find_player_party(i);
+                    if (pid == -1) {
+                        printf("S536-PARTY: player%d is not in a party, leave ignored\n", i);
+                        break;
+                    }
+                    int disbanded = bigo_party_leave(&g_parties[pid], i);
+                    if (disbanded) {
+                        printf("S536-PARTY: player%d left -- party%d disbanded\n", i, pid);
+                    } else {
+                        printf("S536-PARTY: player%d left party%d -- new leader is player%d\n",
+                               i, pid, g_parties[pid].leader_slot);
+                    }
+                    break;
+                }
             } else if (hdr.type == PC_PACKET_INTERACT && (size_t)n >= sizeof(PcInteractPacket)) {
                 /* Real "punch/interact" -- the minimal real input needed to exercise the already-
                    built Paper Engine live, without inventing a real combat system this sandbox
@@ -2197,9 +2298,47 @@ int main(int argc, char **argv) {
                                     reward = on_papercraft_xp_for_object_destroyed();
                                     source = "statically-linked";
                                 }
-                                award_xp(s, reward, i);
-                                printf("Player slot %d destroyed world object %d -- +%d real xp_award_mod XP (%s).\n",
-                                       i, target, reward, source);
+                                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24 --
+                                   the real, first live consumer of the party XP-split (GFD's own
+                                   real party.go XPSplit rule, ported to PARENA in party_rules.prn):
+                                   if the destroying player is in a party, the reward splits evenly
+                                   (integer division, remainder discarded) among every party member
+                                   within BIGO_PARTY_XP_RANGE_UNITS of the destroyed object's own
+                                   real position; out-of-range members get nothing. Solo players
+                                   (no party) keep the exact old, unchanged full-reward behavior. */
+                                int pid = find_player_party(i);
+                                if (pid == -1) {
+                                    award_xp(s, reward, i);
+                                    printf("Player slot %d destroyed world object %d -- +%d real xp_award_mod XP (%s).\n",
+                                           i, target, reward, source);
+                                } else {
+                                    BigoParty *pt = &g_parties[pid];
+                                    int n = bigo_party_size(pt);
+                                    int party_slots[1 + BIGO_PARTY_MAX_MEMBERS];
+                                    int distances_cm[1 + BIGO_PARTY_MAX_MEMBERS];
+                                    int shares[1 + BIGO_PARTY_MAX_MEMBERS];
+                                    party_slots[0] = pt->leader_slot;
+                                    for (int m = 0; m < pt->member_count; m++) party_slots[1 + m] = pt->members[m];
+                                    for (int idx = 0; idx < n; idx++) {
+                                        PlayerSlot *ms = &g_slots[party_slots[idx]];
+                                        float dx = ms->state.x - g_wo_file.objects[target].x;
+                                        float dy = ms->state.y - g_wo_file.objects[target].y;
+                                        float dz = ms->state.z - g_wo_file.objects[target].z;
+                                        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+                                        distances_cm[idx] = (int)(dist * 100.0f);
+                                        if (distances_cm[idx] < 0) distances_cm[idx] = 0;
+                                    }
+                                    int range_limit_cm = (int)(BIGO_PARTY_XP_RANGE_UNITS * 100.0f);
+                                    bigo_party_xp_split(pt, reward, distances_cm, range_limit_cm, shares);
+                                    for (int idx = 0; idx < n; idx++) {
+                                        if (shares[idx] <= 0) continue;
+                                        PlayerSlot *ms = &g_slots[party_slots[idx]];
+                                        if (!ms->active) continue;
+                                        award_xp(ms, shares[idx], party_slots[idx]);
+                                    }
+                                    printf("S536-PARTY: player%d's party%d split %d XP for world object %d destroyed (%s)\n",
+                                           i, pid, reward, target, source);
+                                }
 
                                 /* Real, first slice of TYLER/engine/tyler_phone_mechanics.md's
                                    "in-game smartphone system" spec (Phase 1: Messages app +

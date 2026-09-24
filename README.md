@@ -78,6 +78,13 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > re-investigated its old "blocked on zone landmarks" note and found the real blocker (no live
 > QUIET-observation witness path) already resolved by §18. Every other food item is eaten with no effect yet
 > -- eat-to-heal is still real, deliberately unbuilt (no player HP/damage pool exists). See `NORTHSTAR.md` §20.
+> A real, live multiplayer party system: invite/kick/leave, leadership transfer, up to 6 players per party
+> (leader + 5 members) -- reverse-ported from GoblinFoxDragon's own real FFXI-parity `server/party/party.go`,
+> its pure eligibility/XP-split decisions now a real PARENA module (`PARENA/stdlib/big_o/party_rules.prn`).
+> Destroying a world object now splits its XP reward evenly among party members within real range of it,
+> instead of only the destroyer getting credit. No client UI or party-roster HUD yet, and no invite-accept
+> confirmation step (direct invite-add, matching GFD's own pure logic) -- server-only, same "server logic
+> first, client visual later" precedent every phase in this thread has used. See `NORTHSTAR.md` §24.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

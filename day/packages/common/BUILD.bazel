@@ -11,6 +11,7 @@ cc_library(
         "bigo_sky.h",
         "bigo_skycfg.h",
         "bigo_npc_visual.h",
+        "bigo_party.h",
         "bigo_pheromone.h",
         "bigo_walkie_talkie.h",
         "bigo_food_items.h",

@@ -49,6 +49,20 @@
     yet -- eat-to-heal is still real, separate, deliberately not built (no player HP/damage pool
     exists beyond the Regulator kill/respawn binary, see NORTHSTAR.md §18 Phase B), named, not
     faked. See PcItemUsePacket below. */
+#define PC_PACKET_PARTY_INVITE     18 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §24 -- "add full party system parity use the GFD server subsystems". Direct
+    invite-adds target_slot to the sender's party (forming one, sender as leader, on the sender's
+    own first invite) -- GFD's own real party.go Invite() semantics exactly (no accept/consent
+    step in the pure logic; GFD's MUD layers a real accept-prompt UI on top of it, a real, separate,
+    not-yet-built client affordance here, named in NORTHSTAR). Only the party leader may invite.
+    See PcPartyTargetPacket below. */
+#define PC_PACKET_PARTY_KICK       19 /* client -> server: same follow-up. Only the party leader
+    may kick, never themselves. See PcPartyTargetPacket below. */
+#define PC_PACKET_PARTY_LEAVE      20 /* client -> server: same follow-up. Sender leaves their own
+    party voluntarily; if the leader leaves, leadership transfers to the next member in join order
+    (GFD's own real rule); if the leader leaves with no members left, the party disbands. No
+    payload beyond PcHeader -- sender is resolved from the packet's own source address, same
+    convention PcCostumeSetPacket/PcItemUsePacket above already establish. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -300,6 +314,16 @@ typedef struct {
     PcHeader hdr;
     unsigned char slot; /* index into this player's own server-side inventory[], 0..PC_INVENTORY_SLOTS-1 */
 } PcItemUsePacket;
+
+/* PcPartyTargetPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24. Shared by
+ * PC_PACKET_PARTY_INVITE/PC_PACKET_PARTY_KICK (both name a target player); PC_PACKET_PARTY_LEAVE
+ * needs no payload beyond PcHeader and does not use this struct. Sender (the caller/leader) is
+ * resolved from the packet's own source address, same convention every other client->server packet
+ * in this file already establishes. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char target_slot; /* PC_MAX_PLAYERS-space player slot index being invited/kicked */
+} PcPartyTargetPacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

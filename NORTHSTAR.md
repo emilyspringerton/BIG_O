@@ -1110,3 +1110,125 @@ compromise mechanic (item 4); no player-visible pager cue or intercept/jam/steal
 item 6, named above).
 
 session: sess-20260923-1030-4a526255.
+
+## 24. Party system phase 1 (2026-09-23/24, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+Founder real-time, in rapid succession: "add full party system parity use the GFD server subsystems" ->
+"integrate GFD subsystem affordances for economy and soocials" -> "adding the terminal interface to BIGO" ->
+"pull stuff from pitviper but no go code on the front end" -> "PARENA POWER EVERYTHING" -> "ACTUALLY USER PARENA
+EDITOR FOR THE TERMINAL" -> "PORT PARENA EDITOR SPOTLIGHT PLUGIN INTPO BIGO" -> "REFLUX POWER EVERYTHING" --
+eight real-time messages in one burst, each logged via `emily observe` as it arrived (Apples #20564-#20571),
+several superseding earlier ones mid-burst (the terminal-interface framing changed from "PITVIPER affordances,
+no Go" to "actually use the PARENA editor" while still being investigated). Per Principle 19: rather than
+shallow-building all of it blind against direction that was still actively changing message-to-message, this
+pass lands ONE real, fully-scoped, fully-verified piece -- the party system, the first and most concretely
+scoped ask, investigated before any of the later messages arrived -- and names the rest as real, honestly
+queued follow-ups below, each with actual investigation notes, not guesses.
+
+### What shipped: BIG_O's own real, live party system
+
+Reverse-ported from GoblinFoxDragon's own real, already-shipped `server/party/party.go` (the DragonsNShit MUD's
+FFXI-parity 6-player party system) -- checked directly rather than assumed: that package is pure, tested Go
+(Party leader+members, Invite/Kick/Leave/leadership-transfer, XPSplit-by-range, plus Alliance and XPChain as
+its own doc comment says are genuinely separate concerns) wired only into the MUD's text command parser
+(`apps2/mud/main.go`), never into GFD's own UDP real-time server (`apps2/server-go`) -- so "use the GFD server
+subsystems" meant reusing the real DECISION LOGIC, adapted from GFD's string player-slot identifiers to BIG_O's
+own int `PC_MAX_PLAYERS`-slot convention, not a literal code port (the transport layers don't match).
+
+Per "PARENA POWER EVERYTHING": the pure eligibility/XP-math decisions are a new, real PARENA module,
+`PARENA/stdlib/big_o/party_rules.prn` (scalar I32/Bool, no FFI, no RNG, same discipline as witness_rules.prn/
+walkie_rules.prn/fx_rules.prn) -- `party-can-invite`/`party-can-kick` faithfully replay party.go's own real
+precondition-check ORDER (leader check first, so a rejected call's error code tells you which real check
+failed), `party-in-range`/`party-xp-share` replay party.go's own real `XPSplit` rule (even integer division,
+remainder discarded, zero in-range members shares zero, never divides by zero). Generated to
+`day/packages/simulation/party_rules.c` via `scripts/gen_rules.sh` (extended with this module), wired into
+`scripts/build_day.sh` for the first time (a real, live day-server consumer, not a standalone primitive like
+walkie_rules.c currently is).
+
+The actual roster (array-shaped, inherently stateful -- invite/kick/leave-as-list-mutation) is real host C,
+same "pure math in PARENA, mutation in the host" split every other BIG_O PARENA module already draws:
+`day/packages/common/bigo_party.h` (`BigoParty`: leader_slot + up to 5 members, join order) owns
+`bigo_party_invite`/`bigo_party_kick`/`bigo_party_leave`/`bigo_party_xp_split`, each calling into the real
+generated PARENA decisions above for the actual eligibility/math, matching bigo_phone.h's own "state in, mutate,
+read back" contract.
+
+**Live wiring, not just a standalone primitive:** `day/apps/server/src/main.c` gains `g_parties[PC_MAX_PLAYERS]`
+(one real party slot per potential leader, same "one real X per potential player" convention `g_regulators`
+already established) and `find_player_party` (a real, linear roster-slot lookup). Three new client->server
+packets -- `PC_PACKET_PARTY_INVITE`/`_KICK`/`_LEAVE` (18/19/20), `PcPartyTargetPacket` -- give players a real
+way to form/manage a party over the wire, not just in a test harness. Direct invite-add, no accept/consent
+step: this matches party.go's own real, pure `Invite()` semantics exactly (GFD's MUD layers a real accept-
+prompt UI on top of it in `apps2/mud/main.go`'s own `cmdAccept`, a real, separate, not-yet-built client
+affordance here, named below, not silently dropped).
+
+**The real, first live consumer of the XP split:** the existing "destroyed a world object" `award_xp` call site
+(the only real event in this repo with an actual "kill point" location -- the passive per-second XP tick has
+none, so it stays solo-only, a real, honest, deliberate non-fit, not an oversight) now checks
+`find_player_party` first. Solo players get the exact old, unchanged full-reward behavior. A partied player's
+reward splits evenly among every party member within a new `BIGO_PARTY_XP_RANGE_UNITS` (40.0, matching this
+world's own existing largest real detection radius, `PHEROMONE_DETECTION_RADIUS`, rather than inventing an
+unrelated scale) of the destroyed object's own real position; out-of-range members get nothing.
+
+**Verified, not just compiled:** `day/packages/simulation/bigo_party_test.c` (new Bazel target,
+`:bigo_party_test`, 13 real assertions against the real, generated `party_rules.c`, not a mock) covers party
+formation, leader-only invite/kick, no-self-kick, capacity-6 rejection, already-a-member rejection, voluntary
+leave (no leadership change), leader-leave (real leadership transfer to the next member in join order),
+leader-leave-when-alone (real disband), leave-a-party-you're-not-in (safe no-op), and the real XP-split math
+(even split among in-range members, remainder discarded, zero-in-range-shares-zero, no divide-by-zero). A new
+scratch `#include main.c` integration harness (same precedent this whole thread has used) drives the real,
+unmodified `g_parties`/`find_player_party`/`bigo_party_invite`/`bigo_party_kick`/`bigo_party_leave`/
+`bigo_party_xp_split`/`award_xp` end to end against real `PlayerSlot`s and a real `g_wo_file` object position:
+4/4 real assertions pass (party lookup resolves both leader and member; a real 50/50 XP split lands on the
+correct two players' real `state.xp` while a non-party third player is untouched; real kick enforcement; real
+disband-on-solo-leave), ASan/UBSan clean. `bazel test //...` 37/37 green (36 + the new `bigo_party_test`,
+zero regressions). Real `scripts/build_day.sh`/`scripts/build_client.sh` both clean, zero new warnings (the
+same one pre-existing, unrelated `strncpy` warning). `scripts/build.sh` ASan/UBSan rules path clean (4619
+witness_rules.c parity vectors, 26 crew-sim scenarios, both unaffected by this pass). `README.md` updated (a
+real, new, "meaningful, genuinely interesting piece of kit" per SAGA README Reality).
+
+**Real, honest, deliberately NOT built here:** GFD's own Alliance (up to 3 parties, 18 players) and XPChain
+(a consecutive-kill decay bonus) -- both real, separate concerns party.go's own doc comment already draws
+apart from Party itself; no client UI at all (no party-roster HUD, no invite-accept confirmation prompt, no
+phone app screen) -- server logic first, same precedent every phase in this thread has used; no snapshot
+broadcast of party membership (other players can't SEE who's partied with whom yet, only the server and the
+partied players themselves via their own real XP gains); no chat/social layer of any kind.
+
+### Queued, investigated but NOT built this pass (the rest of the 8-message founder burst)
+
+Per Principle 19, each of these got enough real investigation to be named honestly rather than guessed at, but
+none was built -- landing all of it in one pass would have meant shallow-building against direction that was
+still changing mid-burst (the terminal-interface framing itself was corrected twice within the burst).
+
+1. **Economy.** GFD has no single "economy" package -- the real candidates, checked directly: `server/ledger`
+   (NOT a currency system -- it's the TRAPX mocumentary Receipt audit log, FO custody/K9/city-sim verbs, a
+   different real concept entirely, ruled out); `server/market` (a real, complete FFXI-parity Auction House --
+   blind-bid listings, 12-sale price history, listing fees, PS2-terminal-style screen model); `server/auction`.
+   BIG_O itself has zero currency/wallet field anywhere in `papercraft_protocol.h` today (checked) -- Bio-Slurry
+   (§18 Phase B's own named gap) is the closest existing concept, and still has no earning mechanism. A real
+   economy pass needs to resolve "what IS BIG_O's currency" (Bio-Slurry? something new?) before an Auction-House
+   port makes sense at all -- a real, separate scoping pass, not started.
+2. **Socials.** Checked `server/chat` (a real, PURE, position-based Router -- say/tell/yell/guild channels, no
+   I/O, genuinely UDP-friendly, the closest real analog to BIG_O's own architecture of anything found in GFD)
+   and `server/guild` (a real linkshell-style item-token membership system -- Feather/Feather Sack). BIG_O has
+   no chat packet of any kind today (checked `papercraft_protocol.h`) -- `chat.go`'s own pure Router is real,
+   promising, reusable groundwork, but wiring it needs a real new packet type + client-side text input/display,
+   neither of which exists yet. Not started.
+3. **Terminal interface.** Founder direction changed mid-burst, checked and recorded in order: first "pull
+   stuff from pitviper but no go code on the front end" (BIG_O's client is native C/SDL2, so this meant
+   PITVIPER's own design affordances -- PTY-style prompt, vterm rendering -- reinterpreted in C, not a literal
+   Go port), then corrected to "actually use PARENA editor for the terminal," then further detailed as "port
+   PARENA editor spotlight plugin into BIGO." The real, final direction: follow `EDITOR.GAME`'s own already-
+   proven precedent exactly -- that repo already forked PARENA's real `examples/editor_main.c` +
+   `stdlib/editor/*.prn` (buffer, TextMate highlighting, render, widget, split, spotlight) standalone into a
+   launchable SHANKPIT OS app, verified live via a real Xvfb screenshot. BIG_O would need the same real fork,
+   with `stdlib/editor/spotlight.prn` (the fuzzy-finder/command-palette plugin, named explicitly by the
+   founder) as the first real module wired in. Not started -- this is a real, separate, EDITOR.GAME-sized unit
+   of work on its own, not a small addition to fold into this pass.
+4. **REFLUX wiring.** "REFLUX POWER EVERYTHING" -- once economy/socials/party events exist, they should
+   publish through the same real, PARENA-powered REFLUX pub/sub bus `world_alerts_mod.prn` already uses for
+   day/night+weather phone alerts (SECTION 536 Phase 1/6). This pass's own party invite/kick/leave events do
+   NOT publish to REFLUX yet (they only `printf` a server log line, same "real but partial, log-only" honesty
+   this thread's own §23 pager work already used for its own world-observable-cue gap) -- a real, named,
+   mechanical follow-up once REFLUX has a real BIG_O-side subscriber worth wiring these events to.
+
+session: sess-20260923-1030-4a526255.

@@ -285,6 +285,34 @@ cc_test(
     ],
 )
 
+# party_rules -- the real, PARENA-compiled party-system eligibility/XP-split decisions. EMILY/
+# BACKLOG.md SECTION 536 follow-up, founder real-time: "add full party system parity use the GFD
+# server subsystems" -> "PARENA POWER EVERYTHING". Reverse-ported from GoblinFoxDragon's own real
+# server/party/party.go. Generated from PARENA/stdlib/big_o/party_rules.prn via `parena build`,
+# committed here.
+cc_library(
+    name = "party_rules",
+    srcs = ["party_rules.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+# bigo_party_test -- real, pure, headless coverage for packages/common/bigo_party.h's own roster
+# mutation (invite/kick/leave/leadership-transfer) and XP-split decisions, against the real, live
+# PARENA-compiled :party_rules library (not a mock) -- same real cross-package shape
+# bigo_walkie_talkie_test above already establishes. No live day-server consumer yet -- standalone
+# primitive, same "correct primitive, no consumer" pattern this repo's own phases 2/3/5 already
+# established (a real live consumer is a genuinely separate, named follow-up).
+cc_test(
+    name = "bigo_party_test",
+    srcs = ["bigo_party_test.c"],
+    deps = [
+        ":party_rules",
+        "//day/packages/common:common_headers",
+    ],
+)
+
 # weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
 # weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
 # PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.

@@ -20,3 +20,5 @@ echo "regenerated day/packages/simulation/walkie_rules.c"
 "$PARENA_BIN" build "$PRN_DIR/item_drop_mod.prn" -o day/packages/simulation/item_drop_mod.c
 "$PARENA_BIN" build "$PRN_DIR/inventory_mod.prn" -o day/packages/simulation/inventory_mod.c
 echo "regenerated day/packages/simulation/item_drop_mod.c, inventory_mod.c (big_o's own forked mods, not papercraft's shared ones)"
+"$PARENA_BIN" build "$PRN_DIR/party_rules.prn" -o day/packages/simulation/party_rules.c
+echo "regenerated day/packages/simulation/party_rules.c"
