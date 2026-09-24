@@ -634,6 +634,38 @@ static void server_tick_giant_bugs(unsigned int now_ms) {
     }
 }
 
+/* BugEgg / server_init_bug_eggs / server_tick_bug_eggs -- EMILY/BACKLOG.md SECTION 536 follow-up
+ * (queued 2026-09-22, one of four asks, item 4 of that list already closed in §35): "Giant alien-
+ * bug eggs, Godzilla-90s-movie-style, underground -- disturbing them spawns more Giant Zombie
+ * Bugs (Leeroy-Jenkins-style aggro pull)." Real, narrow slice, matching this thread's own
+ * Principle 19 discipline: eggs are real, fixed trigger volumes (same zone-entry-proximity shape
+ * server_tick_decorum's own bigo_in_range check already establishes) that spawn real, live
+ * ServerGiantBug entries into the SAME array/snapshot path server_spawn_giant_bugs already proved
+ * -- no new wire protocol needed, a hatched bug is already visible via the existing
+ * giant_bug_active[]/giant_bugs[] snapshot fields. Placed near BIGO_LAB_ZONE, echoing giant_bug_
+ * values.h's own doc comment tying these units to the lab's cloning theme ("underground" per the
+ * ask). Real, honest, deliberately NOT built here: no "Leeroy-Jenkins-style aggro pull" -- giant
+ * bugs have no movement or player-targeting model of any kind yet anywhere in this codebase
+ * (server_tick_giant_bugs's own doc comment already names "no bug movement" as a pre-existing v0
+ * gap); inventing one here would be a real, separate, much bigger feature than "eggs exist and
+ * hatch," not attempted blind. A hatched bug behaves exactly like the one already-shipped bug:
+ * stationary, eats a nearby zombie if The Men are active to authorize it. */
+#define BIGO_BUG_EGG_MAX 2
+#define BIGO_BUG_EGG_RADIUS 5.0f
+#define BIGO_BUG_EGG_SPAWN_COOLDOWN_MS 60000
+#define BIGO_BUG_EGGS_PER_DISTURB 2
+typedef struct { float x, y, z; unsigned int last_spawn_ms; } BugEgg; /* last_spawn_ms 0 = never spawned yet, always eligible */
+static BugEgg g_bug_eggs[BIGO_BUG_EGG_MAX];
+
+static void server_init_bug_eggs(void) {
+    g_bug_eggs[0].x = BIGO_LAB_ZONE_CX + 12.0f; g_bug_eggs[0].y = 0.0f; g_bug_eggs[0].z = 8.0f;  g_bug_eggs[0].last_spawn_ms = 0;
+    g_bug_eggs[1].x = BIGO_LAB_ZONE_CX + 12.0f; g_bug_eggs[1].y = 0.0f; g_bug_eggs[1].z = -8.0f; g_bug_eggs[1].last_spawn_ms = 0;
+}
+
+/* server_tick_bug_eggs's own definition is below, next to server_tick_decorum -- both need
+   g_slots (PlayerSlot), which isn't declared until later in this file. */
+static void server_tick_bug_eggs(unsigned int now_ms);
+
 static const char *WS_NAMES[] = {"UNAWARE", "DENIAL", "COMPROMISED", "SILENCING", "PANIC", "ENGAGE"};
 
 /* server_tick_witness -- S504-DISPATCH, closes NORTHSTAR.md §8e item 1's LOUD-event half: every
@@ -1127,6 +1159,36 @@ static int find_player_party(int slot) {
  * are real, honest 0s (no live field-gear-carry flag or vault-token mechanic exists yet, so only
  * DA_WRONG_COSTUME can ever fire from this pass); witnesses are real, active Citizen/The-Men NPCs
  * within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real npc_brain_effective_vigilance. */
+static void server_tick_bug_eggs(unsigned int now_ms) {
+    for (int e = 0; e < BIGO_BUG_EGG_MAX; e++) {
+        BugEgg *egg = &g_bug_eggs[e];
+        if (egg->last_spawn_ms != 0 && now_ms - egg->last_spawn_ms < BIGO_BUG_EGG_SPAWN_COOLDOWN_MS) continue;
+
+        int disturbed_by = -1;
+        for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+            PlayerSlot *s = &g_slots[i];
+            if (!s->active) continue;
+            if (bigo_in_range(s->state.x, s->state.z, egg->x, egg->z, BIGO_BUG_EGG_RADIUS)) { disturbed_by = i; break; }
+        }
+        if (disturbed_by < 0) continue;
+
+        int spawned = 0;
+        for (int bi = 0; bi < BIGO_GIANT_BUG_MAX && spawned < BIGO_BUG_EGGS_PER_DISTURB; bi++) {
+            if (g_giant_bugs[bi].active) continue;
+            ServerGiantBug *b = &g_giant_bugs[bi];
+            b->active = 1;
+            b->x = egg->x + (float)(spawned == 0 ? -1 : 1); b->y = egg->y; b->z = egg->z;
+            giant_bug_state_init(&b->bstate, now_ms);
+            spawned++;
+        }
+        if (spawned > 0) {
+            egg->last_spawn_ms = now_ms;
+            printf("S536-EGG: player%d disturbed a bug egg at (%.1f, %.1f) -- %d new giant zombie bug(s) hatched\n",
+                   disturbed_by, egg->x, egg->z, spawned);
+        }
+    }
+}
+
 static void server_tick_decorum(int sock, unsigned int now_ms) {
     for (int i = 0; i < PC_MAX_PLAYERS; i++) {
         PlayerSlot *s = &g_slots[i];
@@ -1987,6 +2049,7 @@ int main(int argc, char **argv) {
     memset(g_entities, 0, sizeof(g_entities));
     server_spawn_npcs(now_ms());
     server_spawn_giant_bugs(now_ms());
+    server_init_bug_eggs();
     bigo_lab_seed_starter_samples(&g_lab);
     g_pickup_radius = (float)on_papercraft_pickup_radius_millis() / 1000.0f;
     printf("Real, PARENA-decided pickup radius: %.2f world units.\n", g_pickup_radius);
@@ -2703,6 +2766,7 @@ int main(int argc, char **argv) {
             server_tick++;
             server_tick_npcs(now);
             server_tick_giant_bugs(now);
+            server_tick_bug_eggs(now);
             server_tick_wheelbarrow();
             server_tick_witness();
             server_tick_dispatch(now);

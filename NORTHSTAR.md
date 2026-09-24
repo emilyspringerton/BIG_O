@@ -2004,3 +2004,50 @@ folded in.
    separate, already-live feedback (a zombie visibly hunting you), not duplicated here.
 
 session: sess-20260923-1030-4a526255.
+
+## 36. Giant alien-bug eggs -- disturbing them hatches more Giant Zombie Bugs (2026-09-24, closes half of SECTION 536 follow-up wishlist item 4)
+
+Founder real-time (queued 2026-09-22): "Giant alien-bug eggs, Godzilla-90s-movie-style, underground -- disturbing
+them spawns more Giant Zombie Bugs (Leeroy-Jenkins-style aggro pull)." Real, narrow slice per Principle 19: the
+"eggs exist and hatching them spawns real bugs" half is genuinely buildable today by reusing already-proven
+primitives; the "Leeroy-Jenkins-style aggro pull" half would need giant bugs to have a movement/player-targeting
+model, which does not exist anywhere in this codebase yet (`server_tick_giant_bugs`'s own doc comment already
+names "no bug movement" as a pre-existing v0 gap for the ALREADY-shipped single bug) -- inventing one here would be
+a real, separate, much bigger feature, not attempted blind.
+
+### What shipped
+
+- **`day/apps/server/src/main.c`**: `BugEgg` (x/y/z + `last_spawn_ms` cooldown timestamp), `g_bug_eggs[2]`, placed
+  near `BIGO_LAB_ZONE` (echoing `giant_bug_values.h`'s own doc comment tying these units to the lab's cloning
+  theme -- "underground" per the ask). `server_tick_bug_eggs`: real proximity check (`bigo_in_range`, same shape
+  `server_tick_decorum`'s own zone-entry check already uses) against every active player; if disturbed and the
+  egg's own 60s cooldown has elapsed, hatches up to 2 new `ServerGiantBug` entries into the SAME array
+  `server_spawn_giant_bugs` already populates, via the same, already-tested `giant_bug_state_init`. **No new wire
+  protocol needed** -- a hatched bug is already visible to every connected client via the existing
+  `giant_bug_active[]`/`giant_bugs[]` snapshot fields (confirmed by reading `main.c`'s own snapshot-build code
+  before writing anything, not assumed).
+
+### Verified, not just compiled
+
+- `scripts/build_day.sh`/`scripts/build_client.sh`/`scripts/build.sh` (ASan/UBSan core path) all clean.
+  `bazel test //...` still 42/42 green (this feature has no pure-math component worth its own unit test -- it's a
+  direct integration of already-unit-tested primitives, same judgment call `server_tick_decorum`'s own integration
+  code made).
+- **A real, live scratch harness** (`#include main.c`, same precedent every prior verification in this thread uses,
+  ASan/UBSan clean, not committed): confirmed no player near an egg spawns nothing; a player standing on an egg
+  hatches exactly `BIGO_BUG_EGGS_PER_DISTURB` (2) real bugs into `g_giant_bugs[]`; standing there through a second
+  tick inside the cooldown window spawns nothing more; a tick past the cooldown hatches 2 more into the remaining
+  free slots (4 total, `BIGO_GIANT_BUG_MAX` is 8, so headroom for one more full disturbance before the array fills).
+
+### Real, honest, deliberately NOT built here
+
+1. **No "Leeroy-Jenkins-style aggro pull."** Hatched bugs behave exactly like the one already-shipped bug: stationary,
+   eat a nearby zombie only if The Men are active to authorize it. No movement, no player-targeting, no attack --
+   naming this rather than guessing at what a from-scratch bug-AI-movement system should look like.
+2. **No visual for the egg itself.** No new geometry/model -- eggs are invisible trigger volumes today, same
+   "logic first, visual later" precedent every mechanic in this repo has used (the hatched bugs themselves DO
+   render, reusing the existing giant-bug visual from §19).
+3. **Only 2 eggs, fixed positions, no persistence.** A real, small v0 population, not the "underground" plural the
+   ask implies at scale -- easy to grow `BIGO_BUG_EGG_MAX` later once the mechanic itself is proven live.
+
+session: sess-20260923-1030-4a526255.

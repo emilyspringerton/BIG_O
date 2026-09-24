@@ -84,6 +84,10 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > founder real-time aside ("the top regulator is a pop singer dancing werewolf ninja John Wick") landed as a
 > small, honest flavor nod using zero new art, with the full werewolf/ninja/John-Wick character named as real,
 > asset-blocked future work rather than guessed at. See `NORTHSTAR.md` §19.
+> There are now real giant-alien-bug eggs underground near the lab: get close enough to one and it hatches (two
+> more real, live giant zombie bugs, on a real cooldown so it can't be farmed every tick). No visual on the egg
+> itself yet, and a hatched bug is exactly as stationary/non-aggressive as the one that already existed — no
+> "charges the player" behavior, since giant bugs have no movement AI of any kind yet. See `NORTHSTAR.md` §36.
 > The Cargo phone app finally does something: selecting an item now consumes it, and smashing the cake
 > triggers the real cake-smash distraction (halves nearby Citizen/The Men vigilance for 8 seconds) --
 > re-investigated its old "blocked on zone landmarks" note and found the real blocker (no live

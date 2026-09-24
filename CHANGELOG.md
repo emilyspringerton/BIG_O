@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-09-24 (5)
+- feat(day): giant alien-bug eggs -- disturbing them hatches more Giant Zombie Bugs (EMILY/BACKLOG.md SECTION 536
+  follow-up wishlist item 4, BIG_O/NORTHSTAR.md §36). Founder real-time (queued 2026-09-22): "Giant alien-bug eggs,
+  Godzilla-90s-movie-style, underground -- disturbing them spawns more Giant Zombie Bugs." New `BugEgg`/
+  `g_bug_eggs[2]`/`server_tick_bug_eggs` in `day/apps/server/src/main.c`: real proximity trigger (same shape
+  `server_tick_decorum`'s own zone-entry check uses), 60s cooldown, hatches into the SAME `g_giant_bugs[]` array
+  `server_spawn_giant_bugs` already populates -- no new wire packet needed, hatched bugs are already visible via
+  the existing snapshot fields. `scripts/build_day.sh`/`build_client.sh`/`build.sh` (ASan/UBSan core) all clean,
+  `bazel test //...` still 42/42 green. A real, live scratch harness (ASan/UBSan clean, not committed) confirmed
+  proximity-triggers-hatch, cooldown-blocks-repeat, and cooldown-elapsed-hatches-more. Real, honest, not built: no
+  "Leeroy-Jenkins-style aggro pull" (giant bugs have no movement/player-targeting model anywhere in this codebase
+  yet -- a real, separate, much bigger feature, not guessed at), no egg visual (invisible trigger volume, same
+  "logic first" precedent this repo always uses). (sess-20260923-1030-4a526255)
+
 ## 2026-09-24 (4)
 - feat(day): awareness vectors -- real "you've been noticed" feedback (EMILY/BACKLOG.md SECTION 536 follow-up
   queued item 4, BIG_O/NORTHSTAR.md §35). Founder real-time (queued 2026-09-22): "every agent in the system,
