@@ -52,6 +52,7 @@
 #include "../../../packages/common/bigo_hoverboard.h"
 #include "../../../packages/common/bigo_gfd_bridge.h"
 #include "../../../packages/common/bigo_walkie_talkie.h"
+#include "../../../packages/common/bigo_lab.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -1098,6 +1099,13 @@ static void server_tick_regulators(unsigned int now_ms) {
  * (PARENA/stdlib/big_o/party_rules.prn). */
 static BigoParty g_parties[PC_MAX_PLAYERS];
 
+/* g_lab -- the real, ONE, crew-shared lab (EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/
+ * NORTHSTAR.md §30), matching NORTHSTAR.md §7's own "one crew, one basement" v0 model exactly --
+ * unlike g_parties above (one real slot per potential player leader), there is exactly one real
+ * lab in BIG_O's v0, so this is a single instance, not an array. Seeded at startup
+ * (bigo_lab_seed_starter_samples), mutated live by PC_PACKET_LAB_CENTRIFUGE. */
+static LabCrewState g_lab;
+
 /* find_player_party -- real, linear scan (PC_MAX_PLAYERS is small, same "obviously fine" bar
  * PC_PACKET_INTERACT's own nearest-object pick already uses) for the party slot containing player
  * slot. Returns the party's own index into g_parties (== its leader's original slot, but callers
@@ -1659,6 +1667,40 @@ static void send_inventory_update(int sock, PlayerSlot *s) {
     sendto(sock, &iu, sizeof(iu), 0, (struct sockaddr *)&s->addr, s->addr_len);
 }
 
+/* send_lab_update_to -- real, whole-crew-lab sync to ONE address (the real primitive both the
+   WELCOME catch-up and the broadcast helper below share). Converts g_lab's own internal
+   LabSample rows into the real, protocol-owned PcLabSampleWire mirror (papercraft_protocol.h's
+   own doc comment on PcLabSampleWire names why this stays a real, separate conversion rather than
+   reusing LabSample directly on the wire). */
+static void send_lab_update_to(int sock, struct sockaddr_in *addr, socklen_t addr_len) {
+    PcLabUpdatePacket lu;
+    memset(&lu, 0, sizeof(lu));
+    lu.hdr.type = PC_PACKET_LAB_UPDATE;
+    lu.sample_count = (unsigned char)g_lab.sample_count;
+    for (int i = 0; i < g_lab.sample_count && i < BIGO_LAB_SAMPLE_MAX_WIRE; i++) {
+        LabSample *src = &g_lab.samples[i];
+        PcLabSampleWire *dst = &lu.samples[i];
+        dst->contamination_pct = src->contamination_pct;
+        dst->purity_pct = src->purity_pct;
+        dst->integrity_pct = src->integrity_pct;
+        dst->read_depth = src->read_depth;
+        dst->generation = src->generation;
+        dst->genetic_drift = src->genetic_drift;
+    }
+    sendto(sock, &lu, sizeof(lu), 0, (struct sockaddr *)addr, addr_len);
+}
+
+/* broadcast_lab_update -- real, whole-crew-lab sync to EVERY active player (unlike
+   send_inventory_update above, the lab is real, shared crew state, NORTHSTAR.md §7 -- every crew
+   member needs to see the same real sample data, not just whoever triggered the last action).
+   Called once after every real lab mutation. */
+static void broadcast_lab_update(int sock) {
+    for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+        if (!g_slots[i].active) continue;
+        send_lab_update_to(sock, &g_slots[i].addr, g_slots[i].addr_len);
+    }
+}
+
 /* send_weapon_owned_update -- real, whole-bitmask sync to ONE specific player, same real
    "private to the owner" convention send_inventory_update above already establishes. Called
    once, right after granting a new weapon (never on every tick -- this is an event, not
@@ -1923,6 +1965,7 @@ int main(int argc, char **argv) {
     memset(g_entities, 0, sizeof(g_entities));
     server_spawn_npcs(now_ms());
     server_spawn_giant_bugs(now_ms());
+    bigo_lab_seed_starter_samples(&g_lab);
     g_pickup_radius = (float)on_papercraft_pickup_radius_millis() / 1000.0f;
     printf("Real, PARENA-decided pickup radius: %.2f world units.\n", g_pickup_radius);
 
@@ -2063,6 +2106,7 @@ int main(int argc, char **argv) {
                     if (g_entities[e].active) broadcast_entity_spawn_to(sock, e, s);
                 }
                 send_inventory_update(sock, s);
+                send_lab_update_to(sock, &s->addr, s->addr_len);
             } else if (hdr.type == PC_PACKET_USERCMD && (size_t)n >= sizeof(PcUserCmdPacket)) {
                 /* Real per-slot dispatch by reply address -- same convention
                    WEAKNIGHT_BEDROCK_RACERS' own server uses for its own human slot 0. */
@@ -2207,6 +2251,35 @@ int main(int argc, char **argv) {
                             }
                             send_inventory_update(sock, s);
                         }
+                    }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_LAB_CENTRIFUGE && (size_t)n >= sizeof(PcLabCentrifugePacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §30 -- core/
+                   lab_sim.c's first real live consumer. Real, crew-shared mutation (NORTHSTAR.md
+                   §7): any currently-connected player may run the centrifuge on any real crew
+                   sample, matching this v0's own "one crew, one basement, no per-player
+                   ownership" lab model. Sender is still resolved from the packet's own source
+                   address (same convention every other client->server packet here establishes),
+                   purely to confirm the request came from a real, currently-connected player --
+                   the mutation itself is not per-sender. */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcLabCentrifugePacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    if (bigo_lab_centrifuge(&g_lab, req.sample_index)) {
+                        printf("S536-LAB: player%d ran the centrifuge on sample %d "
+                               "(purity now %.1f%%, integrity %.1f%%)\n",
+                               i, req.sample_index, g_lab.samples[req.sample_index].purity_pct,
+                               g_lab.samples[req.sample_index].integrity_pct);
+                        broadcast_lab_update(sock);
+                    } else {
+                        printf("S536-LAB: player%d centrifuge request for invalid sample %d rejected\n",
+                               i, req.sample_index);
                     }
                     break;
                 }

@@ -80,6 +80,16 @@
     PcWheelbarrowTogglePacket, this needs to name WHICH board too). Sender is resolved from the
     packet's own source address, same convention every client->server packet above establishes.
     See PcHoverboardTogglePacket below. */
+#define PC_PACKET_LAB_CENTRIFUGE   24 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §30 -- core/lab_sim.c's first real live consumer. sample_index selects a
+    real, crew-shared LabSample; the server runs a fixed "standard spin" preset (no float-input
+    affordance over the D-pad phone UI) and broadcasts the real, updated crew lab state back via
+    PC_PACKET_LAB_UPDATE. See PcLabCentrifugePacket below. */
+#define PC_PACKET_LAB_UPDATE       25 /* server -> ALL active players (crew-shared state, unlike
+    PcInventoryUpdatePacket's own private-to-one-owner convention -- NORTHSTAR.md §7's "one crew,
+    one basement" lab is real, shared crew state, not per-player): the whole real sample list,
+    sent on connect (catch-up, same convention send_inventory_update's own WELCOME-time call
+    already establishes) and after every real mutation. See PcLabUpdatePacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -354,6 +364,51 @@ typedef struct {
     PcHeader hdr;
     unsigned char target_slot; /* PC_MAX_PLAYERS-space player slot index being invited/kicked */
 } PcPartyTargetPacket;
+
+/* PcLabCentrifugePacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §30.
+ * sample_index selects a real, crew-shared LabSample (bigo_lab.h's own LabCrewState) -- the
+ * server runs a fixed real "standard spin" preset, no minutes/rpm on the wire, matching every
+ * other BIG_O phone app's D-pad-menu (not free-input) shape. Sender resolved from the packet's
+ * own source address, same convention every other client->server packet here establishes. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char sample_index;
+} PcLabCentrifugePacket;
+
+#define BIGO_LAB_SAMPLE_MAX_WIRE 6 /* mirrors bigo_lab.h's own BIGO_LAB_SAMPLE_MAX -- kept as an
+    independent, protocol-owned constant rather than #including core/lab_sim.h from this file,
+    matching this file's own existing self-contained-wire-format discipline (it includes only
+    papercraft_worldobjects.h, never reaches into core/). bigo_lab_test.c _Static_asserts the two
+    stay equal, same "can't silently drift apart" precedent bigo_chat_test.c's own 96-byte
+    BIGO_CHAT_MAX_TEXT check already established. */
+
+/* PcLabSampleWire -- a real, protocol-owned mirror of core/lab_sim.h's own LabSample (identical
+ * field set/order/types -- floats, then a real int generation, then a real one-way float drift;
+ * no padding on any real target this repo builds for, all fields are already 4-byte-aligned).
+ * Deliberately a separate type from LabSample itself (not a #include + direct reuse) so the wire
+ * format doesn't leak an internal simulation-engine struct across the network boundary -- the
+ * same real judgment this file's own existing structs (PcEntitySpawnPacket's plain float x/y/z,
+ * not a reused internal Vec3) already make. */
+typedef struct {
+    float contamination_pct;
+    float purity_pct;
+    float integrity_pct;
+    float read_depth;
+    int generation;
+    float genetic_drift;
+} PcLabSampleWire;
+
+/* PcLabUpdatePacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §30. Real,
+ * whole-crew-lab sync, broadcast to EVERY active player (not just one owner -- NORTHSTAR.md §7's
+ * "one crew, one basement" lab is real, shared crew state, the deliberate opposite of
+ * PcInventoryUpdatePacket's own private-to-one-owner convention). Sent on connect (real catch-up,
+ * same convention send_inventory_update's own WELCOME-time call already establishes) and after
+ * every real mutation. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char sample_count;
+    PcLabSampleWire samples[BIGO_LAB_SAMPLE_MAX_WIRE];
+} PcLabUpdatePacket;
 
 /* PcChatSayPacket/PcChatRecvPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md
  * §24. Deliberate departure from PcPhoneMessagePacket's own fixed-id-table convention: chat is

@@ -36,9 +36,13 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > compounding cycle damage/contamination creep), a sequencer readout (a genuinely noisy instrument estimate, not
 > ground truth), a CRISPR splice bench (guide-RNA off-target mutation, nonsense-mediated decay, and cryptic-splice
 > failure as real, distinct outcomes — not just a pass/fail roll), a repressor/kill-switch install with its own
-> reliability score, breeding with one-way genetic drift across generations, and embryo incubation viability. This
-> is the simulation core only — it is not yet wired into the phone's `BP_APP_LAB` screen or persisted anywhere; that
-> UI is still the client-only mockup it always was. See `NORTHSTAR.md` §9 for what's deferred.
+> reliability score, breeding with one-way genetic drift across generations, and embryo incubation viability.
+> The centrifuge station is now live on the real day server: a crew-shared sample inventory (`g_lab`, 3 real
+> starter samples seeded at boot — a real day-harvest bridge doesn't exist yet) mutates over a real UDP packet
+> (`PC_PACKET_LAB_CENTRIFUGE`) and syncs back to every connected player (`PC_PACKET_LAB_UPDATE`). PCR/sequencer/
+> CRISPR-splice/repressor/breed/incubate are still real, tested, server-side-only primitives with no packet of
+> their own yet, and the phone's `BP_APP_LAB` screen is still its own original client-only mockup (a different,
+> simpler data model) — no client input sends the new packet yet. See `NORTHSTAR.md` §30 for what's deferred.
 > Zombies can now be commanded: press **G** to throw a pheromone marker (`PC_PACKET_PHEROMONE_THROW`), and any
 > zombie within range locks on (`has_target` is no longer hardcoded 0) and steers toward it, escalating mood toward
 > HUNTING/FRENZIED as it closes in — verified live against a running server. No autonomous player-detection yet (a

@@ -11,6 +11,6 @@ gcc -std=gnu11 -O2 -Wall -Wno-unused-function -Wno-comment -Ipackages/common -Ip
   packages/simulation/walkie_rules.c \
   packages/simulation/walkie_callsign.c \
   ../core/npc_archetype.c ../core/zombie_values.c ../core/humanness.c ../core/witness_rules.c \
-  ../core/giant_bug_values.c ../core/giant_bug_brain.c \
+  ../core/giant_bug_values.c ../core/giant_bug_brain.c ../core/lab_sim.c \
   -o ../build/bigo_day_server -lm -ldl -lpthread
 echo "DAY BUILD CLEAN"

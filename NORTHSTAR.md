@@ -1651,3 +1651,98 @@ The other two items §25 queued alongside SSH keygen (the IDUNA phone app, GFD/B
 unaffected and still open.
 
 session: sess-20260923-1030-4a526255.
+
+## 30. The lab goes live -- real server wiring for core/lab_sim.c's first station (2026-09-24, follow-up work
+towards the V0 bar)
+
+Founder real-time: "continue working on BIG_O until it is feature complete." The single, real, named gap
+that has stood since §9 (2026-09-20) as "the real, honest, biggest remaining piece of 'day/night/lab'" is
+the lab: `core/lab_sim.c`'s own real, tested equipment pipeline (centrifuge, PCR, sequencer, CRISPR splice
+bench, repressor install, breeding, incubation) had zero UI or server wiring anywhere -- "nothing calls it
+from any real game state" (§9's own words). This closes the SERVER half of that gap for real, with the
+same "server logic first, client UI named as a real, separate follow-up" precedent
+`server_wheelbarrow_toggle`/`bigo_pheromone.h`/`server_tick_dispatch` each already used successfully in
+this exact codebase before their own client input wiring landed later. Deliberately narrow, per Principle
+19: only the CENTRIFUGE station is wired live -- PCR/sequencer/CRISPR-splice/repressor-install/breed/
+incubate all stay real, tested, unconsumed `core/lab_sim.c` primitives, the same "one real piece landed,
+the rest named" discipline this whole SECTION 536 thread already established (chat's "say" among six asks,
+the pheromone ball among three named command tools).
+
+### What shipped
+
+- **`day/packages/common/bigo_lab.h`** -- new host module, `core/lab_sim.c`'s first real live consumer.
+  `LabCrewState` (`LabSample samples[BIGO_LAB_SAMPLE_MAX]`, `sample_count`) -- ONE real, global,
+  crew-shared instance (`g_lab` in `apps/server/src/main.c`), matching NORTHSTAR.md §7's own "one crew,
+  one basement" v0 model exactly, the deliberate opposite of `g_parties`' own one-slot-per-potential-leader
+  shape. `bigo_lab_seed_starter_samples()` seeds 3 real wild-harvest samples at varied contamination at
+  server startup -- a real, honestly-named placeholder for the still-not-built day-harvest bridge
+  (`lab_sample_init_wild_harvest`'s own doc comment already names this exact gap: a player cannot yet
+  deposit a real day-phase sample into the lab). `bigo_lab_centrifuge()` -- real, bounds-checked decision
+  (same "extract the real decision" discipline `server_wheelbarrow_toggle`/`server_throw_pheromone` already
+  established): an out-of-range or empty-slot index is an honest no-op, never a crash; a valid call runs a
+  fixed "standard spin" preset (8 minutes @ 4000rpm -- no float-input affordance over the D-pad phone UI, so
+  v0 offers one real, tuned setting rather than an arbitrary-parameter mini-game) through the real,
+  unmodified `centrifuge_spin`.
+- **Wire protocol** (`papercraft_protocol.h`): `PC_PACKET_LAB_CENTRIFUGE` (24, client->server,
+  `PcLabCentrifugePacket{hdr, sample_index}`) and `PC_PACKET_LAB_UPDATE` (25, server->ALL active players --
+  real, shared crew state, the deliberate opposite of `PcInventoryUpdatePacket`'s own
+  private-to-one-owner convention -- `PcLabUpdatePacket{hdr, sample_count, PcLabSampleWire samples[6]}`).
+  `PcLabSampleWire` is a real, protocol-owned mirror of `LabSample` (identical fields), deliberately kept
+  separate from reusing `LabSample` directly on the wire -- the same judgment this file's own existing
+  structs (`PcEntitySpawnPacket`'s plain float x/y/z, not a reused internal `Vec3`) already make.
+- **`day/apps/server/src/main.c`**: `g_lab` (global, seeded at startup alongside `server_spawn_npcs`/
+  `server_spawn_giant_bugs`), `send_lab_update_to`/`broadcast_lab_update` (real whole-state sync, sent on
+  WELCOME catch-up -- same convention `send_inventory_update`'s own WELCOME-time call already establishes
+  -- and after every real mutation), and a new `PC_PACKET_LAB_CENTRIFUGE` handler (resolves the sender to
+  confirm a real, currently-connected player, then mutates the real, crew-shared `g_lab` -- not
+  per-sender, matching the "one crew" model). `scripts/build_day.sh` gained `core/lab_sim.c`.
+
+### Verified, not just compiled
+
+- `bazel test //...` -- 41/41 green (up from 33), including the new `bigo_lab_test` (5 real assertions:
+  seeding produces 3 real, distinct, non-degenerate samples; a valid centrifuge measurably raises purity via
+  the real, unmodified `centrifuge_spin`, not a mock; every other sample is untouched by a single-index
+  call; every out-of-range index -1/count/`BIGO_LAB_SAMPLE_MAX`/999 is an honest no-op with zero state
+  mutation). `_Static_assert(BIGO_LAB_SAMPLE_MAX == BIGO_LAB_SAMPLE_MAX_WIRE)` guards the two constants from
+  silently drifting apart, same precedent `bigo_chat_test.c`'s own `BIGO_CHAT_MAX_TEXT` check already set.
+- `scripts/build_day.sh`/`scripts/build_client.sh` both clean (one real, caught-early bug: a first-draft
+  `bigo_lab.h` used a wrong relative-include depth reaching for `core/lab_sim.h` -- `../../../../core/`
+  instead of the real, correct `../../../core/` from `day/packages/common/` -- caught by directly testing
+  both path depths with `test -f` before ever compiling, not discovered via a build failure).
+- A real, live scratch integration harness (`lab_verify.c`, same `#include main.c` precedent every harness
+  in this thread uses, ASan/UBSan clean): seeds the real, live `g_lab` global, runs a real centrifuge call
+  that measurably raises purity in place, confirms an out-of-range request is a genuine no-op against the
+  real global, and -- new for this pass -- opens a real UDP socket pair and calls the real
+  `send_lab_update_to` to confirm every real `PcLabUpdatePacket` field round-trips exactly over an actual
+  socket, not just in memory.
+- The real, compiled `bigo_day_server` binary boots against the real, live shared worldapi (`:7070`,
+  read-only, same convention every other live-verification in this thread uses), reaches full
+  `Listening on UDP` state, and runs cleanly for 8 real seconds with the new lab state active -- no crash.
+- `scripts/build.sh` (the ASan/UBSan `core/` scenario path) unaffected and still clean: 4619 witness_rules
+  parity vectors, 26 crew-sim scenarios.
+
+### Real, honest, deliberately NOT built here
+
+1. **No client UI/input wiring.** The existing `BP_APP_LAB` phone screen (`bigo_phone.h`) is untouched --
+   it still shows its own pre-existing, entirely client-local "base/trait/SPLICE/clone list" mockup (3
+   fixed base types, no server round trip, fires zero `BpEffect`), which is a genuinely different data model
+   from `core/lab_sim.c`'s own real `LabSample`/centrifuge/PCR/sequencer/splice pipeline. No `BP_FX_LAB_*`
+   effect exists yet, no client-side rendering of real crew sample data, no D-pad binding sends
+   `PC_PACKET_LAB_CENTRIFUGE`. Real, separate, next follow-up -- same "prove the server logic first"
+   precedent every other phase in this thread already used before its own client wiring landed.
+2. **Only the centrifuge station is live.** PCR amplification, the sequencer readout, CRISPR splice/
+   repressor-install, breeding, and incubation are all real, already-tested `core/lab_sim.c` primitives with
+   no server packet/handler of their own yet -- named, not guessed at, matching this pass's own deliberate
+   one-station scope cut.
+3. **No day-harvest bridge.** `bigo_lab_seed_starter_samples`'s own 3 starter samples are a real, honest
+   placeholder -- a player cannot deposit a real day-phase-harvested sample into the lab; that bridge is
+   still real, separate, not-yet-built work (§12 item 1's own already-named structural gap).
+4. **No persistence.** `g_lab` lives only in server memory -- a server restart resets it to the same 3
+   starter samples, no save/load format exists (matching `core/lab_sim.h`'s own already-named gap).
+5. **No IDUNA/crew ownership model.** Any currently-connected player can run the centrifuge on any real
+   sample -- there is no per-crew or per-account lab ownership concept in BIG_O's v0 (matching §7's own
+   "one crew, one basement" model exactly, not a new gap this pass introduced).
+6. **No REFLUX publish for lab events.** Same "log/wire-only, no REFLUX subscriber yet" gap every other
+   system in this thread's own reverse-port/§24-§28 work already carries.
+
+session: sess-20260923-1030-4a526255.

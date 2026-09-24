@@ -97,6 +97,10 @@ cc_library(
     srcs = ["core/lab_sim.c"],
     hdrs = ["core/lab_sim.h"],
     copts = COPTS,
+    # public: day/packages/common/bigo_lab.h (EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/
+    # NORTHSTAR.md §30) is the first real cross-package consumer -- the day/packages/common
+    # package's own bigo_lab_test needs this label visible outside the root package.
+    visibility = ["//visibility:public"],
 )
 
 cc_test(

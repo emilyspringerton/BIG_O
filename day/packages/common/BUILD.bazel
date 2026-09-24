@@ -18,6 +18,7 @@ cc_library(
         "bigo_pheromone.h",
         "bigo_walkie_talkie.h",
         "bigo_food_items.h",
+        "bigo_lab.h",
         "hmac_sha256.h",
         "http_client.h",
         "hud_text.h",
@@ -30,6 +31,21 @@ cc_library(
         "papercraft_worldobjects.h",
     ],
     visibility = ["//visibility:public"],
+)
+
+# bigo_lab_test -- real, direct coverage for bigo_lab.h's own crew-shared lab state and bounds-
+# checked centrifuge decision (EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §30) --
+# core/lab_sim.c's first real live consumer. bigo_lab.h is the first header in this package to
+# reach into core/ (root package), so this depends on //:lab_sim directly (public visibility,
+# root BUILD.bazel) in addition to :common_headers for bigo_lab.h/papercraft_protocol.h
+# themselves.
+cc_test(
+    name = "bigo_lab_test",
+    srcs = ["bigo_lab_test.c"],
+    deps = [
+        ":common_headers",
+        "//:lab_sim",
+    ],
 )
 
 # hmac_sha256_test -- real RFC 4231 test-vector coverage for this repo's own real connect-ticket
