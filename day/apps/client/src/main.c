@@ -1296,6 +1296,37 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
 }
 
 
+/* draw_hoverboard -- a simple wedge (triangular prism, low pointed nose at +z matching
+ * draw_player_marker's own "+z = forward" convention) under a mounted player's feet. EMILY/
+ * BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §26. board_type's literal 1/2/3 values are
+ * hardcoded here rather than calling board_speedster()/board_tank()/board_glider() (this client
+ * never links hoverboard_rules.c -- same real "client hardcodes a shared id" convention
+ * PC_PHONE_MESSAGE_TABLE already establishes for message ids); must stay in sync with
+ * PARENA/stdlib/big_o/hoverboard_rules.prn's own real board identity. */
+static void draw_hoverboard(float x, float y, float z, float yaw, int board_type) {
+    if (board_type == 0) return; /* BIGO_BOARD_NONE (bigo_hoverboard.h) */
+    glPushMatrix();
+    glTranslatef(x, y + 0.06f, z); /* hovers just under the player's own feet-level y */
+    glRotatef(yaw * 180.0f / (float)M_PI, 0.0f, 1.0f, 0.0f);
+    float bw = 0.4f, bl = 0.7f, bh = 0.15f;
+    if (board_type == 1) glColor3f(0.9f, 0.2f, 0.2f);       /* SPEEDSTER */
+    else if (board_type == 2) glColor3f(0.3f, 0.35f, 0.4f); /* TANK */
+    else glColor3f(0.3f, 0.7f, 0.95f);                      /* GLIDER */
+    glBegin(GL_QUADS);
+    /* back (tall) face */
+    glVertex3f(-bw, bh, -bl); glVertex3f(bw, bh, -bl); glVertex3f(bw, 0.0f, -bl); glVertex3f(-bw, 0.0f, -bl);
+    /* flat bottom */
+    glVertex3f(-bw, 0.0f, -bl); glVertex3f(bw, 0.0f, -bl); glVertex3f(bw, 0.0f, bl); glVertex3f(-bw, 0.0f, bl);
+    /* sloped top, tapering to the front nose */
+    glVertex3f(-bw, bh, -bl); glVertex3f(-bw, 0.0f, bl); glVertex3f(bw, 0.0f, bl); glVertex3f(bw, bh, -bl);
+    glEnd();
+    glBegin(GL_TRIANGLES);
+    glVertex3f(-bw, bh, -bl); glVertex3f(-bw, 0.0f, -bl); glVertex3f(-bw, 0.0f, bl); /* left side */
+    glVertex3f(bw, bh, -bl); glVertex3f(bw, 0.0f, bl); glVertex3f(bw, 0.0f, -bl);    /* right side */
+    glEnd();
+    glPopMatrix();
+}
+
 static void draw_player_marker(float x, float y, float z, float yaw, int is_own) {
     glPushMatrix();
     glTranslatef(x, y + 0.9f, z);
@@ -1816,6 +1847,24 @@ int main(int argc, char **argv) {
                     req.x = own_now.x + sinf(cam_yaw) * PC_PHEROMONE_THROW_DISTANCE;
                     req.y = own_now.y;
                     req.z = own_now.z + cosf(cam_yaw) * PC_PHEROMONE_THROW_DISTANCE;
+                    sendto(sock, (const char *)&req, sizeof(req), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+                }
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §26, founder real-time:
+                   "add air ships like wedge shaped hover skateboards" -- V cycles the local player's
+                   own mount state (dismount -> SPEEDSTER -> TANK -> GLIDER -> dismount) and sends the
+                   real request; same "client asks, server decides" split PC_PACKET_INTERACT already
+                   establishes -- board-count()/board-is-valid() (PARENA, hoverboard_rules.prn) are
+                   the real, only validator. Guarded off while the GFD terminal has text-input focus
+                   so typing a literal "v" into chat can't also toggle a mount mid-sentence. */
+                if (e.key.keysym.sym == SDLK_v && !(phone.open && phone.app == BP_APP_GFD)) {
+                    int current = latest_snap.players[my_slot].mounted_board;
+                    int next = (current + 1) % 4; /* 0=BIGO_BOARD_NONE, 1..3=SPEEDSTER..GLIDER -- same
+                        literal-board-type convention draw_hoverboard() above already uses, not
+                        board_speedster()/etc (client deliberately doesn't link hoverboard_rules.c) */
+                    PcHoverboardTogglePacket req; memset(&req, 0, sizeof(req));
+                    req.hdr.type = PC_PACKET_HOVERBOARD_TOGGLE;
+                    req.hdr.sequence = ++allocate_seq;
+                    req.requested_board = (unsigned char)next;
                     sendto(sock, (const char *)&req, sizeof(req), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
                 }
                 /* Real "arsenal" weapon-switch request -- F1-F6, matching PC_WPN_KNIFE..KATANA's
@@ -2383,6 +2432,7 @@ int main(int argc, char **argv) {
                 if (!latest_snap.active[i]) continue;
                 PcPlayerState *p = &latest_snap.players[i];
                 draw_player_marker(p->x, p->y, p->z, p->yaw, i == my_slot);
+                draw_hoverboard(p->x, p->y, p->z, p->yaw, p->mounted_board);
             }
             bigo_sky_fog_off();
             bigo_sky_draw_precip(&g_sky, eye_x, eye_y, eye_z, now);

@@ -338,6 +338,33 @@ cc_test(
     ],
 )
 
+# hoverboard_rules -- the real, PARENA-compiled per-board physics tuning (accel/friction/max-speed/
+# gravity-scale) for BIG_O's own new "air ship" hover skateboards. EMILY/BACKLOG.md SECTION 536
+# follow-up, founder real-time (2026-09-24): "add air ships like wedge shaped hover skateboards
+# they have different physics per board and they can be programmed in parena friction and gravity
+# etc can be tuned". Generated from PARENA/stdlib/big_o/hoverboard_rules.prn via `parena build`,
+# committed here.
+cc_library(
+    name = "hoverboard_rules",
+    srcs = ["hoverboard_rules.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+# bigo_hoverboard_test -- real, pure, headless coverage for packages/common/bigo_hoverboard.h's own
+# momentum-physics integration, against the real, live PARENA-compiled :hoverboard_rules library
+# (not a mock) -- same real cross-package shape bigo_chat_test above already establishes.
+cc_test(
+    name = "bigo_hoverboard_test",
+    srcs = ["bigo_hoverboard_test.c"],
+    deps = [
+        ":hoverboard_rules",
+        "//day/packages/common:common_headers",
+    ],
+    linkopts = ["-lm"],
+)
+
 # weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
 # weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
 # PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.

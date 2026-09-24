@@ -13,6 +13,7 @@ cc_library(
         "bigo_npc_visual.h",
         "bigo_party.h",
         "bigo_chat.h",
+        "bigo_hoverboard.h",
         "bigo_pheromone.h",
         "bigo_walkie_talkie.h",
         "bigo_food_items.h",

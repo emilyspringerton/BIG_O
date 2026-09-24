@@ -49,6 +49,7 @@
 #include "../../../packages/common/bigo_food_items.h"
 #include "../../../packages/common/bigo_party.h"
 #include "../../../packages/common/bigo_chat.h"
+#include "../../../packages/common/bigo_hoverboard.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -258,6 +259,14 @@ typedef struct {
     int was_holding_jump;
     int speed_boost_permille;      /* 1000 = no boost; see PC_SLIDE_JUMP_BOOST_MS */
     unsigned int speed_boost_until_ms;
+
+    /* Real hover-skateboard ("air ship") momentum. EMILY/BACKLOG.md SECTION 536 follow-up,
+       BIG_O/NORTHSTAR.md §26. Server-internal only (not part of PcPlayerState/the wire format --
+       only state.mounted_board itself needs to cross the wire, same "vy/on_ground stay local"
+       precedent right above). Reset to 0 on every mount-state change (see the
+       PC_PACKET_HOVERBOARD_TOGGLE handler), so swapping boards never carries stale momentum from
+       a previous board's own different physics profile. */
+    float board_vx, board_vz;
 
     /* Real, fixed-slot inventory (2026-08-30, founder real-time: "gta3 style stuff drops and you
        can pick it up ffxi style list affordances"). Reuses PcInventoryUpdatePacket's own
@@ -1458,6 +1467,8 @@ static void spawn_player(PlayerSlot *s) {
     s->speed_boost_permille = 0;
     s->speed_boost_until_ms = 0;
     s->last_xp_tick_ms = 0;
+    s->board_vx = 0.0f; /* real hover-skateboard momentum, same "stale previous occupant" reset class as latest_cmd_seq above -- state.mounted_board itself is already covered by the memset(&s->state, ...) above (it's a PcPlayerState field), but board_vx/vz live outside state and would otherwise carry a stale occupant's own momentum into a freshly-spawned player. */
+    s->board_vz = 0.0f;
     /* Real, deliberate inventory reset too -- same real class of bug as latest_cmd_seq above
        (a stale previous occupant's own leftover inventory must never carry over to a genuinely
        new player). Position/XP restore from a real save file below for an existing player_id;
@@ -2233,6 +2244,38 @@ int main(int argc, char **argv) {
                            i, text, heard, chat_say_radius_cm());
                     break;
                 }
+            } else if (hdr.type == PC_PACKET_HOVERBOARD_TOGGLE && (size_t)n >= sizeof(PcHoverboardTogglePacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §26. requested_board
+                   0 always dismounts (BIGO_BOARD_NONE); any other value must be a real, valid
+                   board type or the request is rejected outright (an invalid request leaves the
+                   player's current mount state completely unchanged, not silently coerced to
+                   something else). Any mount-state CHANGE (including staying dismounted from an
+                   invalid request -- a real no-op) is not double-logged; momentum always resets
+                   on a real change so a fresh board never inherits a previous board's own
+                   different physics feel. */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcHoverboardTogglePacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    int requested = (int)req.requested_board;
+                    if (requested != BIGO_BOARD_NONE && !board_is_valid(requested)) {
+                        printf("S536-HOVERBOARD: player%d requested invalid board %d, ignored\n", i, requested);
+                        break;
+                    }
+                    s->state.mounted_board = requested;
+                    s->board_vx = 0.0f;
+                    s->board_vz = 0.0f;
+                    if (requested == BIGO_BOARD_NONE) {
+                        printf("S536-HOVERBOARD: player%d dismounted\n", i);
+                    } else {
+                        printf("S536-HOVERBOARD: player%d mounted %s\n", i, BIGO_BOARD_NAMES[requested]);
+                    }
+                    break;
+                }
             } else if (hdr.type == PC_PACKET_INTERACT && (size_t)n >= sizeof(PcInteractPacket)) {
                 /* Real "punch/interact" -- the minimal real input needed to exercise the already-
                    built Paper Engine live, without inventing a real combat system this sandbox
@@ -2590,8 +2633,23 @@ int main(int argc, char **argv) {
                     move_speed *= (float)s->speed_boost_permille / 1000.0f;
                 }
                 float horiz_speed = sqrtf(mx * mx + mz * mz) * move_speed;
-                s->state.x += mx * move_speed * PC_TICK_DT;
-                s->state.z += mz * move_speed * PC_TICK_DT;
+
+                /* Real hover-skateboard ("air ship") momentum -- EMILY/BACKLOG.md SECTION 536
+                   follow-up, BIG_O/NORTHSTAR.md §26, founder real-time: "add air ships like
+                   wedge shaped hover skateboards they have different physics per board...
+                   friction and gravity etc can be tuned". Mounted play REPLACES the direct-input
+                   on-foot model above (move_speed/sprint/slide-jump don't apply while riding --
+                   a board has its own real, separate accel/friction/max-speed identity) with real
+                   momentum that carries across ticks; unmounted play is completely unaffected
+                   (bigo_hoverboard_tick is a real, honest no-op for BIGO_BOARD_NONE). */
+                if (s->state.mounted_board != BIGO_BOARD_NONE) {
+                    bigo_hoverboard_tick(s->state.mounted_board, mx, mz, PC_TICK_DT, &s->board_vx, &s->board_vz);
+                    s->state.x += s->board_vx * PC_TICK_DT;
+                    s->state.z += s->board_vz * PC_TICK_DT;
+                } else {
+                    s->state.x += mx * move_speed * PC_TICK_DT;
+                    s->state.z += mz * move_speed * PC_TICK_DT;
+                }
 
                 int crouching = (s->latest_buttons & PC_BTN_CROUCH) != 0;
                 int jump_held = (s->latest_buttons & PC_BTN_JUMP) != 0;
@@ -2632,7 +2690,12 @@ int main(int argc, char **argv) {
                 }
 
                 if (!s->on_ground) {
-                    s->vy -= PC_GRAVITY * PC_TICK_DT;
+                    /* bigo_hoverboard_gravity_scale is a real, honest 1.0 (unscaled) whenever
+                       BIGO_BOARD_NONE/invalid, so this one line is the whole real "gravity can be
+                       tuned" hook -- no separate mounted/unmounted branch needed here, unlike the
+                       horizontal movement block above (which genuinely does need two different
+                       models, not just a scaled constant). */
+                    s->vy -= PC_GRAVITY * bigo_hoverboard_gravity_scale(s->state.mounted_board) * PC_TICK_DT;
                     s->state.y += s->vy * PC_TICK_DT;
                     if (has_ground && s->vy <= 0.0f && s->state.y <= ground_y) {
                         s->state.y = ground_y;

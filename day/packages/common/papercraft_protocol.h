@@ -73,6 +73,13 @@
 #define PC_PACKET_CHAT_RECV        22 /* server -> client: one send per real recipient within
     chat_say_radius_cm() of the sender, same "server decides, then fans out" convention
     broadcast_entity_spawn already follows. See PcChatRecvPacket below. */
+#define PC_PACKET_HOVERBOARD_TOGGLE 23 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §26 -- "add air ships like wedge shaped hover skateboards". Mount/switch/
+    dismount a hover board -- requested_board (0 = dismount, else board_speedster()/board_tank()/
+    board_glider()) is the FULL desired new state, not a bare toggle (unlike
+    PcWheelbarrowTogglePacket, this needs to name WHICH board too). Sender is resolved from the
+    packet's own source address, same convention every client->server packet above establishes.
+    See PcHoverboardTogglePacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -214,6 +221,11 @@ typedef struct {
      * (80), clamped 0..decorum_cap() (100) by decorum_after(). */
     int costume;
     int decorum;
+    /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §26 -- real hover-skateboard
+     * ("air ship") mount state, broadcast so every player can see who's riding what, not just
+     * the rider themselves. 0 (BIGO_BOARD_NONE, bigo_hoverboard.h) = not mounted, else a real
+     * board_speedster()/board_tank()/board_glider() value. */
+    int mounted_board;
 } PcPlayerState;
 
 /* PC_WPN_*: real weapon-slot constants -- must match PARENA/stdlib/papercraft/weapon_mod.prn's
@@ -308,6 +320,14 @@ typedef struct {
 typedef struct {
     PcHeader hdr;
 } PcWheelbarrowTogglePacket;
+
+/* PcHoverboardTogglePacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §26. See
+ * PC_PACKET_HOVERBOARD_TOGGLE's own doc comment above for why this carries a real requested_board
+ * field rather than being a bare toggle like PcWheelbarrowTogglePacket. */
+typedef struct {
+    PcHeader hdr;
+    unsigned char requested_board; /* 0 = dismount, else a real board_speedster()/board_tank()/board_glider() value */
+} PcHoverboardTogglePacket;
 
 /* PcCostumeSetPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A.
  * Sender is resolved from the packet's own source address, same convention

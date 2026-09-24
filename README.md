@@ -91,6 +91,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > to exit; nearby players (and you) see it appear in their own terminal's scrollback. tell/yell/guild
 > channels, a player-name registry, and REFLUX event publishing are real, separate, not-yet-built follow-
 > ups. See `NORTHSTAR.md` §25.
+> Air ships: wedge-shaped hover skateboards you can ride. Press V to mount/cycle (SPEEDSTER, TANK, GLIDER,
+> dismount) — each has its own real, PARENA-tuned physics (`PARENA/stdlib/big_o/hoverboard_rules.prn`:
+> acceleration, friction/deceleration feel, top speed, and how much gravity affects you while riding).
+> Real momentum, not a teleport — accelerate, coast, and drift to a stop when you let go. See `NORTHSTAR.md`
+> §26 for the physics model and a real, named gap (slide-jump doesn't yet account for being mounted).
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

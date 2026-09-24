@@ -24,3 +24,5 @@ echo "regenerated day/packages/simulation/item_drop_mod.c, inventory_mod.c (big_
 echo "regenerated day/packages/simulation/party_rules.c"
 "$PARENA_BIN" build "$PRN_DIR/chat_rules.prn" -o day/packages/simulation/chat_rules.c
 echo "regenerated day/packages/simulation/chat_rules.c"
+"$PARENA_BIN" build "$PRN_DIR/hoverboard_rules.prn" -o day/packages/simulation/hoverboard_rules.c
+echo "regenerated day/packages/simulation/hoverboard_rules.c"
