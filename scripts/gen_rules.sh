@@ -26,3 +26,5 @@ echo "regenerated day/packages/simulation/party_rules.c"
 echo "regenerated day/packages/simulation/chat_rules.c"
 "$PARENA_BIN" build "$PRN_DIR/hoverboard_rules.prn" -o day/packages/simulation/hoverboard_rules.c
 echo "regenerated day/packages/simulation/hoverboard_rules.c"
+"$PARENA_BIN" build "$PRN_DIR/walkie_callsign.prn" -o day/packages/simulation/walkie_callsign.c
+echo "regenerated day/packages/simulation/walkie_callsign.c"

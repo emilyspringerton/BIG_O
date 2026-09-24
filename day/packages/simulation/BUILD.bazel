@@ -270,17 +270,33 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# walkie_callsign -- the real, PARENA-compiled "which canned radio-call line-id" decision for The
+# Men's own dispatch events. EMILY/BACKLOG.md SECTION 536 follow-up, founder real-time
+# (2026-09-24): "ensure walkies function somehow, make it unit tested -- The Men should have
+# their own channel, robot speak via a very fast tts generator built in parena". Generated from
+# PARENA/stdlib/big_o/walkie_callsign.prn via `parena build`, committed here.
+cc_library(
+    name = "walkie_callsign",
+    srcs = ["walkie_callsign.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
 # bigo_walkie_talkie_test -- real, pure, headless coverage for packages/common/
-# bigo_walkie_talkie.h's own channel/hearing decisions, against the real, live PARENA-compiled
-# :walkie_rules library (not a mock) -- same real cross-package shape papercraft_inventory_test
-# above already establishes. No live consumer yet (see bigo_walkie_talkie.h's own doc comment on
-# BIG_O's single-shared-crew v0 having no team concept) -- standalone primitive, same "correct
-# primitive, no consumer" pattern this repo's own phases 2/3/5 already established.
+# bigo_walkie_talkie.h's own channel/hearing decisions AND the real callsign-selection decisions
+# above, against the real, live PARENA-compiled :walkie_rules/:walkie_callsign libraries (not a
+# mock) -- same real cross-package shape papercraft_inventory_test above already establishes.
+# Real live day-server consumer as of 2026-09-24 (server_walkie_transmit, day/apps/server/src/
+# main.c) -- The Men all share BIGO_WALKIE_TEAM_THE_MEN, closing this header's own previously-
+# named "no live consumer yet" gap (BIG_O's still-missing player-team system is unaffected/still
+# not needed for this NPC-only channel).
 cc_test(
     name = "bigo_walkie_talkie_test",
     srcs = ["bigo_walkie_talkie_test.c"],
     deps = [
         ":walkie_rules",
+        ":walkie_callsign",
         "//day/packages/common:common_headers",
     ],
 )

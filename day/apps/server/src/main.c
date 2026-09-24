@@ -51,6 +51,7 @@
 #include "../../../packages/common/bigo_chat.h"
 #include "../../../packages/common/bigo_hoverboard.h"
 #include "../../../packages/common/bigo_gfd_bridge.h"
+#include "../../../packages/common/bigo_walkie_talkie.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -727,6 +728,32 @@ static void server_tick_witness(void) {
  * DESIGN_DIGEST.md §11's own "memory-wipe spray"). A hunt that resolves some OTHER way first (or
  * whose target NPC goes inactive), including mid-buzz before the Man ever moves, makes its
  * responder stand down instead of arriving to nothing. */
+/* server_walkie_transmit -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §28.
+ * Real, live consumer of bigo_walkie_talkie.h's own channel/hearing decision logic, closing that
+ * header's previously-named "no live consumer yet" gap: The Men all share
+ * BIGO_WALKIE_TEAM_THE_MEN, so every other active Man really does hear a speaker's real, PARENA-
+ * decided callsign line via a real bigo_walkie_can_hear() call per listener (same-team is always
+ * true per walkie_rules.prn's own real semantics -- exercised for real here, not hardcoded around).
+ * "Speaking" today means: a real, distinct printed log line, counted by how many other Men really
+ * heard it -- the real, honest "robot speak" content half; actual synthesized audio is a real,
+ * separate, not-yet-built follow-up (see bigo_walkie_talkie.h's own doc comment). */
+static void server_walkie_transmit(int speaker_npc, int event, int witness_state) {
+    const char *text = bigo_walkie_callsign_text_for_event(event, witness_state);
+    if (!text[0]) return; /* callsign-none -- an out-of-range/unrecognized event, real, honest no-op */
+    ServerNpc *sp = &g_npcs[speaker_npc];
+    int heard = 0;
+    for (int i = 0; i < PC_NPC_MAX; i++) {
+        if (i == speaker_npc) continue;
+        ServerNpc *n = &g_npcs[i];
+        if (!n->active || n->role != PC_NPC_ROLE_THE_MEN) continue;
+        float dx = n->x - sp->x, dz = n->z - sp->z;
+        float distance_m = sqrtf(dx * dx + dz * dz);
+        if (bigo_walkie_can_hear(BIGO_WALKIE_TEAM_THE_MEN, BIGO_WALKIE_TEAM_THE_MEN, distance_m)) heard++;
+    }
+    printf("S536-WALKIE: npc%d (channel %d) %s -- heard by %d other Man/Men\n",
+           speaker_npc, bigo_walkie_channel_for_team(BIGO_WALKIE_TEAM_THE_MEN), text, heard);
+}
+
 static void server_tick_dispatch(unsigned int now_ms) {
     static unsigned int last_dispatch_tick_ms = 0;
     float dt_sec = (last_dispatch_tick_ms == 0) ? 0.0f : (float)(now_ms - last_dispatch_tick_ms) / 1000.0f;
@@ -767,6 +794,7 @@ static void server_tick_dispatch(unsigned int now_ms) {
         g_npcs[responder].pager_buzz_until_ms = now_ms + BIGO_PAGER_LATENCY_MS;
         printf("S536-PAGER: The Men npc%d's pager buzzes -- dispatched to npc%d's hunt (%s), "
                "responding in %ums\n", responder, hi, WS_NAMES[hn->witness_state], BIGO_PAGER_LATENCY_MS);
+        server_walkie_transmit(responder, event_dispatched(), hn->witness_state);
     }
 
     for (int mi = 0; mi < PC_NPC_MAX; mi++) {
@@ -795,6 +823,7 @@ static void server_tick_dispatch(unsigned int now_ms) {
                 target->witness_state = nx;
                 printf("S504-DISPATCH: The Men npc%d resolved npc%d's hunt: %s -> %s (memory wipe)\n",
                        mi, mn->dispatch_target_npc, WS_NAMES[prev], WS_NAMES[nx]);
+                server_walkie_transmit(mi, event_resolved(), prev);
             }
             mn->has_dispatch_target = 0;
         }

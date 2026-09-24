@@ -96,6 +96,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > (live Minecraft) bridge as a third participant -- messages from GFD, EINHORN_SURVIVAL, and the older
 > mud<->battlegrounds bridge all show up in your terminal too, tagged `[GFD]`/`[MC]`/`[MUD]`/`[BG]`. Live-
 > verified against the real, running IDUNA. See `NORTHSTAR.md` §27.
+> The Men now talk on their own real walkie channel: when one gets dispatched to a hunt (or resolves one),
+> a real, PARENA-decided "robot speak" callsign line goes out and every other Man really hears it. Server-
+> log-visible only for now, no synthesized audio yet (checked directly: BIG_O has no audio subsystem at
+> all today) -- see `NORTHSTAR.md` §28 for the real, honest reasoning on why an actual TTS generator can't
+> live inside PARENA, and the real path if audio is ever added.
 > Air ships: wedge-shaped hover skateboards you can ride. Press V to mount/cycle (SPEEDSTER, TANK, GLIDER,
 > dismount) — each has its own real, PARENA-tuned physics (`PARENA/stdlib/big_o/hoverboard_rules.prn`:
 > acceleration, friction/deceleration feel, top speed, and how much gravity affects you while riding).

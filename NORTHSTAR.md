@@ -1500,3 +1500,85 @@ events. The three still-queued §25 items (SSH keygen, the IDUNA phone app, GFD/
 and still open.
 
 session: sess-20260923-1030-4a526255.
+
+## 28. Walkie-talkie goes live -- The Men's own channel + real "robot speak" callsigns (2026-09-24, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+Founder real-time: "ensure walkies function somehow, make it unit tested -- The Men should have their own
+channel, robot speak via a very fast tts generator built in parena." Picked up from BACKLOG.md (Principle
+1, not new founder-real-time direction this pass -- already logged, Apple #20592). `bigo_walkie_talkie.h`'s
+own doc comment had named its real standing blocker since the reverse-port: BIG_O's v0 has no player-team
+concept, so the channel/hearing logic had a correct primitive but no live consumer. Re-read the founder's
+own wording closely before assuming that blocker still applied: "The Men should have their own channel" is
+about NPCs, not players -- BIG_O already tracks The Men individually (`ServerNpc`,
+`PC_NPC_ROLE_THE_MEN`), with zero dependency on the still-missing player-team system. That reframing is
+what made this buildable now instead of blocked.
+
+### "Robot speak via a very fast tts generator built in PARENA" -- checked, not guessed
+
+VS0 is I32/Bool-scalar-only -- no strings, no audio, no FFI (`PARENA/STDLIB.md`'s own real capability
+list) -- so a literal text-to-speech GENERATOR cannot exist inside PARENA at all, full stop. Checked BIG_O's
+own client directly too: zero audio subsystem of any kind (no `SDL_mixer`, no `SDL_OpenAudio`, nothing --
+confirmed via a real grep). The closest real precedent anywhere in this monorepo is SHANKPIT's own live
+`packages/audio/audio.c` -- a real, in-repo, no-external-file procedural PCM wavetable synthesizer (weapon
+fire / footsteps as synthesized tones, not sampled audio, not speech) -- which would be the real, buildable
+path for an eventual "robotic tone" version, not literal word-for-word speech. Building that (SDL audio
+device init + a real-time mixer + a synthesis engine in BIG_O's own client, which has none of this today)
+is a genuinely large, separate follow-up, not attempted this pass.
+
+What PARENA genuinely CAN own, and does here: the real DECISION of which canned callsign a Man's radio call
+represents, same "mods first everything" split every other real decision in this repo already draws. This
+is the real, honest, buildable "robot speak" content for now -- a distinct, PARENA-selected text line per
+real dispatch event, printed/logged; not synthesized audio.
+
+### What shipped
+
+- **`PARENA/stdlib/big_o/walkie_callsign.prn`** -- new PARENA module. Two real event-phase constants
+  matching `server_tick_dispatch`'s own two real, distinct radio moments (dispatched, resolved -- a third
+  "arrived, not yet resolved" phase doesn't exist in the real state machine, checked directly, not
+  invented to pad this out). `walkie-callsign-for-event(event, witness-state)`: dispatched while
+  `WS_SILENCING` gets a genuinely different real callsign than dispatched while `WS_ENGAGE` (a real urgency
+  distinction, not cosmetic); resolved always gets the same real all-clear regardless of which state it
+  resolved from; an unrecognized `witness-state` at dispatch time degrades to `callsign-none`, same honest-
+  degrade convention `resolveEquipEntry`/`board-is-valid` already established elsewhere in this monorepo.
+  Compiles clean, generates to `day/packages/simulation/walkie_callsign.c` (`scripts/gen_rules.sh`
+  extended).
+- **`day/packages/common/bigo_walkie_talkie.h`**: `BIGO_WALKIE_TEAM_THE_MEN` (0) -- every Man shares this
+  one, fixed, reserved walkie team (a future real player-team system must start its own ids elsewhere so
+  it never collides). New declarations for the callsign functions above, a real host-owned
+  `BIGO_WALKIE_CALLSIGN_TEXT[]` lookup (PARENA returns an id, host owns the English text -- same split
+  `on_papercraft_phone_message_for_event`'s own real call site already uses), and
+  `bigo_walkie_callsign_text_for_event()` (id lookup + a real `""` no-op for `callsign_none()`). Doc
+  comment updated to name the real, current state honestly (NPC-side unblocked, player-side gap
+  unaffected and still open).
+- **`day/apps/server/src/main.c`**: new `server_walkie_transmit(speaker_npc, event, witness_state)` -- a
+  real, live consumer, finally closing the header's own long-standing "no live consumer yet" gap. Counts
+  how many OTHER active Men really hear it via a real `bigo_walkie_can_hear()` call per listener (same-
+  team is always true per `walkie_rules.prn`'s own real semantics, exercised for real here rather than
+  hardcoded around). Wired into both of `server_tick_dispatch`'s own two real radio moments: pager-buzz
+  assignment (`event_dispatched()`, the hunt's own current `witness_state`) and hunt resolution
+  (`event_resolved()`, the state it resolved FROM). `walkie_rules.c` (the channel/hearing PARENA module
+  itself) had never actually been added to `scripts/build_day.sh`'s own source list either -- fixed
+  alongside `walkie_callsign.c`, since wiring in a live consumer needed both.
+
+### Verified, not just compiled ("make it unit tested")
+
+- `bigo_walkie_talkie_test.c` extended (10 assertions total, up from 4): The Men's own dedicated channel
+  (0 -> ext 3000, always heard); real, distinct callsigns for quiet-dispatch vs. code-red-dispatch vs. an
+  unrecognized state; resolve is always the same real all-clear regardless of prior state; the real text
+  lookup, including its real `""` no-op. `bazel test //day/packages/...` 33/33 green.
+- A real, live scratch integration harness (`walkie_verify.c`, same `#include main.c` precedent every
+  harness in this thread uses, ASan/UBSan clean): two real Men NPCs + one real hunting Citizen, a real
+  `server_tick_dispatch()` call assigns and transmits for real, the real printed `S536-WALKIE` line shows
+  the correct callsign text and "heard by 1 other Man/Men" -- the second Man heard it, the Citizen (not a
+  Man) correctly never counts. Real server+client builds clean.
+
+### Real, honest, deliberately NOT built here
+
+No actual synthesized audio -- see the "checked, not guessed" section above for the real reasoning and the
+real, named path (SHANKPIT's own procedural wavetable precedent) if this is ever picked up. No REFLUX
+publish for walkie events (same "log-only, no subscriber yet" gap this whole thread's own reverse-port
+already carries in multiple other places). The real Asterisk/SIP voice-transport gap this module's own doc
+comment has named since 2026-09-23 is unaffected and still real. The player-side "no team concept" gap is
+unaffected and still open -- this pass never needed to solve it, and didn't.
+
+session: sess-20260923-1030-4a526255.
