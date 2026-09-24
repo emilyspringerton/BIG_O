@@ -110,6 +110,14 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > acceleration, friction/deceleration feel, top speed, and how much gravity affects you while riding).
 > Real momentum, not a teleport — accelerate, coast, and drift to a stop when you let go. See `NORTHSTAR.md`
 > §26 for the physics model and a real, named gap (slide-jump doesn't yet account for being mounted).
+> The phone has a twelfth app, IDUNA — links your real IDUNA account via the same real device-code flow
+> IDUNA.GAME already uses (start → shows a code and a URL → SELECT to check status → auto-exchanges once
+> authorized). First time this client has ever made an HTTP call from inside the live game loop (reuses
+> the client's own existing background-thread `NetJob` mechanism so it never stalls the render loop).
+> Building this found and fixed a real, live IDUNA bug along the way (device-auth polling had never
+> actually worked against SQLite — see `IDUNA/CHANGELOG.md`) — fixed and tested, but not yet deployed to
+> the live server, so a full live "linked" round trip is still unverified end to end. See `NORTHSTAR.md`
+> §31.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

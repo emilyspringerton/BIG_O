@@ -11,6 +11,7 @@
 #define BIGO_PHONE_H
 
 #include <string.h>
+#include <stdio.h>
 
 typedef enum {
     BP_APP_MESSAGES = 0, BP_APP_CONTACTS, BP_APP_MAP, BP_APP_CAMERA, BP_APP_NOTES,   /* TYLER spec apps */
@@ -21,6 +22,12 @@ typedef enum {
                    BP_APP that breaks the pure D-pad-menu model every other app here uses), talking
                    to GoblinFoxDragon-reverse-ported subsystems one command at a time. v1 ships one
                    real command: say. */
+    BP_APP_IDUNA, /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §31, founder
+                     real-time: "add the iduna app from IDUNA.GAME" -- IDUNA's real device-code
+                     auth flow (/auth/device/start -> poll -> /auth/token/exchange), the same real
+                     flow IDUNA.GAME's own prompt already walks a player through, reached here as
+                     a phone app instead of a standalone terminal screen. Real, honest v0: SELECT
+                     drives each step by hand (start, then poll) -- no automatic timed polling. */
     BP_APP_COUNT
 } BpApp;
 
@@ -41,7 +48,7 @@ typedef enum {
                                 the host's separate g_inventory does), so the server is the real,
                                 only validator, same "server decides" split every other real
                                 system in this file already follows. */
-    BP_FX_CHAT_SEND         /* arg = length of the pending say text. The text itself lives in
+    BP_FX_CHAT_SEND,        /* arg = length of the pending say text. The text itself lives in
                                 p->term_input (NUL-terminated) -- an int arg can't carry free text,
                                 so the host must call bigo_phone_term_take() to read AND clear it
                                 before doing anything else with the phone (same "host reads other
@@ -53,6 +60,12 @@ typedef enum {
                                 does anything at all (EMILY/BACKLOG.md SECTION 536 follow-up,
                                 BIG_O/NORTHSTAR.md §24, reverse-ported from GoblinFoxDragon's own
                                 real server/chat/chat.go "say" channel). */
+    BP_FX_IDUNA_START,      /* SELECT on the idle/error IDUNA screen -- host starts the real
+                                /auth/device/start HTTP call (async, off the main thread -- see
+                                NORTHSTAR.md §31). arg unused. */
+    BP_FX_IDUNA_POLL        /* SELECT on the pending IDUNA screen -- host runs one real
+                                /auth/device/poll call by hand (no automatic timed polling in this
+                                v0). arg unused. */
 } BpEffectKind;
 
 typedef struct { BpEffectKind kind; int arg; } BpEffect;
@@ -82,8 +95,21 @@ static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "S
 #define BP_MSG_THORNE_BRIEF 6   /* client message table id: Dr. Thorne's A1M1 reprimand; unlocks him in Contacts */
 
 static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
-    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD"
+    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD", "IDUNA"
 };
+
+/* BP_IDUNA_*: real device-auth flow stages (BIG_O/NORTHSTAR.md §31) -- IDLE (nothing started
+   yet, or a prior attempt errored and can be retried), PENDING (device_code/user_code in hand,
+   waiting on the player to confirm at IDUNA's own /device page and for a poll to come back
+   authorized), LINKED (real handle in hand, the terminal state -- SELECT is a no-op once here). */
+#define BP_IDUNA_IDLE 0
+#define BP_IDUNA_PENDING 1
+#define BP_IDUNA_LINKED 2
+#define BP_IDUNA_ERROR 3
+#define BP_IDUNA_CODE_LEN 16
+#define BP_IDUNA_URL_LEN 96
+#define BP_IDUNA_HANDLE_LEN 64
+#define BP_IDUNA_ERR_LEN 80
 
 /* Contacts: trust ladder observer -> witness -> bound -> documented (spec). Preset replies advance it. */
 static const char *const BP_TRUST_NAMES[4] = { "observer", "witness", "bound", "documented" };
@@ -126,6 +152,15 @@ typedef struct {
     char term_input[BP_TERM_INPUT_MAX + 1]; int term_input_len;
     char term_lines[BP_TERM_LINES][BP_TERM_LINE_LEN]; int term_line_count;
 
+    /* IDUNA device-auth flow (BP_APP_IDUNA) -- BIG_O/NORTHSTAR.md §31. Host-fed display state,
+       same "host writes, phone renders" convention term_lines[] above already establishes (this
+       header itself stays real, pure, no-network -- see this file's own top doc comment). */
+    int iduna_stage;
+    char iduna_user_code[BP_IDUNA_CODE_LEN];
+    char iduna_verification_url[BP_IDUNA_URL_LEN];
+    char iduna_handle[BP_IDUNA_HANDLE_LEN];
+    char iduna_error[BP_IDUNA_ERR_LEN];
+
     /* notifications */
     int queue[BP_MAX_QUEUED]; int queue_len;
     unsigned int shown_at[BP_SPAM_MAX]; int shown_n;    /* recent banner times inside the spam window */
@@ -165,6 +200,7 @@ static inline int bp_rows(const BigoPhone *p) {
     case BP_APP_LOADOUT: return 6;
     case BP_APP_WARDROBE: return BP_COSTUMES;
     case BP_APP_GFD: return p->term_line_count > 0 ? p->term_line_count : 1;
+    case BP_APP_IDUNA: return 1;   /* a status screen, not a list */
     default: return 1;
     }
 }
@@ -213,6 +249,26 @@ static inline int bigo_phone_term_take(BigoPhone *p, char *out, int out_cap) {
     p->term_input_len = 0;
     p->term_input[0] = '\0';
     return n;
+}
+
+/* bigo_phone_iduna_set_pending/_linked/_error -- the host calls exactly one of these once its
+ * real, async IDUNA HTTP job (BIG_O/NORTHSTAR.md §31) finishes, to feed the real result back into
+ * the phone's own display state. Truncates rather than overflowing -- same real, silent clamp
+ * discipline bigo_phone_term_line's own overflow handling already establishes, not a crash. */
+static inline void bigo_phone_iduna_set_pending(BigoPhone *p, const char *user_code, const char *verification_url) {
+    p->iduna_stage = BP_IDUNA_PENDING;
+    snprintf(p->iduna_user_code, sizeof(p->iduna_user_code), "%s", user_code);
+    snprintf(p->iduna_verification_url, sizeof(p->iduna_verification_url), "%s", verification_url);
+    p->iduna_error[0] = '\0';
+}
+static inline void bigo_phone_iduna_set_linked(BigoPhone *p, const char *handle) {
+    p->iduna_stage = BP_IDUNA_LINKED;
+    snprintf(p->iduna_handle, sizeof(p->iduna_handle), "%s", handle);
+    p->iduna_error[0] = '\0';
+}
+static inline void bigo_phone_iduna_set_error(BigoPhone *p, const char *msg) {
+    p->iduna_stage = BP_IDUNA_ERROR;
+    snprintf(p->iduna_error, sizeof(p->iduna_error), "%s", msg);
 }
 
 /* Notification with the spec's anti-spam rule: <= 2 banners per 30s, extras queued and later shown as a summary. */
@@ -331,6 +387,13 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         break;
     case BP_APP_GFD:
         if (a == BP_SELECT && p->term_input_len > 0) { fx.kind = BP_FX_CHAT_SEND; fx.arg = p->term_input_len; }
+        break;
+    case BP_APP_IDUNA:
+        if (a == BP_SELECT) {
+            if (p->iduna_stage == BP_IDUNA_IDLE || p->iduna_stage == BP_IDUNA_ERROR) fx.kind = BP_FX_IDUNA_START;
+            else if (p->iduna_stage == BP_IDUNA_PENDING) fx.kind = BP_FX_IDUNA_POLL;
+            /* BP_IDUNA_LINKED: already linked, SELECT is a real, honest no-op here. */
+        }
         break;
     default: break;
     }

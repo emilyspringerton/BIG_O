@@ -85,6 +85,10 @@ static unsigned int now_ms(void) { return SDL_GetTicks(); }
 
 static char g_player_jwt[2048];
 static char g_player_display_name[64];
+/* g_iduna_device_code -- the real device_code from a real /auth/device/start call, remembered
+   client-side across the START -> POLL steps of BIG_O/NORTHSTAR.md §31's real flow (POLL's own
+   request body needs it, but it never appears anywhere on screen -- only user_code does). */
+static char g_iduna_device_code[80];
 
 /* Keep the IDUNA bearer credential alive independently of the short-lived connect ticket.  A
    connected UDP session does not need to present the JWT on every packet, but it does need a
@@ -222,6 +226,112 @@ static int pc_mint_ticket(const char *iduna_host, int iduna_port,
     return 1;
 }
 
+/* ---------------- IDUNA device-auth flow (BIG_O/NORTHSTAR.md §31, founder real-time: "add the
+ * iduna app from IDUNA.GAME") -- the same real, unauthenticated device-code flow IDUNA.GAME's own
+ * prompt walks a player through, reached here via BP_APP_IDUNA instead of a standalone terminal.
+ * No bearer token: this is deliberately separate from pc_login's own email/password
+ * PAPERCRAFT-ticket flow above -- it links a player's REAL IDUNA identity (Google-authenticated,
+ * confirmed on IDUNA's own /device web page), it does not authenticate the game session itself.
+ */
+static int bigo_iduna_start(const char *iduna_host, int iduna_port,
+                             char *out_device_code, size_t device_code_cap,
+                             char *out_user_code, size_t user_code_cap,
+                             char *out_verification_url, size_t verification_url_cap,
+                             char *out_err, size_t out_err_len) {
+    char resp[1024];
+    int status = 0;
+    if (http_post_json(iduna_host, iduna_port, "/auth/device/start", NULL, NULL, resp, sizeof(resp), &status) != 0) {
+        snprintf(out_err, out_err_len, "Could not reach IDUNA.");
+        return 0;
+    }
+    if (status != 200) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth start failed (server said %d).", status);
+        return 0;
+    }
+    if (!http_extract_json_string_field(resp, "device_code", out_device_code, device_code_cap) ||
+        !http_extract_json_string_field(resp, "user_code", out_user_code, user_code_cap) ||
+        !http_extract_json_string_field(resp, "verification_url", out_verification_url, verification_url_cap)) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth start response missing a real field.");
+        return 0;
+    }
+    return 1;
+}
+
+/* bigo_iduna_poll -- one real, single /auth/device/poll call (SELECT-driven, no automatic timed
+ * polling in this v0 -- see BpEffectKind's own BP_FX_IDUNA_POLL doc comment). "pending" is a real,
+ * honest, non-error outcome (out_authorized stays 0, out_err stays empty) -- the caller re-shows
+ * the same pending screen, it does not treat this as a failure. */
+static int bigo_iduna_poll(const char *iduna_host, int iduna_port, const char *device_code,
+                            int *out_authorized, char *out_exchange_code, size_t exchange_code_cap,
+                            char *out_err, size_t out_err_len) {
+    char device_code_esc[80];
+    json_escape_into(device_code, device_code_esc, sizeof(device_code_esc));
+    char body[128];
+    snprintf(body, sizeof(body), "{\"device_code\":\"%s\"}", device_code_esc);
+
+    char resp[1024];
+    int status = 0;
+    *out_authorized = 0;
+    if (http_post_json(iduna_host, iduna_port, "/auth/device/poll", NULL, body, resp, sizeof(resp), &status) != 0) {
+        snprintf(out_err, out_err_len, "Could not reach IDUNA.");
+        return 0;
+    }
+    if (status == 429) {
+        snprintf(out_err, out_err_len, "Polling too fast -- wait a moment and try again.");
+        return 0;
+    }
+    if (status != 200) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth poll failed (server said %d).", status);
+        return 0;
+    }
+    char poll_status[24];
+    if (!http_extract_json_string_field(resp, "status", poll_status, sizeof(poll_status))) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth poll response missing status.");
+        return 0;
+    }
+    if (strcmp(poll_status, "authorized") == 0) {
+        if (!http_extract_json_string_field(resp, "exchange_code", out_exchange_code, exchange_code_cap)) {
+            snprintf(out_err, out_err_len, "IDUNA device-auth poll authorized with no exchange_code.");
+            return 0;
+        }
+        *out_authorized = 1;
+    }
+    /* "pending" (or any other real, non-error status) -- not authorized yet, not an error either. */
+    return 1;
+}
+
+/* bigo_iduna_exchange -- the real, final step: exchange_code -> a real IDUNA access token +
+ * handle. This client only keeps the handle for display (BP_APP_IDUNA's own real "linked" screen)
+ * -- the access_token itself is not persisted or used for anything else in this v0 (a real,
+ * honest, named scope cut -- see NORTHSTAR.md §31 for what a future pass could do with it). */
+static int bigo_iduna_exchange(const char *iduna_host, int iduna_port, const char *exchange_code,
+                                char *out_handle, size_t handle_cap,
+                                char *out_err, size_t out_err_len) {
+    char exchange_code_esc[80];
+    json_escape_into(exchange_code, exchange_code_esc, sizeof(exchange_code_esc));
+    char body[128];
+    snprintf(body, sizeof(body), "{\"exchange_code\":\"%s\"}", exchange_code_esc);
+
+    char resp[2048];
+    int status = 0;
+    if (http_post_json(iduna_host, iduna_port, "/auth/token/exchange", NULL, body, resp, sizeof(resp), &status) != 0) {
+        snprintf(out_err, out_err_len, "Could not reach IDUNA.");
+        return 0;
+    }
+    if (status != 200) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth exchange failed (server said %d).", status);
+        return 0;
+    }
+    /* "me" is a nested JSON object -- http_extract_json_string_field's own real, documented scope
+       is "first occurrence of this field name anywhere in the buffer" (no path support), which is
+       exactly what's needed here since "handle" only ever appears once, inside "me". */
+    if (!http_extract_json_string_field(resp, "handle", out_handle, handle_cap)) {
+        snprintf(out_err, out_err_len, "IDUNA device-auth exchange response missing handle.");
+        return 0;
+    }
+    return 1;
+}
+
 /* ---------------- login screen (ported from WEAKNIGHT_BEDROCK_RACERS' own real, verified login
  * screen -- same GFD-sourced pattern, see that repo's own apps/client/src/main.c) ---------------- */
 #define LOGIN_FIELD_MAX 127
@@ -239,18 +349,39 @@ typedef struct {
    attempts, the RECONNECTING screen frozen ("it didnt come back"; server log: usercmds_rx fell to 0 for 50s while snapshots kept flowing).
    One job at a time on a detached thread; the main loop only starts jobs and polls for the result, so it can never stall on the network. ---- */
 typedef struct {
-    int kind;                       /* 1 = mint ticket, 2 = refresh JWT */
+    int kind;                       /* 1 = mint ticket, 2 = refresh JWT, 3/4/5 = IDUNA device-auth
+                                        start/poll/exchange (BIG_O/NORTHSTAR.md §31) */
     char host[128]; int port;
     unsigned char ticket[PC_TICKET_TOTAL_LEN];
     char err[128]; int ok;
     SDL_atomic_t state;             /* 0 idle, 1 running, 2 done (result waiting to be consumed) */
+
+    /* IDUNA device-auth fields (kinds 3/4/5). in_code is the caller-supplied input for kind 4
+       (device_code) and kind 5 (exchange_code) -- net_job_start below copies it in before the
+       thread starts, matching host/port's own existing copy-before-start convention. */
+    char in_code[80];
+    char out_device_code[80], out_user_code[BP_IDUNA_CODE_LEN], out_verification_url[BP_IDUNA_URL_LEN];
+    int out_authorized;
+    char out_exchange_code[80];
+    char out_handle[BP_IDUNA_HANDLE_LEN];
 } NetJob;
 static NetJob g_job;
 static int net_job_thread(void *arg) {
     NetJob *j = (NetJob *)arg;
     j->err[0] = 0;
-    j->ok = (j->kind == 1) ? pc_mint_ticket(j->host, j->port, j->ticket, j->err, sizeof(j->err))
-                            : pc_refresh_player_token(j->host, j->port, j->err, sizeof(j->err));
+    switch (j->kind) {
+    case 1: j->ok = pc_mint_ticket(j->host, j->port, j->ticket, j->err, sizeof(j->err)); break;
+    case 2: j->ok = pc_refresh_player_token(j->host, j->port, j->err, sizeof(j->err)); break;
+    case 3: j->ok = bigo_iduna_start(j->host, j->port, j->out_device_code, sizeof(j->out_device_code),
+                                      j->out_user_code, sizeof(j->out_user_code),
+                                      j->out_verification_url, sizeof(j->out_verification_url),
+                                      j->err, sizeof(j->err)); break;
+    case 4: j->ok = bigo_iduna_poll(j->host, j->port, j->in_code, &j->out_authorized,
+                                     j->out_exchange_code, sizeof(j->out_exchange_code),
+                                     j->err, sizeof(j->err)); break;
+    default: j->ok = bigo_iduna_exchange(j->host, j->port, j->in_code, j->out_handle, sizeof(j->out_handle),
+                                          j->err, sizeof(j->err)); break;
+    }
     SDL_AtomicSet(&j->state, 2);
     return 0;
 }
@@ -262,6 +393,13 @@ static int net_job_start(int kind, const char *host, int port) {
     if (!t) { SDL_AtomicSet(&g_job.state, 0); return 0; }
     SDL_DetachThread(t);
     return 1;
+}
+/* net_job_start_with_code -- same real "one job at a time" contract as net_job_start above, for
+   the two IDUNA kinds (4/5) that need a real input string copied in before the thread starts. */
+static int net_job_start_with_code(int kind, const char *host, int port, const char *code) {
+    if (SDL_AtomicGet(&g_job.state) != 0) return 0;
+    snprintf(g_job.in_code, sizeof(g_job.in_code), "%s", code);
+    return net_job_start(kind, host, port);
 }
 
 /* CONNECT = PcConnectPacket + one capability byte (PC_CAP_LZ4 unless --no-lz4). Old servers ignore the extra byte. */
@@ -1290,6 +1428,31 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         }
         glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("type, ENTER to say, ESC to exit", x, py + 12, 4);
         break;
+    case BP_APP_IDUNA:
+        /* Real device-auth flow status screen, BIG_O/NORTHSTAR.md §31. */
+        switch (p->iduna_stage) {
+        case BP_IDUNA_IDLE:
+            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string("not linked to IDUNA", x, y, 6);
+            glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string("SELECT to start", x, y - step, 5);
+            break;
+        case BP_IDUNA_PENDING:
+            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string("go to:", x, y, 5);
+            glColor3f(0.6f, 0.95f, 0.6f); pc_draw_string(bp_trunc(p->iduna_verification_url, tmp, sizeof(tmp), 34), x, y - step, 5);
+            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string("enter code:", x, y - step * 2.5f, 5);
+            glColor3f(0.95f, 0.85f, 0.3f); pc_draw_string(p->iduna_user_code, x, y - step * 3.5f, 7);
+            glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string("SELECT to check status", x, y - step * 5.0f, 5);
+            break;
+        case BP_IDUNA_LINKED:
+            glColor3f(0.6f, 0.95f, 0.6f); pc_draw_string("linked", x, y, 6);
+            glColor3f(0.95f, 0.85f, 0.3f); pc_draw_string(p->iduna_handle, x, y - step, 7);
+            break;
+        case BP_IDUNA_ERROR:
+            glColor3f(0.9f, 0.3f, 0.2f); pc_draw_string(bp_trunc(p->iduna_error, tmp, sizeof(tmp), 36), x, y, 5);
+            glColor3f(0.55f, 0.8f, 0.95f); pc_draw_string("SELECT to retry", x, y - step, 5);
+            break;
+        default: break;
+        }
+        break;
     default: break;
     }
     glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("esc: back", px + 10, py + 12, 4);
@@ -1639,6 +1802,10 @@ int main(int argc, char **argv) {
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); \
             char echo_[8 + sizeof(rq.text)]; snprintf(echo_, sizeof(echo_), "you: %.*s", chat_n_, rq.text); \
             bigo_phone_term_line(&phone, echo_); } \
+        else if (fx_.kind == BP_FX_IDUNA_START) { \
+            net_job_start(3, iduna_host, iduna_port); } \
+        else if (fx_.kind == BP_FX_IDUNA_POLL) { \
+            net_job_start_with_code(4, iduna_host, iduna_port, g_iduna_device_code); } \
     } while (0)
     BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */
 
@@ -1967,14 +2134,49 @@ int main(int argc, char **argv) {
            with its already-authorized session, and the request is retried at a bounded cadence
            instead of auto-logging the player out or hammering IDUNA once per frame. */
         if (SDL_AtomicGet(&g_job.state) == 2) {   /* a background HTTP job finished: apply its result */
-            if (g_job.kind == 2) {
-                if (g_job.ok) last_token_refresh_ms = now; else fprintf(stderr, "LOGIN: token refresh deferred: %s\n", g_job.err);
-            } else {
-                if (g_job.ok) { memcpy(connect_pkt.ticket, g_job.ticket, PC_TICKET_TOTAL_LEN); need_ticket_remint = 0; last_ticket_mint_ms = now;
-                                fprintf(stderr, "[net] minted a fresh ticket in the background.\n"); }
-                else fprintf(stderr, "[net] ticket mint failed, will retry: %s\n", g_job.err);
-            }
+            int finished_kind = g_job.kind;
+            int finished_ok = g_job.ok;
+            /* Copy out exactly what each branch below needs before resetting job state -- kind 4's
+               own success path starts a NEW job (kind 5) right after the reset, which would
+               otherwise overwrite g_job's shared fields out from under a naive post-reset read. */
+            char job_err[sizeof(g_job.err)]; memcpy(job_err, g_job.err, sizeof(job_err));
+            char job_out_device_code[sizeof(g_job.out_device_code)]; memcpy(job_out_device_code, g_job.out_device_code, sizeof(job_out_device_code));
+            char job_out_user_code[sizeof(g_job.out_user_code)]; memcpy(job_out_user_code, g_job.out_user_code, sizeof(job_out_user_code));
+            char job_out_verification_url[sizeof(g_job.out_verification_url)]; memcpy(job_out_verification_url, g_job.out_verification_url, sizeof(job_out_verification_url));
+            char job_out_handle[sizeof(g_job.out_handle)]; memcpy(job_out_handle, g_job.out_handle, sizeof(job_out_handle));
+            int job_out_authorized = g_job.out_authorized;
+            char job_out_exchange_code[sizeof(g_job.out_exchange_code)]; memcpy(job_out_exchange_code, g_job.out_exchange_code, sizeof(job_out_exchange_code));
+            unsigned char job_ticket[PC_TICKET_TOTAL_LEN]; memcpy(job_ticket, g_job.ticket, sizeof(job_ticket));
             SDL_AtomicSet(&g_job.state, 0);
+
+            switch (finished_kind) {
+            case 2:
+                if (finished_ok) last_token_refresh_ms = now; else fprintf(stderr, "LOGIN: token refresh deferred: %s\n", job_err);
+                break;
+            case 1:
+                if (finished_ok) { memcpy(connect_pkt.ticket, job_ticket, PC_TICKET_TOTAL_LEN); need_ticket_remint = 0; last_ticket_mint_ms = now;
+                                    fprintf(stderr, "[net] minted a fresh ticket in the background.\n"); }
+                else fprintf(stderr, "[net] ticket mint failed, will retry: %s\n", job_err);
+                break;
+            case 3: /* IDUNA device-auth start (BIG_O/NORTHSTAR.md §31) */
+                if (finished_ok) {
+                    snprintf(g_iduna_device_code, sizeof(g_iduna_device_code), "%s", job_out_device_code);
+                    bigo_phone_iduna_set_pending(&phone, job_out_user_code, job_out_verification_url);
+                } else {
+                    bigo_phone_iduna_set_error(&phone, job_err);
+                }
+                break;
+            case 4: /* IDUNA device-auth poll -- authorized chains straight into exchange (kind 5) */
+                if (!finished_ok) { bigo_phone_iduna_set_error(&phone, job_err); }
+                else if (job_out_authorized) { net_job_start_with_code(5, iduna_host, iduna_port, job_out_exchange_code); }
+                /* else: still pending -- real, honest, non-error outcome; phone stays on its
+                   already-shown PENDING screen, nothing to update. */
+                break;
+            default: /* 5: IDUNA device-auth exchange */
+                if (finished_ok) bigo_phone_iduna_set_linked(&phone, job_out_handle);
+                else bigo_phone_iduna_set_error(&phone, job_err);
+                break;
+            }
         }
         if (now - last_token_refresh_ms >= PC_TOKEN_REFRESH_MS &&
             now - last_token_refresh_attempt_ms >= PC_TOKEN_REFRESH_RETRY_MS && SDL_AtomicGet(&g_job.state) == 0) {
