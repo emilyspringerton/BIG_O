@@ -1361,13 +1361,19 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("read-only for now (no text entry)", x, y - step * 7, 4);
         break;
     case BP_APP_LAB:
-        snprintf(line, sizeof(line), "samples S%d H%d B%d", p->samples[0], p->samples[1], p->samples[2]); glColor3f(0.85f, 0.85f, 0.85f); pc_draw_string(line, x, y, 6);
-        snprintf(line, sizeof(line), "base  - %s +", BP_BASES[p->cursor2]); bp_line(x, y - step * 1.5f, line, p->cursor == 0, 1.0f);
-        snprintf(line, sizeof(line), "trait - %s +", BP_TRAITS[p->lab_trait]); bp_line(x, y - step * 2.5f, line, p->cursor == 1, 1.0f);
-        bp_line(x, y - step * 3.5f, "( SPLICE )", p->cursor == 2, p->samples[p->cursor2] > 0 ? 1.0f : 0.4f);
-        snprintf(line, sizeof(line), "clones: %d", p->clone_count); bp_line(x, y - step * 5, line, p->cursor == 3, 1.0f);
-        for (int i = 0; i < p->clone_count && i < 5; i++) { snprintf(line, sizeof(line), "%s / %s", BP_BASES[p->clones[i]], BP_TRAITS[p->clone_traits[i]]); glColor3f(0.6f, 0.9f, 0.7f); pc_draw_string(line, x + 12, y - step * (float)(6 + i), 5); }
-        if (p->samples[0] + p->samples[1] + p->samples[2] == 0) { glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("no samples: harvest by day", x, py + 30, 5); }
+        /* Real, crew-shared sample list -- host-fed from PC_PACKET_LAB_UPDATE (BIG_O/NORTHSTAR.md
+           §30 follow-up). SELECT runs the centrifuge on the highlighted row; the real result comes
+           back on the next update, there is no local purity/contamination prediction here. */
+        if (p->lab_sample_count == 0) {
+            glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("no samples in the crew lab", x, y, 5);
+        }
+        for (int i = 0; i < p->lab_sample_count && i < BP_LAB_SAMPLES; i++) {
+            snprintf(line, sizeof(line), "sample %d  gen %d", i, p->lab_generation[i]);
+            bp_line(x, y - step * (float)(i * 2), line, i == p->cursor, 1.0f);
+            snprintf(line, sizeof(line), "  purity %.0f%%  contam %.0f%%  integ %.0f%%", p->lab_purity[i], p->lab_contamination[i], p->lab_integrity[i]);
+            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string(line, x, y - step * (float)(i * 2 + 1), 4);
+        }
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("SELECT to centrifuge (standard spin)", x, py + 12, 4);
         break;
     case BP_APP_CARGO:
         for (int i = 0; i < BP_INV_SLOTS && i < PC_INVENTORY_SLOTS; i++) {
@@ -1825,6 +1831,9 @@ int main(int argc, char **argv) {
             net_job_start(3, iduna_host, iduna_port); } \
         else if (fx_.kind == BP_FX_IDUNA_POLL) { \
             net_job_start_with_code(4, iduna_host, iduna_port, g_iduna_device_code); } \
+        else if (fx_.kind == BP_FX_LAB_CENTRIFUGE) { PcLabCentrifugePacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_LAB_CENTRIFUGE; rq.hdr.sequence = ++allocate_seq; rq.sample_index = (unsigned char)fx_.arg; \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
     } while (0)
     BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */
 
@@ -2299,6 +2308,20 @@ int main(int argc, char **argv) {
                 PcWeaponOwnedPacket wu; memcpy(&wu, buf, sizeof(wu));
                 g_weapons_owned = wu.weapons_owned;
                 g_current_weapon = wu.current_weapon;
+            } else if (hdr.type == PC_PACKET_LAB_UPDATE && (size_t)n >= sizeof(PcLabUpdatePacket)) {
+                /* Real, whole-crew-lab snapshot (BIG_O/NORTHSTAR.md §30 follow-up) -- not a delta,
+                   same convention PC_PACKET_INVENTORY_UPDATE above already uses. */
+                PcLabUpdatePacket lu; memcpy(&lu, buf, sizeof(lu));
+                int cnt = lu.sample_count; if (cnt > BP_LAB_SAMPLES) cnt = BP_LAB_SAMPLES;
+                phone.lab_sample_count = cnt;
+                for (int i = 0; i < cnt; i++) {
+                    phone.lab_contamination[i] = lu.samples[i].contamination_pct;
+                    phone.lab_purity[i] = lu.samples[i].purity_pct;
+                    phone.lab_integrity[i] = lu.samples[i].integrity_pct;
+                    phone.lab_read_depth[i] = lu.samples[i].read_depth;
+                    phone.lab_generation[i] = lu.samples[i].generation;
+                    phone.lab_genetic_drift[i] = lu.samples[i].genetic_drift;
+                }
             }
         }
 

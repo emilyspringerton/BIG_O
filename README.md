@@ -41,8 +41,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > starter samples seeded at boot — a real day-harvest bridge doesn't exist yet) mutates over a real UDP packet
 > (`PC_PACKET_LAB_CENTRIFUGE`) and syncs back to every connected player (`PC_PACKET_LAB_UPDATE`). PCR/sequencer/
 > CRISPR-splice/repressor/breed/incubate are still real, tested, server-side-only primitives with no packet of
-> their own yet, and the phone's `BP_APP_LAB` screen is still its own original client-only mockup (a different,
-> simpler data model) — no client input sends the new packet yet. See `NORTHSTAR.md` §30 for what's deferred.
+> their own yet. The phone's `BP_APP_LAB` screen is now the real thing, not a mockup: it lists the crew's actual
+> shared samples (contamination/purity/integrity, generation) fed live from `PC_PACKET_LAB_UPDATE`, and **SELECT**
+> on a sample sends the real `PC_PACKET_LAB_CENTRIFUGE` request — the earlier client-only "base/trait/clone" model
+> is gone. See `NORTHSTAR.md` §30/§34 for what's deferred (no PCR/sequencer/splice UI yet, no day-harvest bridge,
+> no persistence, no live GL screenshot in this sandbox).
 > Zombies can now be commanded: press **G** to throw a pheromone marker (`PC_PACKET_PHEROMONE_THROW`), and any
 > zombie within range locks on (`has_target` is no longer hardcoded 0) and steers toward it, escalating mood toward
 > HUNTING/FRENZIED as it closes in — verified live against a running server. No autonomous player-detection yet (a

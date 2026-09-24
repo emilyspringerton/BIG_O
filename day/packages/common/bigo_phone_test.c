@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "bigo_phone.h"
+#include "papercraft_protocol.h" /* BIGO_LAB_SAMPLE_MAX_WIRE -- see the BP_LAB_SAMPLES parity check below */
 static int fails = 0;
 #define CHECK(c) do { if (!(c)) { printf("FAIL line %d: %s\n", __LINE__, #c); fails++; } } while (0)
 static void go(BigoPhone *p, int app) { p->open = 1; p->app = -1; p->home_cursor = app; bigo_phone_input(p, BP_SELECT, 0); }
@@ -46,14 +47,14 @@ int main(void) {
        this fires unconditionally regardless of cursor position. */
     go(&p, BP_APP_CARGO); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
     fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_ITEM_USE && fx.arg == 2);
-    /* lab: splice needs a sample; consumes exactly one; base/trait choice recorded */
-    go(&p, BP_APP_LAB); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
-    bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 0);
-    p.samples[0] = 1; bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 1 && p.samples[0] == 0 && p.clones[0] == 0);
-    bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 1);
-    p.app = BP_APP_LAB; p.cursor = 0; bigo_phone_input(&p, BP_RIGHT, 0); CHECK(p.cursor2 == 1);
-    p.cursor = 1; bigo_phone_input(&p, BP_RIGHT, 0); CHECK(p.lab_trait == 1);
-    p.samples[1] = 1; p.cursor = 2; bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.clone_count == 2 && p.clones[1] == 1 && p.clone_traits[1] == 1);
+    /* lab: real, host-fed crew sample list (BIG_O/NORTHSTAR.md §30 follow-up). SELECT on a real
+       row fires BP_FX_LAB_CENTRIFUGE with the row index; empty lab is a real, honest no-op. */
+    go(&p, BP_APP_LAB); CHECK(bp_rows(&p) == 1);   /* no samples yet -- one placeholder row, not zero */
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_NONE);
+    p.lab_sample_count = 2; CHECK(bp_rows(&p) == 2);
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_CENTRIFUGE && fx.arg == 0);
+    bigo_phone_input(&p, BP_DOWN, 0); fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_CENTRIFUGE && fx.arg == 1);
+    CHECK(BP_LAB_SAMPLES == BIGO_LAB_SAMPLE_MAX_WIRE);
     /* world feed + Thorne unlock + message detail */
     bigo_phone_init(&p); CHECK(!p.wf_valid && p.contacts_met == 1);
     int zc[BP_ZONES] = { 12, 4, 0, 2, 0 }; bigo_phone_set_world(&p, 450, 1, 1, 2, zc, 75);

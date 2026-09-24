@@ -1878,3 +1878,68 @@ app -- the exact same three-assertion shape `BP_APP_MESSAGES`'s own test block a
 `scripts/build_day.sh`/`scripts/build_client.sh` compile, not a rendered frame.
 
 session: sess-20260923-1030-4a526255.
+
+## 34. The lab finally has a real phone screen -- BP_APP_LAB cutover (2026-09-24, closes §30's own client-wiring gap)
+
+§30 shipped the SERVER half of "the lab goes live" (real crew-shared `g_lab`, centrifuge over `PC_PACKET_LAB_CENTRIFUGE`,
+sync over `PC_PACKET_LAB_UPDATE`) and named the client half as the real, biggest remaining gap: `BP_APP_LAB` was still
+its own original, entirely client-local "base/trait/SPLICE/clone list" mockup -- a different, never-built breeding
+concept with zero server round trip, not `core/lab_sim.c`'s real sample pipeline. This closes that gap: a clean cutover
+(same "replace outright" precedent phase 7d already established for orphaned mockup content), not a second, parallel
+lab screen.
+
+### What shipped
+
+- **`day/packages/common/bigo_phone.h`**: the old fake fields (`lab_trait`, `samples[3]`, `clones[]`/`clone_count`/
+  `clone_traits[]`, `BP_BASES`/`BP_TRAITS`, `BP_CLONES`) are gone. `BigoPhone` gains real, host-fed crew sample state
+  (`lab_sample_count` + parallel `lab_contamination`/`lab_purity`/`lab_integrity`/`lab_read_depth`/`lab_generation`/
+  `lab_genetic_drift` arrays, sized `BP_LAB_SAMPLES` -- a new, independent constant mirroring `papercraft_protocol.h`'s
+  own `BIGO_LAB_SAMPLE_MAX_WIRE`, same "no cross-header network dependency" discipline that file's own doc comment
+  already established against `core/lab_sim.h`). `bp_rows(BP_APP_LAB)` now returns the real sample count (1 if empty,
+  matching every other list app's own "always at least one row" convention). New effect `BP_FX_LAB_CENTRIFUGE` (arg =
+  sample index) fires unconditionally once the cursor is on a real row -- same "server is the only real validator, no
+  local gate" precedent `BP_FX_ITEM_USE` already set, since this header carries no purity/contamination copy to
+  validate against locally anyway.
+- **`day/apps/client/src/main.c`**: `draw_bigo_phone`'s `BP_APP_LAB` case now renders the real list (per-sample
+  generation/purity/contamination/integrity, cursor-highlighted, "SELECT to centrifuge" hint) instead of the old
+  base/trait/SPLICE UI. `PHONE_APPLY` gained a `BP_FX_LAB_CENTRIFUGE` arm building a real `PcLabCentrifugePacket` and
+  sending it, same shape every other `BP_FX_*` -> `Pc*Packet` arm in that macro already uses. The incoming-packet
+  switch gained a `PC_PACKET_LAB_UPDATE` case, filling `phone.lab_*` from `PcLabUpdatePacket` field-for-field (a real,
+  whole-crew snapshot, not a delta, same convention `PC_PACKET_INVENTORY_UPDATE`'s own handling already uses).
+- **`day/tools/phone_preview.c`**: seed data updated to the new fields (2 real sample rows with distinct
+  purity/contamination/generation) so the phone-screenshot tool still renders something meaningful for `BP_APP_LAB`.
+
+### Verified, not just compiled
+
+- `bazel test //day/packages/common:bigo_phone_test` -- rewritten lab coverage: empty lab is a real, honest one-row
+  no-op (SELECT fires nothing); seeding 2 samples makes `bp_rows` return 2; SELECT on row 0 fires
+  `BP_FX_LAB_CENTRIFUGE` with `arg == 0`, moving down and re-selecting fires `arg == 1`; a direct
+  `BP_LAB_SAMPLES == BIGO_LAB_SAMPLE_MAX_WIRE` check (added `papercraft_protocol.h` to this test's own includes/BUILD
+  deps for the first time, same precedent `bigo_lab_test.c` already set) guards the two constants from silently
+  drifting apart.
+- `bazel test //...` -- 41/41 green, no regressions anywhere else in the suite.
+- `scripts/build_day.sh` and `scripts/build_client.sh` both clean (one real, caught-and-fixed bug along the way: a
+  first-draft doc comment's own prose -- `wf_*/iduna_*` -- contained a literal `*/`-shaped substring that closed the
+  C comment early, corrupting everything after it into malformed struct members; the exact same bug class §26's own
+  header comment hit, fixed the same way, by rewording rather than suppressing).
+- `scripts/build.sh` (the ASan/UBSan `core/` scenario path) unaffected and still clean: 4619 witness_rules parity
+  vectors, 26 crew-sim scenarios -- confirms this pass never touched anything upstream of the client/phone layer.
+
+### Real, honest, deliberately NOT built here
+
+1. **No live GL screenshot.** Same standing sandbox limitation every prior BIG_O client change already carries (no
+   real GL driver here) -- not attempted, not silently skipped either.
+2. **No live network round trip through the real client.** The wire structs (`PcLabCentrifugePacket`/
+   `PcLabUpdatePacket`) are byte-identical to what §30 already proved round-trips correctly over a real UDP socket
+   server-side (`lab_verify.c`'s own real socket-pair test); the client's decode is a straight `memcpy` into that same
+   type, type-checked by the compiler, following the exact pattern every neighboring case
+   (`PC_PACKET_INVENTORY_UPDATE`, `PC_PACKET_WEAPON_OWNED`) in this same switch already uses. A full connect-ticket
+   handshake (HMAC-signed, minted by IDUNA) was judged not worth building standalone just to re-prove a wire format
+   already proven correct -- named honestly as a real, not-yet-done step rather than assumed away.
+3. **Still only the centrifuge station.** PCR/sequencer/CRISPR-splice/repressor-install/breed/incubate remain real,
+   tested, server-side-only primitives with neither a packet nor a phone screen of their own -- unchanged from §30,
+   not attempted this pass (Principle 19: one station's full client loop closed for real, the rest still named).
+4. **No day-harvest bridge, no persistence, no IDUNA/crew ownership model.** All three unchanged from §30's own
+   already-honest list -- this pass closed the client-UI gap specifically, nothing else.
+
+session: sess-20260923-1030-4a526255.

@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-09-24 (3)
+- feat(phone): BP_APP_LAB is finally the real thing -- closes §30's own named client-wiring gap. The old
+  entirely-client-local "base/trait/SPLICE/clone list" mockup (a different, never-built breeding concept, zero
+  server round trip) is gone outright, replaced by a real crew-shared sample list host-fed from
+  `PC_PACKET_LAB_UPDATE` (contamination/purity/integrity/generation per sample); SELECT on a row sends the real
+  `PC_PACKET_LAB_CENTRIFUGE` request, same "server is the only real validator" convention `BP_FX_ITEM_USE`
+  established. `bigo_phone.h`/`day/apps/client/src/main.c`/`day/tools/phone_preview.c` updated;
+  `bigo_phone_test.c` rewritten for the new model plus a `BP_LAB_SAMPLES == BIGO_LAB_SAMPLE_MAX_WIRE` parity
+  check. `bazel test //...` 41/41 green, `scripts/build_day.sh`/`scripts/build_client.sh`/`scripts/build.sh`
+  (ASan/UBSan core path) all clean. One real bug caught and fixed along the way: a doc comment's own prose
+  (`wf_*/iduna_*`) contained a literal `*/` that closed the C comment early, corrupting the whole struct
+  definition -- same bug class §26 already hit once, fixed the same way. README updated (the old "still a
+  mockup" line was now false). `NORTHSTAR.md` §34. Real, honest, not done: no live GL screenshot (standing
+  sandbox limitation) and no full connect-ticket-handshake network round trip through the real client (the wire
+  structs are byte-identical to what §30 already proved round-trips correctly server-side). (sess-20260923-1030-4a526255)
+
 ## 2026-09-24 (2)
 - feat(phone): new ARPANET app (`BP_APP_ARPANET`, `day/packages/common/bigo_phone.h`) -- founder real-time: "add the arpanet to big_o," clarified (asked directly, since the bare ask was genuinely ambiguous) as "a retro terminal/BBS app on the phone." A read-only, pre-seeded archive of 5 static text nodes, styled after the real historical ARPANET's IMP host numbering -- browse the list, SELECT a node to read it in full, reusing the exact list<->detail pattern (and the same `p->detail` flag) `BP_APP_MESSAGES` already established. Deliberately NOT the live free-text networking `BP_APP_GFD` already does -- this is archival, not a chat. New `case BP_APP_ARPANET` in `draw_bigo_phone` (`day/apps/client/src/main.c`), splitting each node's body on its own authored `\n` line breaks rather than word-wrapping. `bigo_phone_test.c` extended (list/detail/back-navigation); `scripts/build_day.sh`/`scripts/build_client.sh` both clean. No real GL driver in this sandbox (same standing limitation every prior BIG_O client change here carries, per NORTHSTAR.md) -- verified via the standalone logic test, not a rendered screenshot. `NORTHSTAR.md` §33 added.
 

@@ -71,9 +71,16 @@ typedef enum {
     BP_FX_IDUNA_START,      /* SELECT on the idle/error IDUNA screen -- host starts the real
                                 /auth/device/start HTTP call (async, off the main thread -- see
                                 NORTHSTAR.md §31). arg unused. */
-    BP_FX_IDUNA_POLL        /* SELECT on the pending IDUNA screen -- host runs one real
+    BP_FX_IDUNA_POLL,       /* SELECT on the pending IDUNA screen -- host runs one real
                                 /auth/device/poll call by hand (no automatic timed polling in this
                                 v0). arg unused. */
+    BP_FX_LAB_CENTRIFUGE    /* SELECT on a real, host-fed lab sample row (BIG_O/NORTHSTAR.md §30
+                                follow-up: real client wiring for the server-authoritative lab).
+                                arg = sample index -> PC_PACKET_LAB_CENTRIFUGE. Fired unconditionally
+                                whenever the cursor is on a real row (lab_sample_count bounds it
+                                already, same "server is the only real validator" convention
+                                BP_FX_ITEM_USE established) -- the server runs the actual spin and
+                                the real result comes back on the next PC_PACKET_LAB_UPDATE. */
 } BpEffectKind;
 
 typedef struct { BpEffectKind kind; int arg; } BpEffect;
@@ -82,7 +89,6 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_MAX_QUEUED 8
 #define BP_NOTE_LINES 6
 #define BP_CONTACTS 5
-#define BP_CLONES 8
 #define BP_INV_SLOTS 8
 #define BP_ZONES 5
 #define BP_COSTUMES 4
@@ -98,6 +104,12 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_TERM_LINES 6
 #define BP_TERM_LINE_LEN 80
 #define BP_ARPANET_NODES 5
+#define BP_LAB_SAMPLES 6 /* mirrors papercraft_protocol.h's own BIGO_LAB_SAMPLE_MAX_WIRE -- kept as
+    an independent, header-owned constant rather than #including papercraft_protocol.h from this
+    file, matching this file's own top-of-file "pure C99, no network" discipline (the same
+    judgment papercraft_protocol.h itself already made against core/lab_sim.h's BIGO_LAB_SAMPLE_MAX).
+    bigo_phone_test.c _Static_asserts the two stay equal, same precedent bigo_chat_test.c's own
+    BIGO_CHAT_MAX_TEXT check already established. */
 
 static const char *const BP_PHASE_NAMES[4] = { "DAWN", "DAY", "DUSK", "NIGHT" };
 static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "STORM" };
@@ -130,10 +142,6 @@ static const char *const BP_ZONE_NAMES[BP_ZONES] = { "WASTELAND", "NEXTOWN", "OF
 
 static const char *const BP_COSTUME_NAMES[BP_COSTUMES] = { "CIVILIAN SUIT", "LAB SMOCK", "JANITOR OVERALLS", "FIELD GEAR" };
 
-/* Lab terminal: isolate -> align -> splice, base vector x trait, consuming one sample per splice. */
-static const char *const BP_BASES[3] = { "SCAVENGER", "HOUND", "BRUTE" };
-static const char *const BP_TRAITS[3] = { "SPEED", "ARMOR", "SCENT" };
-
 /* ARPANET terminal (BP_APP_ARPANET): a read-only, pre-seeded archive of old, pre-corporate
    research-network traffic -- the archive the Notes app's own pre-populated Eastwind Owls
    briefing already hints exists ("the archive is not where you think it is"). Five static nodes,
@@ -154,8 +162,7 @@ typedef struct {
     int app;                 /* -1 = home grid, else BpApp */
     int home_cursor;
     int cursor;              /* per-app row cursor (reset on entering an app) */
-    int cursor2;             /* second axis (lab base / contact reply) */
-    int lab_trait;           /* lab: selected trait */
+    int cursor2;              /* second axis (contact reply) */
 
     int messages[BP_MAX_MESSAGES]; int message_count; int unread;
     int trust[BP_CONTACTS]; int replied[BP_CONTACTS]; int contacts_met;
@@ -165,8 +172,20 @@ typedef struct {
     /* world feed (host-fed: clock/weather/zombies). wf_valid 0 = no world source, screens say so. */
     int wf_valid, wf_minute, wf_day, wf_phase, wf_weather, wf_zombies[BP_ZONES], wf_sight;
     char notes[BP_NOTE_LINES][48];
-    int samples[3];          /* harvested sample counts per type (fed by the host; 0 until harvesting exists) */
-    int clones[BP_CLONES]; int clone_count; int clone_traits[BP_CLONES];
+
+    /* Lab (BP_APP_LAB) -- real, crew-shared sample data, host-fed from PC_PACKET_LAB_UPDATE
+       (BIG_O/NORTHSTAR.md §30 follow-up: cuts over the app's own earlier "base/trait/SPLICE/clone
+       list" mockup, which had zero server round trip and modeled a different, never-built breeding
+       concept -- core/lab_sim.c's real pipeline is samples in, not clones out). Same "host writes,
+       phone renders" convention wf_valid/iduna_stage above already use; this header stays pure/no-network. */
+    int lab_sample_count;
+    float lab_contamination[BP_LAB_SAMPLES];
+    float lab_purity[BP_LAB_SAMPLES];
+    float lab_integrity[BP_LAB_SAMPLES];
+    float lab_read_depth[BP_LAB_SAMPLES];
+    int lab_generation[BP_LAB_SAMPLES];
+    float lab_genetic_drift[BP_LAB_SAMPLES];
+
     int costume;             /* worn costume index */
     int weapons_owned;       /* bitmask, mirrored from server */
     int current_weapon;
@@ -207,7 +226,7 @@ static inline int bp_wrap(int v, int n) { return n <= 0 ? 0 : ((v % n) + n) % n;
 
 static inline void bp_enter_app(BigoPhone *p, int app) {
     p->detail = 0;
-    p->app = app; p->cursor = 0; p->cursor2 = 0; p->lab_trait = 0;
+    p->app = app; p->cursor = 0; p->cursor2 = 0;
     if (app == BP_APP_MESSAGES) p->unread = 0;
 }
 
@@ -218,7 +237,7 @@ static inline int bp_rows(const BigoPhone *p) {
     case BP_APP_CONTACTS: return p->contacts_met;
     case BP_APP_MAP: return BP_ZONES;
     case BP_APP_NOTES: return BP_NOTE_LINES;
-    case BP_APP_LAB: return 4;       /* base, trait, SPLICE, clone list */
+    case BP_APP_LAB: return p->lab_sample_count > 0 ? p->lab_sample_count : 1;
     case BP_APP_CARGO: return BP_INV_SLOTS;
     case BP_APP_SKILLS: return 5;
     case BP_APP_LOADOUT: return 6;
@@ -382,16 +401,12 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         if (a == BP_SELECT) { p->photos++; fx.kind = BP_FX_TAKE_PHOTO; fx.arg = p->photos; }
         break;
     case BP_APP_LAB:
-        if (p->cursor == 0 && (a == BP_LEFT || a == BP_RIGHT)) p->cursor2 = bp_wrap(p->cursor2 + (a == BP_RIGHT ? 1 : -1), 3);
-        else if (p->cursor == 1 && (a == BP_LEFT || a == BP_RIGHT)) p->lab_trait = bp_wrap(p->lab_trait + (a == BP_RIGHT ? 1 : -1), 3);
-        else if (p->cursor == 2 && a == BP_SELECT) {
-            int base = p->cursor2, trait = p->lab_trait;
-            if (p->samples[base] > 0 && p->clone_count < BP_CLONES) {
-                p->samples[base]--;
-                p->clones[p->clone_count] = base;
-                p->clone_traits[p->clone_count] = trait;
-                p->clone_count++;
-            }
+        /* Real crew-shared sample list -- SELECT runs the real centrifuge on the highlighted
+           sample. Fired unconditionally once the cursor is on a real row (lab_sample_count already
+           bounds it via bp_rows), same "server is the only real validator" convention BP_FX_ITEM_USE
+           established -- no local purity/contamination gate here, the server owns that call. */
+        if (a == BP_SELECT && p->lab_sample_count > 0 && p->cursor < p->lab_sample_count) {
+            fx.kind = BP_FX_LAB_CENTRIFUGE; fx.arg = p->cursor;
         }
         break;
     case BP_APP_SKILLS:

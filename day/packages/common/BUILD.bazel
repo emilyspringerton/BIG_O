@@ -94,6 +94,9 @@ cc_test(
 cc_test(
     name = "bigo_phone_test",
     srcs = ["bigo_phone_test.c", "bigo_phone.h"],
+    # papercraft_protocol.h added (BIG_O/NORTHSTAR.md §30 follow-up: BP_LAB_SAMPLES/
+    # BIGO_LAB_SAMPLE_MAX_WIRE parity check) -- pulls in :common_headers for the first time.
+    deps = [":common_headers"],
 )
 
 cc_test(
