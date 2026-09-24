@@ -1207,12 +1207,10 @@ still changing mid-burst (the terminal-interface framing itself was corrected tw
    (§18 Phase B's own named gap) is the closest existing concept, and still has no earning mechanism. A real
    economy pass needs to resolve "what IS BIG_O's currency" (Bio-Slurry? something new?) before an Auction-House
    port makes sense at all -- a real, separate scoping pass, not started.
-2. **Socials.** Checked `server/chat` (a real, PURE, position-based Router -- say/tell/yell/guild channels, no
-   I/O, genuinely UDP-friendly, the closest real analog to BIG_O's own architecture of anything found in GFD)
-   and `server/guild` (a real linkshell-style item-token membership system -- Feather/Feather Sack). BIG_O has
-   no chat packet of any kind today (checked `papercraft_protocol.h`) -- `chat.go`'s own pure Router is real,
-   promising, reusable groundwork, but wiring it needs a real new packet type + client-side text input/display,
-   neither of which exists yet. Not started.
+2. **Socials.** ~~Checked `server/chat`...~~ **Partially closed, 2026-09-24, see §25** -- `say` shipped, real,
+   end to end (real packet type, real client-side free-text terminal, real server-side radius broadcast).
+   `server/chat`'s own tell/yell/guild channels, and `server/guild`'s own linkshell system, are still real,
+   separate, not-started follow-ups (no player-name registry or guild concept exists in BIG_O yet, checked).
 3. **Terminal interface.** Founder direction changed mid-burst, checked and recorded in order: first "pull
    stuff from pitviper but no go code on the front end" (BIG_O's client is native C/SDL2, so this meant
    PITVIPER's own design affordances -- PTY-style prompt, vterm rendering -- reinterpreted in C, not a literal
@@ -1230,5 +1228,107 @@ still changing mid-burst (the terminal-interface framing itself was corrected tw
    NOT publish to REFLUX yet (they only `printf` a server log line, same "real but partial, log-only" honesty
    this thread's own §23 pager work already used for its own world-observable-cue gap) -- a real, named,
    mechanical follow-up once REFLUX has a real BIG_O-side subscriber worth wiring these events to.
+
+## 25. The GFD terminal (BP_APP_GFD) -- real "say" chat, phase 1 (2026-09-24, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+Founder real-time (six messages, logged in order per Principle 1a, Apples #20584-#20588 plus the message
+that opened this unit): "the GFD subsystem affordances should be via the GFD app on the BIG_O phone (mini
+terminal interface)" -> "add real SSH key generation" -> "add the iduna app from IDUNA.GAME" -> "ensure GFD
+uses https use DEADWEIGHT primatives as example" -> "ensure big_o uses https rather" -> "ensure bazaar
+functions in big_o for cargo". Same Principle-19 judgment call as §24's own 8-message burst: land the one
+piece that was already concretely scoped and stable (the GFD app itself, with one real GFD subsystem wired
+through it end to end), and write an honest, investigated queued account of the rest rather than shallow-
+build all six fronts against direction that kept arriving mid-pass.
+
+### What shipped
+
+- **`PARENA/stdlib/big_o/chat_rules.prn`** -- new PARENA module, reverse-ported from GoblinFoxDragon's own
+  real `server/chat/chat.go` Router: `chat-in-range` (radius check, GFD's own real `inRadius()` rule) and
+  `chat-msg-len-ok` (non-empty, <= 200 bytes, GFD's own real `Deliver()` guard). Compiles clean, generates to
+  `day/packages/simulation/chat_rules.c` via `scripts/gen_rules.sh` (updated).
+- **`day/packages/common/bigo_chat.h`** -- new, thin host wrapper (`bigo_chat_hears`, `bigo_chat_len_ok`),
+  same "mods first everything" split every other BIG_O PARENA consumer header already draws. No persistent
+  state of its own (chat has none to own, unlike `bigo_party.h`'s roster array).
+- **Two new wire packets**: `PC_PACKET_CHAT_SAY` (client->server, `PcChatSayPacket`, a 96-byte fixed text
+  buffer) and `PC_PACKET_CHAT_RECV` (server->client, `PcChatRecvPacket`, adds `sender_slot`). Deliberate
+  departure from `PcPhoneMessagePacket`'s own fixed-id-table convention -- chat is genuinely free text, which
+  that convention can't express -- so this follows `PcRejectPacket`'s own real fixed-char-buffer precedent
+  instead. `bigo_chat_test.c` `_Static_assert`s the 96-byte literal against `BIGO_CHAT_MAX_TEXT` so the two
+  headers can't silently drift apart.
+- **`day/apps/server/src/main.c`**: a new `PC_PACKET_CHAT_SAY` handler, same sender-resolved-from-source-
+  address loop every other client->server handler in this file uses, then a real per-player radius-broadcast
+  loop (real `PlayerSlot` positions, real distance-cm, `bigo_chat_hears`) -- sender always hears their own
+  say (distance 0), matching `chat.go`'s own real `inRadius()` semantics exactly.
+- **`day/packages/common/bigo_phone.h`**: a new eleventh phone app, `BP_APP_GFD` -- the one app in this file
+  that breaks the pure D-pad-menu model every other app uses. Real free-text input (`term_input`, printable-
+  ASCII-only, 95 chars) and a real 6-line scrollback (`term_lines`), with a new `BP_FX_CHAT_SEND` effect
+  (arg carries the length; the host reads the actual text via the new `bigo_phone_term_take()`, since an int
+  arg can't carry free text -- same "host reads other state, arg is just a signal" convention `BP_FX_TAKE_PHOTO`
+  already established).
+- **`day/apps/client/src/main.c`**: real SDL_TEXTINPUT wiring, scoped to exactly when the GFD app is open
+  (`SDL_Start/StopTextInput` synced once per frame) -- reuses the exact real text-input pattern
+  `run_login_screen`'s own email/password fields already establish. RETURN sends (`BP_FX_CHAT_SEND` ->
+  `PcChatSayPacket` -> local echo line), ESCAPE exits the app, BACKSPACE deletes a character (all three
+  special-cased out of the generic WASD/arrow/space D-pad mapping, which would otherwise swallow those same
+  keys as navigation instead of chat text). A real `PC_PACKET_CHAT_RECV` handler appends `player<N>: <text>`
+  to the terminal's scrollback. A real render case (`draw_bigo_phone`'s own `BP_APP_GFD` switch arm): the
+  scrollback, then a live input line with a blinking caret.
+
+### Verified, not just compiled
+
+- `bazel test //day/packages/...` -- 31/31 green, including the new `bigo_chat_test` (6 real assertions:
+  constants match `chat.go`'s own real values, length gate, range gate, self-always-heard) and the unaffected
+  `bigo_phone_test`.
+- `scripts/build_day.sh` and `scripts/build_client.sh` both clean (the client build surfaced and fixed one
+  real `-Wformat-truncation` warning: `line`'s existing 96-byte buffer can't hold `"> " + 95-char input + "_"`
+  in the worst case -- fixed with a correctly-sized local buffer, not a suppressed warning).
+- A real, live integration harness (`chat_verify.c`, scratch, not committed, same `#include main.c` precedent
+  every harness in this thread uses) against the real, unmodified `bigo_chat_hears`/`bigo_chat_len_ok` and real
+  `g_slots[]` positions -- ASan/UBSan clean, all assertions pass: self and in-range players hear a say,
+  out-of-range does not, length gate matches the packet handler's own real validation.
+
+### Real, honest, deliberately NOT built here
+
+No tell/yell/guild channels (named in §24's own queued list, still true). No player-name registry (say
+identifies senders by slot number, `player<N>`, not a chosen display name -- BIG_O has no name system at all
+today, checked). No REFLUX publish for chat events (same "log/wire-only, no REFLUX subscriber yet" gap §24's
+own party events and §23's own pager cue already carry). No chat history persistence across reconnects (the
+6-line scrollback is client-local and resets on client restart, matching every other phone app's own
+in-session-only state).
+
+### Queued, investigated but NOT built this pass (the rest of the six-message burst)
+
+1. **SSH key generation.** Checked PITVIPER's own `internal/sshkey/sshkey.go` first, expecting a stub to
+   replace -- it is NOT a stub, it's a real, complete Ed25519 keygen (on-device generation, PEM-encoded
+   private key saved locally, public `authorized_keys` line returned for display, private key never
+   transmitted). PITVIPER already has this. The founder's ask lands here instead: BIG_O has no Ed25519 (or
+   any elliptic-curve) primitive anywhere -- `day/packages/common/hmac_sha256.h` is real but is SHA-256/HMAC
+   only, no signature scheme. A from-scratch pure-C99 Ed25519 implementation (or an FFI bind to an external
+   crypto lib, which this repo has never done) is a real, separate, nontrivial cryptography unit of work, not
+   a small addition alongside a wire-protocol feature -- not started, real scope not yet cut.
+2. **The IDUNA app (from IDUNA.GAME).** IDUNA.GAME's own real login flow (honor code display + real IDUNA
+   device-auth: `/auth/device/start` -> poll -> exchange) talks to IDUNA over real HTTP(S) REST calls, not
+   UDP. BIG_O's C/SDL2 client has never had an HTTP client of any kind in its own gameplay loop (there IS a
+   real `day/packages/common/http_client.h`, used only by `apps/mapeditor`/offline tooling for pulling level
+   exports from IDUNA -- never wired into the live `apps/client` game loop or its UDP session). Adding a real
+   IDUNA app to the phone means threading that same real HTTP client (or a new one) into the live client for
+   the first time, plus a new phone-app UI for the device-code flow -- a real, separate, IDUNA.GAME-sized
+   piece of work. Not started.
+3. **GFD/BIG_O over HTTPS.** Checked the referenced example first, honestly: `DEADWEIGHT` has NO TLS/HTTPS
+   code anywhere (`grep -rl "ListenAndServeTLS\|tls.Config\|autocert\|certmagic"` -- zero matches) -- the
+   founder's own named example doesn't hold up as stated, a real finding, not assumed. The monorepo's own
+   actual, confirmed HTTPS convention (OpenExecutive's `https://exec.okemily.com`, JEWEL's nginx `/jewel/`
+   proxy, the webphone `wss` nginx proxy already in `sudo-queue/`) is nginx/Caddy TLS termination in front of
+   a plain-HTTP Go backend, not `ListenAndServeTLS` in the Go binary itself. Both GFD's own HTTP surface
+   (`server/trapxapi`, `server/worldapi`, `apps2/server-go`, etc.) and BIG_O's own non-gameplay HTTP traffic
+   (today: none live -- `http_client.h` calls IDUNA directly over whatever scheme IDUNA itself serves) would
+   need a real ops/deploy pass (a domain, an nginx vhost, a cert) more than a code change -- genuinely
+   different work from everything else in this unit, not started, real scope not yet cut.
+4. **Bazaar (Cargo economy).** Names where the still-open economy question (§24's own queued item 1, "what
+   IS BIG_O's currency") should surface once resolved: the existing `BP_APP_CARGO` phone app, as a "Bazaar"
+   function, referencing GFD's own real `server/market/ah.go` (FFXI-parity blind-bid Auction House,
+   identified as the closest real analog back in §24). The currency question is still genuinely unresolved --
+   this message names WHERE the UI should live, not what BIG_O trades in, so still correctly not guessed at.
+   Not started.
 
 session: sess-20260923-1030-4a526255.

@@ -63,6 +63,16 @@
     (GFD's own real rule); if the leader leaves with no members left, the party disbands. No
     payload beyond PcHeader -- sender is resolved from the packet's own source address, same
     convention PcCostumeSetPacket/PcItemUsePacket above already establish. */
+#define PC_PACKET_CHAT_SAY         21 /* client -> server: EMILY/BACKLOG.md SECTION 536 follow-up,
+    BIG_O/NORTHSTAR.md §24 -- "the GFD subsystem affordances should be via the GFD app on the
+    BIG_O phone (mini terminal interface)". Reverse-ported from GoblinFoxDragon's own real
+    server/chat/chat.go "say" channel: a radius broadcast from the sender's own position, sender
+    included (GFD's own real inRadius() semantics -- distance to self is always 0). Sender is
+    resolved from the packet's own source address, same convention every client->server packet
+    above already establishes. See PcChatSayPacket below. */
+#define PC_PACKET_CHAT_RECV        22 /* server -> client: one send per real recipient within
+    chat_say_radius_cm() of the sender, same "server decides, then fans out" convention
+    broadcast_entity_spawn already follows. See PcChatRecvPacket below. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 
@@ -324,6 +334,30 @@ typedef struct {
     PcHeader hdr;
     unsigned char target_slot; /* PC_MAX_PLAYERS-space player slot index being invited/kicked */
 } PcPartyTargetPacket;
+
+/* PcChatSayPacket/PcChatRecvPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md
+ * §24. Deliberate departure from PcPhoneMessagePacket's own fixed-id-table convention: chat is
+ * genuinely free text (players type arbitrary things), which that convention can't express. This
+ * repo's own real, existing precedent for free text over the wire is PcRejectPacket's own
+ * PC_REJECT_REASON_MAX fixed char buffer -- same real shape here, sized for a short chat line
+ * (BIGO_CHAT_MAX_TEXT, day/packages/common/bigo_chat.h), not JSON (VS0 is I32-scalar-only and
+ * this repo's own convention throughout is fixed-size binary structs, same reasoning
+ * PcPhoneMessagePacket's own doc comment above already gives). text is NOT guaranteed
+ * NUL-terminated by the sender -- both apps/client and apps/server must treat it as a fixed-size
+ * byte buffer and bound every read to BIGO_CHAT_MAX_TEXT. */
+typedef struct {
+    PcHeader hdr;
+    char text[96]; /* BIGO_CHAT_MAX_TEXT, spelled out numerically -- papercraft_protocol.h has no
+                       dependency on bigo_chat.h (this file is the lower layer); bigo_chat.h's own
+                       #define is the same literal 96, checked by a real _Static_assert in
+                       bigo_chat_test.c so the two can never silently drift apart. */
+} PcChatSayPacket;
+
+typedef struct {
+    PcHeader hdr;
+    unsigned char sender_slot; /* PC_MAX_PLAYERS-space player slot index who said it */
+    char text[96]; /* see PcChatSayPacket's own doc comment above */
+} PcChatRecvPacket;
 
 /* PcPhoneMessagePacket -- PAPERCRAFT's own first real slice of
  * TYLER/engine/tyler_phone_mechanics.md's "in-game smartphone system" spec (Phase 1 only:

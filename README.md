@@ -85,6 +85,12 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > instead of only the destroyer getting credit. No client UI or party-roster HUD yet, and no invite-accept
 > confirmation step (direct invite-add, matching GFD's own pure logic) -- server-only, same "server logic
 > first, client visual later" precedent every phase in this thread has used. See `NORTHSTAR.md` §24.
+> The in-game phone has an eleventh app, GFD -- a real free-text terminal (the only phone app that isn't
+> pure D-pad menu navigation) with one real command wired end to end: say, a radius-broadcast chat
+> reverse-ported from GoblinFoxDragon's own real `server/chat/chat.go` Router. Type, ENTER to send, ESCAPE
+> to exit; nearby players (and you) see it appear in their own terminal's scrollback. tell/yell/guild
+> channels, a player-name registry, and REFLUX event publishing are real, separate, not-yet-built follow-
+> ups. See `NORTHSTAR.md` §25.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

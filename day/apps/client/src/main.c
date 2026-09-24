@@ -1139,7 +1139,6 @@ static const char *bp_trunc(const char *s, char *out, size_t n, size_t maxc) {
 static const char *const BP_BAND_NAMES[4] = { "OK", "SUSPICION", "HYSTERIC", "CANCELLED" };
 static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPlayerState *own,
                             const PcInventorySlot *inv, unsigned int now_ms_v) {
-    (void)now_ms_v;
     glDisable(GL_DEPTH_TEST);
     glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, win_w, 0, win_h, -1, 1);
     glMatrixMode(GL_MODELVIEW); glLoadIdentity();
@@ -1274,6 +1273,22 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
             pc_draw_string(line, x, y - step * 5.5f, 6);
             if (band == BAND_CANCELLED) { glColor3f(0.9f, 0.3f, 0.2f); pc_draw_string("CANCELLED -- regulator escalation not built yet", x, y - step * 6.5f, 4); }
         }
+        break;
+    case BP_APP_GFD:
+        /* Real terminal render: scrollback (oldest at top) then a live input line with a blinking
+           caret, EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24. */
+        for (int i = 0; i < p->term_line_count; i++) {
+            glColor3f(0.6f, 0.95f, 0.6f);
+            pc_draw_string(bp_trunc(p->term_lines[i], tmp, sizeof(tmp), 38), x, y - step * (float)i, 5);
+        }
+        {
+            int caret_on = ((now_ms_v / 500) % 2) == 0;
+            char input_line[4 + sizeof(p->term_input)];
+            snprintf(input_line, sizeof(input_line), "> %s%s", p->term_input, caret_on ? "_" : " ");
+            glColor3f(0.95f, 0.95f, 0.6f);
+            pc_draw_string(bp_trunc(input_line, tmp, sizeof(tmp), 38), x, py + 30, 5);
+        }
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("type, ENTER to say, ESC to exit", x, py + 12, 4);
         break;
     default: break;
     }
@@ -1587,6 +1602,12 @@ int main(int argc, char **argv) {
         else if (fx_.kind == BP_FX_ITEM_USE) { PcItemUsePacket rq; memset(&rq, 0, sizeof(rq)); \
             rq.hdr.type = PC_PACKET_ITEM_USE; rq.hdr.sequence = ++allocate_seq; rq.slot = (unsigned char)fx_.arg; \
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
+        else if (fx_.kind == BP_FX_CHAT_SEND) { PcChatSayPacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_CHAT_SAY; rq.hdr.sequence = ++allocate_seq; \
+            int chat_n_ = bigo_phone_term_take(&phone, rq.text, (int)sizeof(rq.text)); \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); \
+            char echo_[8 + sizeof(rq.text)]; snprintf(echo_, sizeof(echo_), "you: %.*s", chat_n_, rq.text); \
+            bigo_phone_term_line(&phone, echo_); } \
     } while (0)
     BigoPhone phone; bigo_phone_init(&phone); bigo_world_init(); int thorne_sent = 0; /* every menu is reached through this (bigo_phone.h) */
 
@@ -1739,6 +1760,14 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && !phone.open) running = 0;
+            /* S536-CHAT: real free-text delivery for the GFD terminal (BP_APP_GFD) -- SDL_TEXTINPUT
+               carries composed/printable text distinctly from SDL_KEYDOWN, the same real channel
+               run_login_screen's own email/password fields already use above. Only live while that
+               one app is open (see the SDL_Start/StopTextInput sync right after this poll loop) so
+               ordinary WASD movement never leaks stray characters anywhere else. */
+            if (e.type == SDL_TEXTINPUT && phone.open && phone.app == BP_APP_GFD) {
+                for (const char *c = e.text.text; *c; c++) bigo_phone_term_char(&phone, *c);
+            }
             if (e.type == SDL_MOUSEMOTION) {
                 cam_yaw -= (float)e.motion.xrel * PC_MOUSE_SENSITIVITY;
                 cam_pitch -= (float)e.motion.yrel * PC_MOUSE_SENSITIVITY;
@@ -1827,6 +1856,14 @@ int main(int argc, char **argv) {
                     if (k == SDLK_F9) { if (g_sky.ready) bigo_sky_load_user_config(); }
                     else if (k == SDLK_f) { bigo_phone_toggle(&phone); }
                     else if (k == SDLK_i) { if (phone.open && phone.app == BP_APP_CARGO) phone.open = 0; else bigo_phone_open_app(&phone, BP_APP_CARGO); }
+                    else if (phone.open && phone.app == BP_APP_GFD) {
+                        /* Free-text terminal: WASD/arrows/space are real chat characters here (SDL_TEXTINPUT
+                           above delivers them), not D-pad navigation -- only RETURN=send, ESCAPE=back,
+                           BACKSPACE=delete-char are special. */
+                        if (k == SDLK_RETURN || k == SDLK_KP_ENTER) { act = BP_SELECT; have = 1; }
+                        else if (k == SDLK_ESCAPE) { act = BP_BACK; have = 1; }
+                        else if (k == SDLK_BACKSPACE) { bigo_phone_term_backspace(&phone); }
+                    }
                     else if (phone.open) {
                         if (k == SDLK_UP || k == SDLK_w) { act = BP_UP; have = 1; }
                         else if (k == SDLK_DOWN || k == SDLK_s) { act = BP_DOWN; have = 1; }
@@ -1861,6 +1898,18 @@ int main(int argc, char **argv) {
                     if (have) PHONE_APPLY(bigo_phone_input(&phone, act, latest_snap.players[my_slot].unspent_points));
                 }
             }
+        }
+
+        /* S536-CHAT: keep SDL's text-input mode in sync with whether the GFD terminal is actually
+           open -- SDL_TEXTINPUT events (fed above) only fire while it's active, and it must be off
+           the rest of the time so ordinary WASD movement never gets treated as IME composition.
+           SDL_Start/StopTextInput are cheap no-ops when already in the requested state, so a
+           one-frame-lagged sync (checked once per frame, not per event) is real and sufficient. */
+        {
+            static int term_text_input_active = 0;
+            int want_text_input = phone.open && phone.app == BP_APP_GFD;
+            if (want_text_input && !term_text_input_active) { SDL_StartTextInput(); term_text_input_active = 1; }
+            else if (!want_text_input && term_text_input_active) { SDL_StopTextInput(); term_text_input_active = 0; }
         }
 
         unsigned int now = now_ms();
@@ -1938,6 +1987,18 @@ int main(int argc, char **argv) {
                 PcPhoneMessagePacket pm; memcpy(&pm, buf, sizeof(pm));
                 bigo_phone_notify(&phone, pm.message_id, now_ms());
                 printf("Phone notification received -- message_id %u.\n", pm.message_id);
+            } else if (hdr.type == PC_PACKET_CHAT_RECV && (size_t)n >= sizeof(PcChatRecvPacket)) {
+                /* S536-CHAT: real GFD-terminal say broadcast, see bigo_phone.h's own BP_APP_GFD
+                   doc comment. text is NOT guaranteed NUL-terminated by the sender -- bound the
+                   read to sizeof(rc.text), same convention PC_PACKET_REJECT's own rej.reason
+                   handling above already establishes. */
+                PcChatRecvPacket rc; memcpy(&rc, buf, sizeof(rc));
+                char text[sizeof(rc.text) + 1];
+                memcpy(text, rc.text, sizeof(rc.text));
+                text[sizeof(rc.text)] = '\0';
+                char line[16 + sizeof(text)];
+                snprintf(line, sizeof(line), "player%u: %s", rc.sender_slot, text);
+                bigo_phone_term_line(&phone, line);
             } else if (hdr.type == PC_PACKET_ENTITY_SPAWN && (size_t)n >= sizeof(PcEntitySpawnPacket)) {
                 PcEntitySpawnPacket sp; memcpy(&sp, buf, sizeof(sp));
                 if (sp.entity_id < PC_ENTITY_MAX) {

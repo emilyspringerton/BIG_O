@@ -15,6 +15,12 @@
 typedef enum {
     BP_APP_MESSAGES = 0, BP_APP_CONTACTS, BP_APP_MAP, BP_APP_CAMERA, BP_APP_NOTES,   /* TYLER spec apps */
     BP_APP_LAB, BP_APP_CARGO, BP_APP_SKILLS, BP_APP_LOADOUT, BP_APP_WARDROBE, BP_APP_STATUS, /* BIG_O apps */
+    BP_APP_GFD, /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24, founder real-time
+                   (2026-09-24): "the GFD subsystem affordances should be via the GFD app on the
+                   BIG_O phone (mini terminal interface)" -- a real, free-text terminal (the one
+                   BP_APP that breaks the pure D-pad-menu model every other app here uses), talking
+                   to GoblinFoxDragon-reverse-ported subsystems one command at a time. v1 ships one
+                   real command: say. */
     BP_APP_COUNT
 } BpApp;
 
@@ -28,13 +34,25 @@ typedef enum {
     BP_FX_COSTUME_SET,      /* arg = new costume index (COS_*) -> PC_PACKET_COSTUME_SET, first
                                 time costume becomes server-authoritative (EMILY/BACKLOG.md
                                 SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A) */
-    BP_FX_ITEM_USE          /* arg = inventory slot index -> PC_PACKET_ITEM_USE, first time Cargo
+    BP_FX_ITEM_USE,         /* arg = inventory slot index -> PC_PACKET_ITEM_USE, first time Cargo
                                 does anything at all (EMILY/BACKLOG.md SECTION 536 follow-up,
                                 BIG_O/NORTHSTAR.md §20). Fired unconditionally on SELECT -- this
                                 struct carries no local inventory copy to validate against (only
                                 the host's separate g_inventory does), so the server is the real,
                                 only validator, same "server decides" split every other real
                                 system in this file already follows. */
+    BP_FX_CHAT_SEND         /* arg = length of the pending say text. The text itself lives in
+                                p->term_input (NUL-terminated) -- an int arg can't carry free text,
+                                so the host must call bigo_phone_term_take() to read AND clear it
+                                before doing anything else with the phone (same "host reads other
+                                state, arg is just a signal" convention BP_FX_TAKE_PHOTO already
+                                uses). Build a real PcChatSayPacket from what comes back, send it,
+                                then echo a local line via bigo_phone_term_line() so the sender
+                                sees their own message immediately rather than waiting on the
+                                server's own PC_PACKET_CHAT_RECV round trip. First time the GFD app
+                                does anything at all (EMILY/BACKLOG.md SECTION 536 follow-up,
+                                BIG_O/NORTHSTAR.md §24, reverse-ported from GoblinFoxDragon's own
+                                real server/chat/chat.go "say" channel). */
 } BpEffectKind;
 
 typedef struct { BpEffectKind kind; int arg; } BpEffect;
@@ -50,13 +68,21 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_BANNER_MS 5000
 #define BP_SPAM_WINDOW_MS 30000
 #define BP_SPAM_MAX 2
+#define BP_TERM_INPUT_MAX 95 /* bigo_chat.h's own BIGO_CHAT_MAX_TEXT is 96; capped to 95 here to
+                                 always leave room for this header's own local NUL terminator.
+                                 This header stays independent of bigo_chat.h on purpose (same "no
+                                 upward host-constant dependency" convention bigo_party.h already
+                                 establishes) -- the relationship is checked directly, not assumed,
+                                 by bigo_chat_test.c's own _Static_assert. */
+#define BP_TERM_LINES 6
+#define BP_TERM_LINE_LEN 80
 
 static const char *const BP_PHASE_NAMES[4] = { "DAWN", "DAY", "DUSK", "NIGHT" };
 static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "STORM" };
 #define BP_MSG_THORNE_BRIEF 6   /* client message table id: Dr. Thorne's A1M1 reprimand; unlocks him in Contacts */
 
 static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
-    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS"
+    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD"
 };
 
 /* Contacts: trust ladder observer -> witness -> bound -> documented (spec). Preset replies advance it. */
@@ -95,6 +121,11 @@ typedef struct {
     int weapons_owned;       /* bitmask, mirrored from server */
     int current_weapon;
 
+    /* GFD terminal (BP_APP_GFD) -- free-text input + a real scrollback, the one app that breaks
+       the pure D-pad-menu model every other app here uses. term_input is always NUL-terminated. */
+    char term_input[BP_TERM_INPUT_MAX + 1]; int term_input_len;
+    char term_lines[BP_TERM_LINES][BP_TERM_LINE_LEN]; int term_line_count;
+
     /* notifications */
     int queue[BP_MAX_QUEUED]; int queue_len;
     unsigned int shown_at[BP_SPAM_MAX]; int shown_n;    /* recent banner times inside the spam window */
@@ -109,6 +140,8 @@ static inline void bigo_phone_init(BigoPhone *p) {
     strcpy(p->notes[0], "The archive is not where you");   /* spec: pre-populated Eastwind Owls briefing */
     strcpy(p->notes[1], "think it is. Start with what the");
     strcpy(p->notes[2], "building smells like.");
+    strcpy(p->term_lines[0], "GFD TERMINAL -- type, ENTER to say");
+    p->term_line_count = 1;
 }
 
 static inline int bp_wrap(int v, int n) { return n <= 0 ? 0 : ((v % n) + n) % n; }
@@ -131,8 +164,55 @@ static inline int bp_rows(const BigoPhone *p) {
     case BP_APP_SKILLS: return 5;
     case BP_APP_LOADOUT: return 6;
     case BP_APP_WARDROBE: return BP_COSTUMES;
+    case BP_APP_GFD: return p->term_line_count > 0 ? p->term_line_count : 1;
     default: return 1;
     }
+}
+
+/* bigo_phone_term_line -- append a scrollback line to the GFD terminal (used for both the local
+ * echo of a sent "say" and an incoming PC_PACKET_CHAT_RECV). Truncates to BP_TERM_LINE_LEN-1,
+ * shifts out the oldest line once full -- same real "shift, don't drop the newest" convention
+ * bigo_phone_notify's own messages[] overflow handling already establishes. */
+static inline void bigo_phone_term_line(BigoPhone *p, const char *text) {
+    char buf[BP_TERM_LINE_LEN];
+    size_t n = strlen(text);
+    if (n >= BP_TERM_LINE_LEN) n = BP_TERM_LINE_LEN - 1;
+    memcpy(buf, text, n);
+    buf[n] = '\0';
+    if (p->term_line_count < BP_TERM_LINES) {
+        memcpy(p->term_lines[p->term_line_count++], buf, n + 1);
+    } else {
+        for (int i = 0; i < BP_TERM_LINES - 1; i++) memcpy(p->term_lines[i], p->term_lines[i + 1], BP_TERM_LINE_LEN);
+        memcpy(p->term_lines[BP_TERM_LINES - 1], buf, n + 1);
+    }
+}
+
+/* bigo_phone_term_char -- append one printable ASCII character to the pending input, dropped
+ * silently once full or if non-printable (matches SDL_TEXTINPUT's own real UTF-8 text callback --
+ * multi-byte sequences are rejected byte-by-byte here rather than decoded, a real, honest v1
+ * limit: no non-ASCII chat text yet). */
+static inline void bigo_phone_term_char(BigoPhone *p, char c) {
+    if (c < 32 || c > 126) return;
+    if (p->term_input_len >= BP_TERM_INPUT_MAX) return;
+    p->term_input[p->term_input_len++] = c;
+    p->term_input[p->term_input_len] = '\0';
+}
+
+static inline void bigo_phone_term_backspace(BigoPhone *p) {
+    if (p->term_input_len > 0) p->term_input[--p->term_input_len] = '\0';
+}
+
+/* bigo_phone_term_take -- copies out the pending input (up to out_cap bytes, NOT NUL-terminated by
+ * this call -- caller owns that) and clears it. The host calls this exactly once, immediately on
+ * seeing a BP_FX_CHAT_SEND effect, before any further phone input can overwrite term_input.
+ * Returns the real byte count copied. */
+static inline int bigo_phone_term_take(BigoPhone *p, char *out, int out_cap) {
+    int n = p->term_input_len;
+    if (n > out_cap) n = out_cap;
+    memcpy(out, p->term_input, n);
+    p->term_input_len = 0;
+    p->term_input[0] = '\0';
+    return n;
 }
 
 /* Notification with the spec's anti-spam rule: <= 2 banners per 30s, extras queued and later shown as a summary. */
@@ -248,6 +328,9 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
         break;
     case BP_APP_CARGO:
         if (a == BP_SELECT) { fx.kind = BP_FX_ITEM_USE; fx.arg = p->cursor; }
+        break;
+    case BP_APP_GFD:
+        if (a == BP_SELECT && p->term_input_len > 0) { fx.kind = BP_FX_CHAT_SEND; fx.arg = p->term_input_len; }
         break;
     default: break;
     }

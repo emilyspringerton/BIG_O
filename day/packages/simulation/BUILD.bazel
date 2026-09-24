@@ -313,6 +313,31 @@ cc_test(
     ],
 )
 
+# chat_rules -- the real, PARENA-compiled chat "say" range/length decisions. EMILY/BACKLOG.md
+# SECTION 536 follow-up, founder real-time (2026-09-24): "the GFD subsystem affordances should be
+# via the GFD app on the BIG_O phone (mini terminal interface)". Reverse-ported from
+# GoblinFoxDragon's own real server/chat/chat.go "say" channel. Generated from
+# PARENA/stdlib/big_o/chat_rules.prn via `parena build`, committed here.
+cc_library(
+    name = "chat_rules",
+    srcs = ["chat_rules.c"],
+    hdrs = ["parena_runtime.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
+
+# bigo_chat_test -- real, pure, headless coverage for packages/common/bigo_chat.h's own range/
+# length decisions, against the real, live PARENA-compiled :chat_rules library (not a mock) --
+# same real cross-package shape bigo_party_test above already establishes.
+cc_test(
+    name = "bigo_chat_test",
+    srcs = ["bigo_chat_test.c"],
+    deps = [
+        ":chat_rules",
+        "//day/packages/common:common_headers",
+    ],
+)
+
 # weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
 # weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
 # PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.

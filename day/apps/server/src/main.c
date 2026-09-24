@@ -48,6 +48,7 @@
 #include "../../../packages/common/bigo_pheromone.h"
 #include "../../../packages/common/bigo_food_items.h"
 #include "../../../packages/common/bigo_party.h"
+#include "../../../packages/common/bigo_chat.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -2190,6 +2191,46 @@ int main(int argc, char **argv) {
                         printf("S536-PARTY: player%d left party%d -- new leader is player%d\n",
                                i, pid, g_parties[pid].leader_slot);
                     }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_CHAT_SAY && (size_t)n >= sizeof(PcChatSayPacket)) {
+                /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §24 -- reverse-ported
+                   from GoblinFoxDragon's own real server/chat/chat.go "say" channel: radius
+                   broadcast from the sender's own real position, sender included (distance to
+                   self is always 0, same real inRadius() semantics). text is NOT guaranteed
+                   NUL-terminated by the sender -- bound every read to sizeof(req.text). */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcChatSayPacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    char text[sizeof(req.text) + 1];
+                    memcpy(text, req.text, sizeof(req.text));
+                    text[sizeof(req.text)] = '\0';
+                    int len = (int)strlen(text);
+                    if (!bigo_chat_len_ok(len)) {
+                        printf("S536-CHAT: player%d said an invalid-length message (%d bytes), dropped\n", i, len);
+                        break;
+                    }
+                    int heard = 0;
+                    for (int j = 0; j < PC_MAX_PLAYERS; j++) {
+                        PlayerSlot *rs = &g_slots[j];
+                        if (!rs->active) continue;
+                        float dx = rs->state.x - s->state.x, dy = rs->state.y - s->state.y, dz = rs->state.z - s->state.z;
+                        int distance_cm = (int)(sqrtf(dx * dx + dy * dy + dz * dz) * 100.0f);
+                        if (!bigo_chat_hears(distance_cm)) continue;
+                        PcChatRecvPacket rc; memset(&rc, 0, sizeof(rc));
+                        rc.hdr.type = PC_PACKET_CHAT_RECV;
+                        rc.sender_slot = (unsigned char)i;
+                        memcpy(rc.text, text, len < (int)sizeof(rc.text) ? (size_t)len : sizeof(rc.text));
+                        sendto(sock, &rc, sizeof(rc), 0, (struct sockaddr *)&rs->addr, rs->addr_len);
+                        heard++;
+                    }
+                    printf("S536-CHAT: player%d said \"%s\" -- heard by %d player(s) within %dcm\n",
+                           i, text, heard, chat_say_radius_cm());
                     break;
                 }
             } else if (hdr.type == PC_PACKET_INTERACT && (size_t)n >= sizeof(PcInteractPacket)) {
