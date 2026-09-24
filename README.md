@@ -91,6 +91,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > to exit; nearby players (and you) see it appear in their own terminal's scrollback. tell/yell/guild
 > channels, a player-name registry, and REFLUX event publishing are real, separate, not-yet-built follow-
 > ups. See `NORTHSTAR.md` §25.
+> The GFD app is now a real, live bridge, not just a local simulation: say something and it goes out over
+> IDUNA's own real cross-server chat bus, joining GoblinFoxDragon's own existing GFD<->EINHORN_SURVIVAL
+> (live Minecraft) bridge as a third participant -- messages from GFD, EINHORN_SURVIVAL, and the older
+> mud<->battlegrounds bridge all show up in your terminal too, tagged `[GFD]`/`[MC]`/`[MUD]`/`[BG]`. Live-
+> verified against the real, running IDUNA. See `NORTHSTAR.md` §27.
 > Air ships: wedge-shaped hover skateboards you can ride. Press V to mount/cycle (SPEEDSTER, TANK, GLIDER,
 > dismount) — each has its own real, PARENA-tuned physics (`PARENA/stdlib/big_o/hoverboard_rules.prn`:
 > acceleration, friction/deceleration feel, top speed, and how much gravity affects you while riding).

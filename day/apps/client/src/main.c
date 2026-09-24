@@ -2045,9 +2045,20 @@ int main(int argc, char **argv) {
                 char text[sizeof(rc.text) + 1];
                 memcpy(text, rc.text, sizeof(rc.text));
                 text[sizeof(rc.text)] = '\0';
-                char line[16 + sizeof(text)];
-                snprintf(line, sizeof(line), "player%u: %s", rc.sender_slot, text);
-                bigo_phone_term_line(&phone, line);
+                if (rc.sender_slot == 255) {
+                    /* 255 == BIGO_BRIDGE_SENDER_SLOT (bigo_gfd_bridge.h, server-only -- the
+                       client deliberately hardcodes the literal rather than linking that whole
+                       header in, same "client hardcodes a shared id" precedent the hoverboard
+                       render code already established). EMILY/BACKLOG.md SECTION 536 follow-up,
+                       BIG_O/NORTHSTAR.md §27: a real cross-server bridge line (GFD/
+                       EINHORN_SURVIVAL/mud/battlegrounds), already fully formatted server-side
+                       ("[TAG] name: body") -- render as-is, no "player<N>:" prefix. */
+                    bigo_phone_term_line(&phone, text);
+                } else {
+                    char line[16 + sizeof(text)];
+                    snprintf(line, sizeof(line), "player%u: %s", rc.sender_slot, text);
+                    bigo_phone_term_line(&phone, line);
+                }
             } else if (hdr.type == PC_PACKET_ENTITY_SPAWN && (size_t)n >= sizeof(PcEntitySpawnPacket)) {
                 PcEntitySpawnPacket sp; memcpy(&sp, buf, sizeof(sp));
                 if (sp.entity_id < PC_ENTITY_MAX) {

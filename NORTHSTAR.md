@@ -1411,3 +1411,92 @@ speed boost on top of hoverboard momentum -- not exploited or verified either wa
 honestly rather than silently ignored or over-engineered away.
 
 session: sess-20260923-1030-4a526255.
+
+## 27. Real GFD integration -- BIG_O joins the live cross-server chat bridge (2026-09-24, EMILY/BACKLOG.md SECTION 536 follow-up)
+
+Founder real-time: "continue with the big_o gfd integration via the phone app." Investigated two real
+paths before building anything (see the two `AskUserQuestion` decisions this pass made, both answered
+by the founder): (1) a real live connection, chosen over reworking the queued §25 list in order; (2) once
+a real, existing, live GFD<->EINHORN_SURVIVAL chat bridge was found
+(`GoblinFoxDragon/docs2/CHAT_BRIDGE_TO_EINHORN_SURVIVAL_SPEC.md`, IDUNA's `POST/GET /api/v1/chat/messages`),
+BIG_O joins THAT bridge as a third real participant rather than opening its own bespoke raw-TCP connection
+into GFD's telnet port -- more consistent with the rest of the monorepo, no bespoke MUD-protocol parsing,
+and it reaches EINHORN_SURVIVAL (the live Minecraft server) too, not just GFD.
+
+### What shipped
+
+- **IDUNA** (`internal/http/handlers/chat_messages.go`): new `sender_source` `"bigo_server"` and channel
+  `"big_o"` (same "own channel, no native taxonomy to reuse" reasoning `einhorn_survival`'s own `"gta7"`
+  channel already established). New real M2M agent, `BIGO-SERVER` (`config/agents.json` +
+  `migrations/truestore/202609240100_bigo_server_agent.sql`) -- no special permission needed, `RequireAuth`
+  (any valid JWT) is the only real gate on this route, same fact `GTA7-SERVER`/`DRAGONSNSHIT-MUD` already
+  rely on. 2 new tests (`bigo_server`/`big_o` accepted; an invalid `sender_source` rejected). Live-verified,
+  not just built: ran `go run ./cmd/bootstrap` against the real running DB (provisioned the secret,
+  confirmed every other agent's own credential was left untouched), rebuilt + restarted the live
+  `iduna.service`, then a real `curl` round trip (auth -> POST -> GET) against the live server succeeded
+  end to end before any BIG_O code touched it.
+- **`day/packages/common/bigo_gfd_bridge.h`** -- new host module. One persistent background poller
+  `pthread` (auth once via `POST /api/v1/auth/agent`, then `GET .../chat/messages?since_id=...` every 5s,
+  matching GFD's own established cadence) plus one short-lived detached `pthread` per outbound send
+  (`POST`, fire-and-forget) -- the server's own single-threaded 60Hz UDP tick loop never blocks on IDUNA,
+  same reason a chat-relay outage can't stall or crash the game the way a bare blocking call on the main
+  thread would. A real, minimal JSON-array walker (`bigo_bridge_next_json_object`, brace-depth + string-
+  literal aware, so a literal `{`/`}` typed into someone's real chat body can't desync it) on top of
+  `http_client.h`'s own existing scalar-field extractors, since IDUNA's response is a JSON *array* of
+  message objects and `http_client.h` only ever finds the first occurrence of a field in a whole buffer.
+  A mutex-protected ring buffer (`BIGO_BRIDGE_QUEUE_CAP` 32, same "shift, don't drop the newest" overflow
+  convention `bigo_phone.h`'s own scrollback/notification queues already use) is the real hand-off between
+  the poller thread and the main tick loop. Relays *everything* not from `bigo_server` itself (`gfd_server`/
+  `einhorn_survival`/`mud`/`battlegrounds` all included, each tagged `[GFD]`/`[MC]`/`[MUD]`/`[BG]`) -- a
+  real, honest reflection of the shared bus this actually is, not a GFD-only pipe. `IDUNA_AGENT_SECRET`
+  unset leaves the whole bridge a real, silent no-op (no thread started, every send a no-op, every drain
+  empty) -- same "no credential, feature quietly off" convention every other IDUNA-agent-backed feature in
+  this monorepo already follows.
+- **`day/apps/server/src/main.c`**: new `--iduna-host`/`--iduna-port` flags (default `127.0.0.1:8080`),
+  `bigo_gfd_bridge_init()` at startup. The existing `PC_PACKET_CHAT_SAY` handler gains one real, additive
+  step -- after its own unchanged local radius broadcast, it also relays the same text onto the bridge,
+  named from the player's own real, stable, IDUNA-backed `player_id` (`"BigO-<6 hex chars>"`, not the slot
+  index, which is ephemeral/reused -- the same real human keeps the same real bridge identity across
+  reconnects). A new `server_tick_gfd_bridge()` drains the ring buffer once per tick and broadcasts each
+  line to every active player as a `PC_PACKET_CHAT_RECV` tagged `BIGO_BRIDGE_SENDER_SLOT` (255, a value
+  `PC_MAX_PLAYERS`=16 never reaches).
+- **`day/apps/client/src/main.c`**: `PC_PACKET_CHAT_RECV`'s existing handler special-cases
+  `sender_slot == 255` (the literal, not the header -- the client deliberately doesn't link
+  `bigo_gfd_bridge.h`/`pthread`/`http_client.h` at all, same "client hardcodes a shared id" precedent the
+  hoverboard render code already established) and renders the already-formatted `"[TAG] name: body"` line
+  as-is, instead of its own normal `"player<N>: ..."` prefix.
+
+### Verified, not just compiled
+
+- `bigo_gfd_bridge_test.c` (new Bazel target, hermetic, no network): the JSON-array walker against a
+  real-shaped multi-object payload including a message body containing a literal `{`/`}` (doesn't desync
+  the scan); source tagging (all four known sources, plus an honest fallback for an unknown one); ring-
+  buffer push/drain order; ring-buffer overflow (oldest evicted, newest kept); a disabled bridge's `send()`
+  is a real no-op. `bazel test //day/packages/...` 33/33 green.
+- Real server+client builds clean (`-lpthread` added to `scripts/build_day.sh`; one real
+  `-Wformat-truncation` false-positive found and fixed properly -- a same-size `memcpy` instead of
+  `snprintf(...,"%s",...)` between two identically-sized, already-NUL-terminated buffers, not suppressed).
+- **A real, live, end-to-end run against the actual running IDUNA** (not a mock): launched the real,
+  freshly-built `bigo_day_server` binary (scratch save-dir, throwaway UDP port, real `worldapi` chunk fetch)
+  with the real `IDUNA_SECRET_BIGO_SERVER` credential. Server log shows real authentication
+  (`[gfd-bridge] authenticated as BIGO-SERVER`), then real, live historical chat correctly polled, parsed,
+  and tagged from all three OTHER real bridge participants already on the bus --
+  `S536-GFD-BRIDGE: relayed "[BG] Test: ..."`, `"[MC] .GarbageMan4147: test"`, `"[MUD] EMILY: hello"` --
+  including surviving adversarial-looking real test content (a literal `` ``` drop al;ll tables `` string,
+  various `%`/`$`/`@` punctuation runs) with zero crashes or parse errors. The earlier `curl`-based
+  self-post (id 46, `sender_source=bigo_server`) was correctly seen and skipped (never relayed back to
+  itself) while still advancing `since_id` past it. Process shut down cleanly on `SIGTERM`.
+
+### Real, honest, deliberately NOT built here
+
+No real in-game player actually typed a message through this end to end (that needs a real, connected
+client with a valid connect ticket -- `PAPERCRAFT_TICKET_SECRET` wasn't set for the scratch verification
+run above, by design, to avoid standing up unrelated live-ticket infrastructure just for this check); the
+outbound POST path itself was verified twice, separately (a raw `curl` round trip, and unit coverage of
+the JSON-building/escaping), just not chained through a real player's own keypress. No rate limiting (the
+underlying bridge's own spec already names this as a real, deliberately deferred, shared gap across all
+participants, not something to solve unilaterally from BIG_O's side alone). No REFLUX publish for bridge
+events. The three still-queued §25 items (SSH keygen, the IDUNA phone app, GFD/BIG_O HTTPS) are unaffected
+and still open.
+
+session: sess-20260923-1030-4a526255.

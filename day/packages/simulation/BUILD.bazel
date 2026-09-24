@@ -365,6 +365,18 @@ cc_test(
     linkopts = ["-lm"],
 )
 
+# bigo_gfd_bridge_test -- hermetic coverage (no network) for packages/common/bigo_gfd_bridge.h's
+# own pure logic: JSON-array object walking, source tagging, ring-buffer push/drain+overflow.
+# EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §27.
+cc_test(
+    name = "bigo_gfd_bridge_test",
+    srcs = ["bigo_gfd_bridge_test.c"],
+    deps = [
+        "//day/packages/common:common_headers",
+    ],
+    linkopts = ["-lpthread"],
+)
+
 # weapon -- the real, PARENA-compiled "arsenal" weapon-switching decisions (which item ids are
 # weapons, whether a player may switch to a weapon slot they haven't found yet). Generated from
 # PARENA/stdlib/papercraft/weapon_mod.prn via `parena build`, committed here.

@@ -50,6 +50,7 @@
 #include "../../../packages/common/bigo_party.h"
 #include "../../../packages/common/bigo_chat.h"
 #include "../../../packages/common/bigo_hoverboard.h"
+#include "../../../packages/common/bigo_gfd_bridge.h"
 /* S504 §8c -- the real NPC-entity system giving core/npc_archetype.h (Citizens/The Men) and
  * core/zombie_values.h (zombies) a live server tick to actually drive, instead of proving them in
  * isolation only. See ServerNpc's own doc comment below for the full design. */
@@ -903,6 +904,40 @@ static void server_tick_wheelbarrow(void) {
     }
 }
 
+/* server_tick_gfd_bridge -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §27.
+ * Drains whatever the background poller thread (bigo_gfd_bridge.h) has queued from the shared
+ * cross-server chat bus since the last drain, and broadcasts each already-formatted line to
+ * every active player as a real PC_PACKET_CHAT_RECV, tagged BIGO_BRIDGE_SENDER_SLOT so the
+ * client renders it as-is rather than as "player<N>: ...". A real, honest no-op most ticks (the
+ * poller only queues something new roughly every 5s at most) -- draining every tick anyway (not
+ * gated to some slower cadence) since the drain itself is one cheap mutex lock, not worth adding
+ * its own separate timer for. */
+static void server_tick_gfd_bridge(int sock) {
+    char lines[4][BIGO_BRIDGE_LINE_MAX];
+    int n = bigo_gfd_bridge_drain(&g_bigo_bridge, lines, 4);
+    for (int li = 0; li < n; li++) {
+        PcChatRecvPacket rc; memset(&rc, 0, sizeof(rc));
+        rc.hdr.type = PC_PACKET_CHAT_RECV;
+        rc.sender_slot = BIGO_BRIDGE_SENDER_SLOT;
+        /* memcpy, not snprintf(...,"%s",...): both sides are exactly BIGO_BRIDGE_LINE_MAX (96)
+           bytes and lines[li] is already guaranteed NUL-terminated within that size (built via
+           its own snprintf in bigo_bridge_push_locked) -- a straight fixed-size copy can never
+           truncate, but %s's own unknown-source-length semantics made GCC's -Wformat-truncation
+           flag a false positive here (it can't see the guarantee). Fixed properly, not suppressed,
+           same real precedent the GFD-terminal chat work already established for this warning
+           class. */
+        memcpy(rc.text, lines[li], sizeof(rc.text));
+        int heard = 0;
+        for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+            PlayerSlot *rs = &g_slots[i];
+            if (!rs->active) continue;
+            sendto(sock, &rc, sizeof(rc), 0, (struct sockaddr *)&rs->addr, rs->addr_len);
+            heard++;
+        }
+        printf("S536-GFD-BRIDGE: relayed \"%s\" to %d connected player(s)\n", lines[li], heard);
+    }
+}
+
 static const char *BAND_NAMES[] = {"OK", "SUSPICION", "HYSTERIC", "CANCELLED"};
 
 /* Regulator dispatch + real player kill/respawn -- EMILY/BACKLOG.md SECTION 536 follow-up,
@@ -1623,10 +1658,14 @@ int main(int argc, char **argv) {
     const char *worldapi_host = "localhost";
     int worldapi_port = 7070;
     int server_port = PC_SERVER_PORT;
+    const char *iduna_host = "127.0.0.1";
+    int iduna_port = 8080;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--worldapi-host") == 0 && i + 1 < argc) worldapi_host = argv[++i];
         else if (strcmp(argv[i], "--worldapi-port") == 0 && i + 1 < argc) worldapi_port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) server_port = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--iduna-host") == 0 && i + 1 < argc) iduna_host = argv[++i];
+        else if (strcmp(argv[i], "--iduna-port") == 0 && i + 1 < argc) iduna_port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--save-dir") == 0 && i + 1 < argc) {
             strncpy(g_save_dir, argv[++i], sizeof(g_save_dir) - 1);
             g_save_dir[sizeof(g_save_dir) - 1] = '\0';
@@ -1644,6 +1683,17 @@ int main(int argc, char **argv) {
 
     pc_persist_ensure_dir(g_save_dir);
     printf("Real player persistence dir: %s\n", g_save_dir);
+
+    /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §27: real cross-server chat
+       bridge (see bigo_gfd_bridge.h's own doc comment). IDUNA_AGENT_NAME defaults to the real,
+       provisioned "BIGO-SERVER" agent (config/agents.json, IDUNA repo) -- no secret set means the
+       bridge stays a real, honest no-op rather than failing startup. */
+    {
+        const char *agent_name = getenv("IDUNA_AGENT_NAME");
+        if (!agent_name || !agent_name[0]) agent_name = "BIGO-SERVER";
+        bigo_gfd_bridge_init(&g_bigo_bridge, iduna_host, iduna_port, agent_name, getenv("IDUNA_AGENT_SECRET"));
+    }
+
     signal(SIGINT, handle_shutdown_signal);
     signal(SIGTERM, handle_shutdown_signal);
     signal(SIGHUP, handle_reload_signal);
@@ -2242,6 +2292,18 @@ int main(int argc, char **argv) {
                     }
                     printf("S536-CHAT: player%d said \"%s\" -- heard by %d player(s) within %dcm\n",
                            i, text, heard, chat_say_radius_cm());
+
+                    /* EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §27: also relay
+                       onto the real cross-server bridge (additive -- the local radius broadcast
+                       above is unchanged). Named from the player's own real, stable, IDUNA-backed
+                       player_id (not the slot index, which is ephemeral/reused) so the same real
+                       human always posts under the same real bridge identity across reconnects. */
+                    if (s->has_player_id) {
+                        char sender_name[32];
+                        snprintf(sender_name, sizeof(sender_name), "BigO-%02x%02x%02x",
+                                  s->player_id[0], s->player_id[1], s->player_id[2]);
+                        bigo_gfd_bridge_send(&g_bigo_bridge, sender_name, text);
+                    }
                     break;
                 }
             } else if (hdr.type == PC_PACKET_HOVERBOARD_TOGGLE && (size_t)n >= sizeof(PcHoverboardTogglePacket)) {
@@ -2522,6 +2584,7 @@ int main(int argc, char **argv) {
             server_tick_dispatch(now);
             server_tick_decorum(now);
             server_tick_regulators(now);
+            server_tick_gfd_bridge(sock);
 
             for (int i = 0; i < PC_MAX_PLAYERS; i++) {
                 PlayerSlot *s = &g_slots[i];

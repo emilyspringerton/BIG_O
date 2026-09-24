@@ -10,5 +10,5 @@ gcc -std=gnu11 -O2 -Wall -Wno-unused-function -Wno-comment -Ipackages/common -Ip
   packages/simulation/hoverboard_rules.c \
   ../core/npc_archetype.c ../core/zombie_values.c ../core/humanness.c ../core/witness_rules.c \
   ../core/giant_bug_values.c ../core/giant_bug_brain.c \
-  -o ../build/bigo_day_server -lm -ldl
+  -o ../build/bigo_day_server -lm -ldl -lpthread
 echo "DAY BUILD CLEAN"
