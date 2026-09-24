@@ -510,11 +510,12 @@ typedef struct {
 #define PC_ITEM_WPN_KATANA  7
 
 /* PC_ITEM_FOOD_BASE -- real, reverse-ported from SHANKPIT's own food_items.h (EMILY/BACKLOG.md
- * SECTION 536 follow-up, 2026-09-23). 17 real food item ids, 8..24, in the exact same order as
+ * SECTION 536 follow-up, 2026-09-23; FOOD_MINESTRONE added 2026-09-24, mirroring SHANKPIT's own
+ * same-day addition). 18 real food item ids, 8..25, in the exact same order as
  * day/packages/common/bigo_food_items.h's own FoodItemId enum (FOOD_CHERRY=0 -> id 8, ...,
- * FOOD_CAKE=16 -> id 24). Dropped by WOOD-material world-object destruction, same GTA3-style
+ * FOOD_MINESTRONE=17 -> id 25). Dropped by WOOD-material world-object destruction, same GTA3-style
  * walk-over entity system PC_ITEM_SCRAP/PC_ITEM_WPN_* already use -- see
- * PARENA/stdlib/big_o/item_drop_mod.prn for the real drop decision (object-index modulo 17 picks
+ * PARENA/stdlib/big_o/item_drop_mod.prn for the real drop decision (object-index modulo 18 picks
  * which one). Real, honest, named gap: nothing in this repo consumes a food item to heal yet --
  * BIG_O's PlayerSlot has no health field and no damage source exists anywhere (only destructible
  * world-object fragment HP) -- so these are real, tested, PICKABLE/STACKABLE cargo today, not

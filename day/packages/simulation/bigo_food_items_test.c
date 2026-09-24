@@ -8,15 +8,17 @@
 #include <string.h>
 
 int main(void) {
-    assert(FOOD_ITEM_COUNT == 17);
+    assert(FOOD_ITEM_COUNT == 18);
 
     assert(strcmp(food_item_name(FOOD_CHERRY), "CHERRY") == 0);
     assert(strcmp(food_item_name(FOOD_CAKE), "BIRTHDAY CAKE") == 0);
+    assert(strcmp(food_item_name(FOOD_MINESTRONE), "MINESTRONE") == 0);
     assert(strcmp(food_item_name(-1), "?") == 0);
     assert(strcmp(food_item_name(FOOD_ITEM_COUNT), "?") == 0);
 
     assert(food_item_points(FOOD_CHERRY) == 100);
     assert(food_item_points(FOOD_KEY) == 5000); /* highest of the 8 classic Pac-Man fruits */
+    assert(food_item_points(FOOD_MINESTRONE) == 1600);
     assert(food_item_points(-1) == 0);
 
     /* heal = points/100, clamped 5..50. */
@@ -25,6 +27,7 @@ int main(void) {
     assert(food_item_heal(FOOD_ENERGY_BAR) == 7);  /* 750/100=7, no clamp */
     assert(food_item_heal(FOOD_KEY) == 50);        /* 5000/100=50, exactly the ceiling */
     assert(food_item_heal(FOOD_GALAXIAN) == 30);   /* 3000/100=30, no clamp */
+    assert(food_item_heal(FOOD_MINESTRONE) == 16); /* 1600/100=16, no clamp */
     assert(food_item_heal(-1) == 0);
     assert(food_item_heal(FOOD_ITEM_COUNT) == 0);
 

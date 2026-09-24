@@ -39,7 +39,7 @@ int item_drop_food_base(void) {
 }
 
 int item_drop_food_count(void) {
-    return 17;
+    return 18;
 }
 
 int on_papercraft_item_for_object_destroyed(int material __attribute__((unused)), int object_index __attribute__((unused))) {

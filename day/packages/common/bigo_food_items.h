@@ -21,9 +21,14 @@
  * has no observable effect to wire it to yet. Not guessed at here -- a real damage-source design
  * decision (giant bugs attacking players? zombie NPC aggression? PvP?) is genuinely undecided and
  * out of scope for this pass. Same "standalone primitive, no live consumer yet" precedent
- * bigo_walkie_talkie.h already established for this exact reverse-port thread. */
+ * bigo_walkie_talkie.h already established for this exact reverse-port thread.
+ *
+ * FOOD_MINESTRONE (item 18) -- founder real-time, 2026-09-24: "add ministrone to shankpit and
+ * bigo" (minestrone), mirrored here from SHANKPIT's own same-day FOOD_MINESTRONE addition,
+ * same reverse-port discipline this whole file already follows. Same named gap as every other
+ * item here: real cargo, no live heal consumer yet. */
 
-#define FOOD_ITEM_COUNT 17
+#define FOOD_ITEM_COUNT 18
 
 typedef enum {
     FOOD_CHERRY = 0,
@@ -42,19 +47,20 @@ typedef enum {
     FOOD_ENERGY_BAR,
     FOOD_RATION_PACK,
     FOOD_SYNTH_MEAT,
-    FOOD_CAKE
+    FOOD_CAKE,
+    FOOD_MINESTRONE
 } FoodItemId;
 
 static const char *const FOOD_ITEM_NAMES[FOOD_ITEM_COUNT] = {
     "CHERRY", "STRAWBERRY", "PRETZEL", "ORANGE", "APPLE", "PEAR", "BANANA", "MELON",
     "GALAXIAN", "BELL", "KEY", "COFFEE", "DONUT", "ENERGY BAR", "RATION PACK", "SYNTH-MEAT",
-    "BIRTHDAY CAKE"
+    "BIRTHDAY CAKE", "MINESTRONE"
 };
 
 static const int FOOD_ITEM_POINTS[FOOD_ITEM_COUNT] = {
     100, 200, 300, 500, 700, 1000, 1500, 2000,
     3000, 4000, 5000, 100, 250, 750, 1250, 2500,
-    1800
+    1800, 1600
 };
 
 /* Real, derived, not hardcoded per-item -- ported unchanged from SHANKPIT's own formula so a

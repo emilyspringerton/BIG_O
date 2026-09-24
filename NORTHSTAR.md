@@ -1829,3 +1829,23 @@ The other two items §25 queued alongside the IDUNA app (SSH keygen closed in §
 unaffected and still open (HTTPS).
 
 session: sess-20260923-1030-4a526255.
+
+## 32. MINESTRONE -- 18th food item (2026-09-24, mirrors SHANKPIT's own same-day addition)
+
+Founder real-time: "add ministrone to shankpit and bigo." Same pattern §16 established for FOOD_CAKE (item 17):
+`day/packages/common/bigo_food_items.h`'s `FOOD_ITEM_COUNT` 17 -> 18, new enum/name/points entry (1600 points,
+heal 16, no special-case interaction). `papercraft_protocol.h`'s `PC_ITEM_FOOD_BASE` range 8..24 -> 8..25.
+`PARENA/stdlib/big_o/item_drop_mod.prn`'s `item-drop-food-count` 17 -> 18, regenerated into `item_drop_mod.c` --
+a minimal one-line diff, the WOOD-drop modulo formula itself is already item-count-generic. Same real, honest,
+unchanged gap §16 named: real pickable/stackable cargo, `food_item_heal()` still has no live caller (no health
+field/damage source exists in BIG_O yet). **Note: every "17-item" reference in §16 above describes that section's
+own 2026-09-23 snapshot accurately and is left as-is** -- the food/cargo system is an 18-item system as of this
+section, not a retroactive correction to §16's own historical record.
+
+`bigo_food_items_test.c` (18 distinct items, `FOOD_MINESTRONE` name/points/heal all asserted) and
+`item_drop_mod_test.c` (mod-18 wraparound) both re-verified passing -- the wraparound assertion's own arithmetic
+had a real bug on the first attempt (`35 mod 18 = 17`, not `0` -- fixed to use `36`, an actual multiple of 18)
+caught by actually running the test rather than assuming the edited numbers were correct. `scripts/build_day.sh`
+and `scripts/build_client.sh` both rebuild clean.
+
+session: sess-20260923-1030-4a526255.

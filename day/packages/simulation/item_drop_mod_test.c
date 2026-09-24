@@ -17,13 +17,14 @@ int main(void) {
     assert(on_papercraft_item_for_object_destroyed(2, 0) == 0); /* CONCRETE -> no drop yet */
     assert(on_papercraft_item_for_object_destroyed(3, 0) == 5); /* METAL -> PC_ITEM_WPN_SHOTGUN (2026-09-07: "you have to find a shotgun") */
 
-    /* WOOD -> a real food item, id = PC_ITEM_FOOD_BASE + (object_index mod 17) -- deterministic
-       variety across the real 17-item roster, no RNG. */
+    /* WOOD -> a real food item, id = PC_ITEM_FOOD_BASE + (object_index mod 18) -- deterministic
+       variety across the real 18-item roster, no RNG. */
     assert(on_papercraft_item_for_object_destroyed(1, 0) == 8);   /* -> FOOD_CHERRY */
     assert(on_papercraft_item_for_object_destroyed(1, 1) == 9);   /* -> FOOD_STRAWBERRY */
-    assert(on_papercraft_item_for_object_destroyed(1, 16) == 24); /* -> FOOD_CAKE, last of the 17 */
-    assert(on_papercraft_item_for_object_destroyed(1, 17) == 8);  /* wraps back to FOOD_CHERRY */
-    assert(on_papercraft_item_for_object_destroyed(1, 34) == 8);  /* wraps again */
+    assert(on_papercraft_item_for_object_destroyed(1, 16) == 24); /* -> FOOD_CAKE */
+    assert(on_papercraft_item_for_object_destroyed(1, 17) == 25); /* -> FOOD_MINESTRONE, last of the 18 */
+    assert(on_papercraft_item_for_object_destroyed(1, 18) == 8);  /* wraps back to FOOD_CHERRY */
+    assert(on_papercraft_item_for_object_destroyed(1, 36) == 8);  /* wraps again (2*18) */
 
     printf("item_drop_mod_test: all assertions passed\n");
     return 0;
