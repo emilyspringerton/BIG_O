@@ -2205,3 +2205,28 @@ not, named honestly rather than claimed.
 mannequin rig, would be needed); no movement (stationary, same v0 precedent every population here
 started with); the RNA-interference-dart countermeasure and "Glosslighting" dialogue stay real,
 deferred campaign content.
+
+## §34: Real MOBBING movement — birds actually dive (2026-09-25, continued)
+
+§33 left the flock stationary in v0, same precedent every population in this file starts with.
+This closes the one piece of that precedent worth closing immediately: MOBBING was, until now, a
+purely cosmetic mood label — NORTHSTAR.md §6's own "dive-bombing/harassing a marked target"
+framing had no actual movement behind it. ROOSTING/SCOUTING/SIGNALING birds still hold their
+perch (a real, deliberate choice — only the full-commit MOBBING state actually breaks formation).
+
+**What's real:** `server_tick_avians` now finds the nearest witnessable (HUNTING/FRENZIED, reusing
+`witness_live.h`'s own `bigo_zombie_is_witnessable_event` gate) zombie within
+`BIGO_AVIAN_OBSERVE_RADIUS` and, while MOBBING, steps toward it at `BIGO_AVIAN_MOB_SPEED` (7.0
+units/sec — deliberately faster than a pheromone-commanded zombie's own 5.5, matching "dive-bomb"
+urgency, but below the player's own sprint speed so a MOBBING flock is a real threat, not an
+inescapable one) via `pheromone_step_toward` (`day/packages/common/bigo_pheromone.h`'s own real,
+already-proven pure movement primitive — reused directly, not reimplemented). A MOBBING bird with
+no witnessable zombie currently in range holds position rather than wandering, matching zombies'
+own "stationary with no target" default.
+
+**Verified:** `scripts/build_day.sh` still compiles clean with the new movement code. Same real,
+honest limitation as §33: this server's hard `worldapi` startup dependency means the live running
+log couldn't be captured in this sandbox — verified by direct code inspection (the geometry and
+`pheromone_step_toward` call are the same pattern `server_tick_npcs`' own zombie-pheromone-seeking
+movement already uses, live-verified in an earlier pass per that function's own doc comment) plus
+a clean compile, not a live run.

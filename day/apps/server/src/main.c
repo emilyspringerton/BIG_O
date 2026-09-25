@@ -692,7 +692,15 @@ static void server_spawn_avians(unsigned int now_ms) {
  * consumer of avian_beacon_strength anywhere in this repo -- NORTHSTAR.md §31/§32 both named it
  * as a real, tested value with no live consumer yet; this closes that specific gap. */
 #define BIGO_AVIAN_BEACON_FIRE_THRESHOLD 0.5f
+#define BIGO_AVIAN_MOB_SPEED 7.0f /* units/sec, real dive-bomb pace -- faster than
+    PHEROMONE_ZOMBIE_SPEED (5.5), matching the "dive-bombing/harassing" framing NORTHSTAR.md §6
+    names for MOBBING, but well below PC_SPRINT_SPEED so a fleeing player can still outrun it */
 static void server_tick_avians(unsigned int now_ms) {
+    static unsigned int last_avian_tick_ms = 0;
+    float dt_sec = (last_avian_tick_ms == 0) ? 0.0f : (float)(now_ms - last_avian_tick_ms) / 1000.0f;
+    if (dt_sec > 0.5f) dt_sec = 0.5f; /* clamp a stall/hitch, matching server_tick_npcs' own dt clamp */
+    last_avian_tick_ms = now_ms;
+
     for (int ai = 0; ai < BIGO_AVIAN_MAX; ai++) {
         ServerAvian *b = &g_avians[ai];
         if (!b->active) continue;
@@ -736,6 +744,34 @@ static void server_tick_avians(unsigned int now_ms) {
             if (pulled > 0) {
                 printf("S504-BIRDS: avian%d beacon (strength=%.2f) pulled %d zombie(s) toward AGITATED/FRENZIED\n",
                        ai, beacon, pulled);
+            }
+        }
+
+        /* Real MOBBING movement -- a roosting/scouting/signaling bird stays perched (same
+           "logic first, movement later" precedent every other v0 population here started with);
+           only MOBBING actually dives, closing the "dive-bombing/harassing" framing NORTHSTAR.md
+           §6 names rather than leaving MOBBING a purely cosmetic mood label. Targets the NEAREST
+           witnessable (HUNTING/FRENZIED) zombie within observation range -- a bird mobs the same
+           loud event it's already tracking, not an arbitrary one. A MOBBING bird with no such
+           zombie currently in range holds its perch position rather than idly wandering. */
+        if (b->state.mood == AVIAN_MOOD_MOBBING && dt_sec > 0.0f) {
+            int nearest_zi = -1;
+            float nearest_dist_sq = -1.0f;
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                ServerNpc *n = &g_npcs[ni];
+                if (!n->active || n->role != PC_NPC_ROLE_ZOMBIE) continue;
+                if (!bigo_zombie_is_witnessable_event(n->zombie.mood)) continue;
+                if (!bigo_in_range(b->x, b->z, n->x, n->z, BIGO_AVIAN_OBSERVE_RADIUS)) continue;
+                float dx = n->x - b->x, dz = n->z - b->z;
+                float dist_sq = dx * dx + dz * dz;
+                if (nearest_zi < 0 || dist_sq < nearest_dist_sq) {
+                    nearest_zi = ni;
+                    nearest_dist_sq = dist_sq;
+                }
+            }
+            if (nearest_zi >= 0) {
+                ServerNpc *target = &g_npcs[nearest_zi];
+                pheromone_step_toward(&b->x, &b->z, target->x, target->z, BIGO_AVIAN_MOB_SPEED, dt_sec);
             }
         }
     }

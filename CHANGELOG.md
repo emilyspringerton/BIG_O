@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-09-25 (4)
+- feat(day): real MOBBING movement -- birds actually dive (NORTHSTAR.md §34). `server_tick_avians`
+  steps a MOBBING bird toward the nearest witnessable (HUNTING/FRENZIED) zombie in range at
+  `BIGO_AVIAN_MOB_SPEED` (7.0/sec) via `bigo_pheromone.h`'s own `pheromone_step_toward` -- closes
+  NORTHSTAR.md §6's "dive-bombing/harassing" framing, previously a cosmetic mood label only.
+  ROOSTING/SCOUTING/SIGNALING birds still hold their perch on purpose. `scripts/build_day.sh`
+  compiles clean; same real, honest `worldapi`-dependency limitation as §33 for live-log capture.
+
 ## 2026-09-25 (3)
 - feat(day): live `ServerAvian` flock -- closes the Act II beacon loop (NORTHSTAR.md §33).
   `day/apps/server/src/main.c`: new `g_avians[BIGO_AVIAN_MAX]` (3, separate array from `g_npcs[]`,
