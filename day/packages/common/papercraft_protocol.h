@@ -191,6 +191,10 @@ typedef struct {
                             PC_SPRINT_SPEED (apps/server/src/main.c) instead of the default
                             PC_MOVE_SPEED walking pace; mutually exclusive with PC_BTN_CROUCH,
                             server-enforced (see the server's own real movement-tick comment). */
+#define PC_BTN_SHOULDER_SURF 8 /* BIG_O/NORTHSTAR.md §38, DESIGN_DIGEST.md §4 "shoulder-surfing
+                            codes and PINs": hold near a live human NPC (Citizen/The Men) for
+                            BIGO_SHOULDER_SURF_HOLD_MS to steal a vault token -- see the server's
+                            own server_tick_shoulder_surf. */
 
 /* PcAllocateTalentPacket -- real client request to spend one unspent point on one of the real
  * five construct stats (PC_ABILITY_* below). The real DECISION (is this legal right now?) is

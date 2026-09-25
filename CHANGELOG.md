@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## 2026-09-25 (6)
+- feat(day): the shoulder-surf mechanic -- a real, generic stolen-token loop for ZONE_VAULT
+  (NORTHSTAR.md §38, DESIGN_DIGEST.md §4, closes docs/A1M1_PLAN.md gap #4). New `PC_BTN_SHOULDER_
+  SURF` held button (C on keyboard, X on controller). `server_tick_shoulder_surf` grants a real
+  `has_vault_token` after a continuous 3s hold near any live Citizen/The-Men NPC within a tight
+  4.0-unit radius -- releasing the button or losing proximity resets the streak to 0, so it can't
+  be done by walking through a room with the button held. `ZONE_VAULT` gets the same
+  hardcoded-circle landmark treatment as §37's ZONE_EXEC/ZONE_GENERATOR; `server_tick_decorum`'s
+  own `zone_access` call now passes the real token instead of a hardcoded 0 -- all 5 rules-module
+  zones are finally live. Built as a generic world mechanic, not Act I Mission 1-specific content:
+  no dedicated Supervisor NPC/terminal object exists yet, named as real, separate, deferred work,
+  not conflated with this. Verified via a scratch ASan+UBSan harness (13/13 assertions, incl. a
+  §37 regression check): new zone resolves correctly, no-target and broken-hold cases never grant
+  a token, a full continuous hold grants exactly one token at the threshold (not before), and the
+  granted token actually unlocks ZONE_VAULT via the real, unmodified `zone_access()` (still denied
+  for COS_STREET, matching the B1 table). `scripts/build_day.sh` and, for the first time this
+  session, `scripts/build_client.sh` (SDL2/GL dev packages installed successfully this pass) both
+  compile clean; `scripts/build.sh` re-run clean, zero regressions. No witness-risk for the
+  shoulder-surf act itself yet (the generated rules oracle wasn't touched this pass) and no client
+  HUD affordance for the hold -- both named, not built.
+
+## 2026-09-25 (5)
+- feat(day): live Decorum closes two named gaps -- gear conspicuousness + two more zones
+  (NORTHSTAR.md §37). `server_tick_decorum` now computes `gear` from the real, already-live
+  `s->current_weapon` (any slot beyond the universal-baseline `PC_WPN_KNIFE` reads as conspicuous
+  field gear) and selects `DA_CARRY_GEAR` vs. `DA_WRONG_COSTUME` via the exact same rule
+  `core/sim.c`'s own already-tested `sim_observe` already uses (`allowed ? DA_CARRY_GEAR :
+  DA_WRONG_COSTUME`), not invented here. `server_player_zone` gains two more live, hardcoded-circle
+  landmarks -- `ZONE_EXEC` (-30, 0) and `ZONE_GENERATOR` (0, -30) -- joining `ZONE_PUBLIC`/
+  `ZONE_LAB`; 4 of the rules module's 5 zones are now live (only `ZONE_VAULT`, which needs a real
+  stolen-token mechanic, remains unplaced, named not guessed at). Also fixed a real, pre-existing
+  doc-comment misplacement found while editing this function (`server_tick_decorum`'s own doc
+  comment had drifted to sit above `server_tick_bug_eggs` instead). Verified via a scratch
+  ASan+UBSan integration harness (8/8 assertions, ported `#include main.c` precedent, not
+  committed): new zone landmarks resolve correctly; correct costume + carried gear now takes a
+  real `DA_CARRY_GEAR` hit instead of being invisible to Decorum; wrong-costume/baseline-knife and
+  correct-costume/baseline-knife behavior is unchanged (regression-checked). `scripts/build_day.sh`
+  clean; `scripts/build.sh` (witness-rules oracle/parity + crew-sim scenarios, untouched by this
+  pass) re-run clean, zero regressions. `bazel` unavailable in this sandbox (not part of that
+  build graph regardless -- `apps/server/src/main.c` builds only via `scripts/build_day.sh`).
+
 ## 2026-09-25 (4)
 - feat(day): real MOBBING movement -- birds actually dive (NORTHSTAR.md §34). `server_tick_avians`
   steps a MOBBING bird toward the nearest witnessable (HUNTING/FRENZIED) zombie in range at
