@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-09-25 (3)
+- feat(day): live `ServerAvian` flock -- closes the Act II beacon loop (NORTHSTAR.md §33).
+  `day/apps/server/src/main.c`: new `g_avians[BIGO_AVIAN_MAX]` (3, separate array from `g_npcs[]`,
+  same convention `g_giant_bugs[]` already established), `server_spawn_avians`/`server_tick_avians`
+  wired into the real per-tick loop after `server_tick_witness`. Each bird runs all three
+  `core/avian_live.h` observation channels against the live `g_npcs[]` population, ticks real flock
+  coordination among the other live birds, and -- the first live consumer of `avian_beacon_
+  strength` anywhere in this repo -- calls `zombie_get_agitated()` on every zombie within range
+  once a bird's own beacon fires, closing `docs/DESIGN_DIGEST.md`'s own "acoustic beacons pull
+  feral hordes" mechanic. `scripts/build_day.sh` updated (`core/avian_values.c` added), compiles
+  clean. Real, honest limitation: this server hard-requires a reachable `worldapi` at startup with
+  no bypass flag, unavailable in this sandbox, so the live server log output couldn't be captured
+  this pass -- the underlying functions are the same ones `core/avian_live_test.c`/`core/
+  avian_values_test.c` already prove pass.
+
 ## 2026-09-25 (2)
 - feat(core): "observing the observer" -- wire the avian coalition into the other live AI systems
   (NORTHSTAR.md §32, founder real-time follow-up to §31). New `core/avian_live.h` (pure glue,

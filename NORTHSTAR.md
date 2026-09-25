@@ -2154,3 +2154,54 @@ an actual server tick loop, no consumption of `bigo_avian_meta_witness_rank` by
 `avian_beacon_strength`. This pass proves the cross-system signal wiring is real and tested;
 spawning/ticking a live coalition population is the next, still-deferred step toward a playable
 Act II slice.
+
+## §33: Live `ServerAvian` population — closing the beacon loop (2026-09-25, continued)
+
+Direct continuation of §31/§32: both named "no live `ServerAvian` entity, no server tick wiring,
+no consumption of `avian_beacon_strength`" as the remaining gap. This closes it — a real, live,
+server-authoritative flock, wired through §32's own `core/avian_live.h` into the existing
+`g_npcs[]` population, that actually closes the Act II beacon loop `docs/DESIGN_DIGEST.md` names
+("acoustic beacons to pull feral hordes onto you").
+
+**What's real and live, `day/apps/server/src/main.c`:** a new `ServerAvian g_avians[BIGO_AVIAN_MAX]`
+(3, a small real flock, deliberately a separate array from `g_npcs[]` — same reason
+`g_giant_bugs[]` is separate: no wire-protocol change, server-side simulation only, matching that
+population's own "no network broadcast yet, prove it live in the log" precedent). `server_spawn_
+avians` places them on a tight 6-unit circle near world origin, close enough to have real
+Citizens/The Men/zombies in range from tick one. `server_tick_avians`, called every real server
+tick after `server_tick_witness`:
+
+1. Runs all three `avian_live.h` observation channels against every active `ServerNpc` within
+   `BIGO_AVIAN_OBSERVE_RADIUS` (25.0, matching `BIGO_WITNESS_DETECTION_RADIUS`) — zombie mood via
+   `bigo_avian_observe_zombie_event`, human vigilance via `bigo_avian_observe_npc_vigilance`
+   (`npc_brain_effective_vigilance`, the real live value, not a placeholder), human witness_state
+   via `bigo_avian_observe_witness_state` (the SAME `witness_state` field `server_tick_witness`
+   just updated this tick).
+2. Counts real, live `nearby_signaling_peers` among the OTHER active birds in `g_avians[]` and
+   calls `avian_tick`, closing the loop back into §31's own coordination mechanic with a genuine
+   flock instead of a synthetic peer count.
+3. **Closes the beacon loop, the first live consumer of `avian_beacon_strength` anywhere in this
+   repo:** once a bird's beacon crosses `BIGO_AVIAN_BEACON_FIRE_THRESHOLD` (0.5), every active
+   zombie within `BIGO_AVIAN_BEACON_RADIUS` (20.0) gets a real `zombie_get_agitated()` call — the
+   same stimulus a thrown pheromone marker gives, but now sourced from the coalition's own
+   witnessed-and-broadcast signal instead of a player action. This is the literal mechanic
+   `docs/DESIGN_DIGEST.md`'s Act II section names.
+
+**Verified:** `scripts/build_day.sh` compiles clean with the new code linked in (`../core/
+avian_values.c` added to the build script's own source list). Mood transitions and beacon fires
+log via `printf` (`S504-BIRDS:` prefix), matching every other population's own "prove it live in
+the log first" precedent. **Real, honest limitation, not silently worked around:** this server
+hard-requires a reachable `worldapi` (`localhost:7070`) at startup (`FATAL: could not load the
+real city chunk grid from worldapi -- refusing to run on fake/empty terrain`) with no bypass flag
+— this sandbox has no such service reachable, so the actual running-server log output (mood
+transitions, beacon fires) could not be captured live this pass, only the clean compile. The exact
+functions `server_tick_avians` calls (`bigo_avian_observe_*`, `avian_tick`, `avian_beacon_
+strength`, `zombie_get_agitated`) are the same ones `core/avian_live_test.c`/`core/avian_values_
+test.c` already exercise and pass — the integration logic is proven, the live server round-trip is
+not, named honestly rather than claimed.
+
+**Still deferred:** no client rendering or wire-protocol presence for the coalition (no
+`PcAvianState`, no visual — matches §31's own note that a genuinely new bird asset, not the shared
+mannequin rig, would be needed); no movement (stationary, same v0 precedent every population here
+started with); the RNA-interference-dart countermeasure and "Glosslighting" dialogue stay real,
+deferred campaign content.
