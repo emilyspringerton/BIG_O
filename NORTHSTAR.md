@@ -2051,3 +2051,53 @@ a real, separate, much bigger feature, not attempted blind.
    ask implies at scale -- easy to grow `BIGO_BUG_EGG_MAX` later once the mechanic itself is proven live.
 
 session: sess-20260923-1030-4a526255.
+
+## §31: "The Birds" — TYLER reconciliation, avian coalition values (2026-09-25)
+
+Founder real-time ask: "BIG_O add the birds (use TYLER)". §6 and `docs/DESIGN_DIGEST.md`'s Act II
+escalation both already named the avian coalition and both already flagged the same open item:
+"cross-repo canon exists: `TYLER/` already has Hana, 'Bird Correction', Layer 4 / custody;
+reconcile before hardening." This closes that specific reconciliation, not the whole Act II
+chapter (which stays deferred campaign content per §6).
+
+**The TYLER tie-in.** `TYLER/README.md`'s Eastwind Owls are the oldest faction in that universe,
+purely archival ("they are not supernatural... in possession of the most complete timeline
+archive in existence"; "their inability to destroy records is a feature, not a bug"). TYLER's own
+recurring end-log line, "BIRD CORRECTION PENDING" (`TYLER/README.md`, `TYLER/CITY_OF_LIGHT.md`,
+`TYLER/0.md`), is Emily OS's own notation for an unresolved correction the archive is waiting to
+apply. BIG_O's avian coalition is now that same lineage, turned hostile and local: it doesn't
+correct the record quietly, it broadcasts what it's witnessed as a real, live-mechanic acoustic
+beacon that pulls feral hordes onto the crew — the Owls' "distribute it anyway" reflex, made into
+a threat. `docs/DESIGN_DIGEST.md`'s Act II section carries the full in-fiction framing.
+
+**What's real, built and tested this pass:** `core/avian_values.h`/`.c` — the coalition's own
+value vocabulary (vigilance/coordination/exposure, 0.0-1.0), a 4-state mood arc (ROOSTING →
+SCOUTING → SIGNALING → MOBBING), and `avian_beacon_strength()`, a real, tested 0.0-1.0 output that
+is only nonzero in SIGNALING/MOBBING and scales with flock coordination. Same "own math, no shared
+code with sibling value modules" convention `core/zombie_values.h` already established for
+zombies' own hunger/aggression/decay vocabulary — deliberately not a reskinned `NpcBrain` or a
+reskinned `ZombieState`. 8 real behavioral-contract tests in `core/avian_values_test.c` (gcc
+`-Wall -Wextra`, ASan/UBSan-clean pattern matched, `bazel` unavailable in this sandbox so verified
+directly: `gcc -O2 -o /tmp/avian_values_test core/avian_values_test.c core/avian_values.c -lm &&
+/tmp/avian_values_test` — all pass), covering: sane ROOSTING defaults; vigilance's own real
+asymptotic decay (the "can't destroy records" property — approaches but never reaches 0.0); an
+isolated-but-vigilant bird never reaching SIGNALING/MOBBING (the coordination gate genuinely
+holds); a coordinated flock genuinely escalating ROOSTING → SIGNALING → MOBBING; a discrete
+sighting (`avian_get_alerted`) genuinely promoting ROOSTING → SCOUTING; beacon strength zero
+outside SIGNALING/MOBBING and genuinely higher at MOBBING than SIGNALING at equal coordination;
+exposure genuinely rising while signaling and fading once quiet; alertness bounded 0..100 and
+strictly increasing across the mood arc. One real, live bug found and fixed during this pass:
+`avian_get_alerted` originally always pushed its own re-evaluation timer forward on every call, so
+a caller re-alerting a bird every tick (a sustained sighting, the realistic case) silently starved
+`avian_tick`'s own mood re-evaluation forever — fixed to only ever pull the timer earlier, never
+push it later.
+
+**Integration boundary, stated plainly (matching `zombie_values.h`'s own convention):** NOT wired
+into `core/witness_rules.c` or `core/zombie_values.c` yet. `avian_beacon_strength` is a real,
+tested value with a named future consumer (`zombie_get_agitated`, at a future live-wiring pass,
+same shape `core/witness_live.h` already used for zombie↔witness wiring) — not yet a live effect
+on anything else in this repo, and no server-side `ServerAvian` entity exists (no spawn, no
+rendering, no PC snapshot field). The coalition as a playable Act II chapter — server entities,
+client rendering (mannequin-kit precedent from §8a would need a genuinely new bird asset, not the
+shared mannequin rig), the RNA-interference-dart countermeasure, "Glosslighting" dialogue — stays
+real, deferred campaign content, named here rather than silently dropped.

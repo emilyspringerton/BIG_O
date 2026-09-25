@@ -83,6 +83,28 @@ cc_test(
     copts = COPTS,
 )
 
+# avian_values -- "the birds" (docs/DESIGN_DIGEST.md's Act II hyper-intelligent avian coalition):
+# the coalition's OWN attention/value vocabulary (vigilance/coordination/exposure, a 4-state mood
+# arc ROOSTING/SCOUTING/SIGNALING/MOBBING, a real acoustic-beacon-strength output), the TYLER
+# canon reconciliation NORTHSTAR.md §6 and docs/DESIGN_DIGEST.md both flag as needed (Eastwind
+# Owls / "Bird Correction") -- see core/avian_values.h's own top doc comment for the full tie-in.
+# Same "own RNG-free math, no shared code with sibling value modules" convention as :zombie_values.
+# Independent of :zombie_values/:witness_rules on purpose -- avian_beacon_strength is a real,
+# tested output with a named future consumer (zombie_get_agitated), not yet wired live.
+cc_library(
+    name = "avian_values",
+    srcs = ["core/avian_values.c"],
+    hdrs = ["core/avian_values.h"],
+    copts = COPTS,
+)
+
+cc_test(
+    name = "avian_values_test",
+    srcs = ["core/avian_values_test.c"],
+    deps = [":avian_values"],
+    copts = COPTS,
+)
+
 # lab_sim -- founder real-time: "build out all of the cloning facility simulation tech we want to
 # simulate real lab equipment as much as possible." Headless equipment pipeline (centrifuge, PCR,
 # sequencer, CRISPR splice bench, repressor/kill-switch install, breeding/genetic drift, embryo

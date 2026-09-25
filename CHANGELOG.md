@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-09-25
+- feat(core): "the birds" -- avian coalition value module (NORTHSTAR.md §31, founder real-time
+  "BIG_O add the birds (use TYLER)"). New `core/avian_values.h`/`.c`: vigilance/coordination/
+  exposure vocabulary, ROOSTING/SCOUTING/SIGNALING/MOBBING mood arc, `avian_beacon_strength()`
+  (the Act II "acoustic beacon that pulls feral hordes" from `docs/DESIGN_DIGEST.md`). Closes the
+  TYLER cross-repo canon reconciliation both NORTHSTAR.md §6 and DESIGN_DIGEST.md flagged as open:
+  the coalition is now explicitly the same watching/archival lineage as `TYLER/README.md`'s
+  Eastwind Owls, with TYLER's own recurring "BIRD CORRECTION PENDING" line adopted as the
+  in-fiction name for the coalition's own witness ledger. 8 real tests in
+  `core/avian_values_test.c`, all pass (gcc, `bazel` unavailable in this sandbox). Not yet wired
+  into `core/witness_rules.c`/`core/zombie_values.c` or any live server entity -- see NORTHSTAR.md
+  §31's own integration-boundary note.
+
 ## 2026-09-24 (5)
 - feat(day): giant alien-bug eggs -- disturbing them hatches more Giant Zombie Bugs (EMILY/BACKLOG.md SECTION 536
   follow-up wishlist item 4, BIG_O/NORTHSTAR.md §36). Founder real-time (queued 2026-09-22): "Giant alien-bug eggs,
