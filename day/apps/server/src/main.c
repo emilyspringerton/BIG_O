@@ -66,6 +66,13 @@
  * server_giant_bug_command_authorized/server_tick_giant_bugs below for the real, live
  * "Men hold the key" gate + eat-a-nearby-zombie loop. */
 #include "../../../../core/giant_bug_values.h"
+/* NORTHSTAR.md §31/§32 ("the birds"): the avian coalition's own value module + its "observing the
+ * observer" glue (avian_live.h) into the OTHER AI systems already ticking above (npc_archetype.h,
+ * witness_rules.h, zombie_values.h). See server_spawn_avians/server_tick_avians below for the
+ * real, live wiring -- server-side simulation only for now, matching giant-bug's own "no network
+ * broadcast yet, prove it live in the log" precedent. */
+#include "../../../../core/avian_values.h"
+#include "../../../../core/avian_live.h"
 
 #define PC_SERVER_PORT 7799
 #define PC_TICK_HZ 20 /* on-foot movement doesn't need a vehicle sim's own 60Hz -- real, deliberately lower tick rate for Phase 0 */
@@ -630,6 +637,142 @@ static void server_tick_giant_bugs(unsigned int now_ms) {
             printf("S536-BUG: bug%d ate npc%d (zombie) -- strength=%.2f speed=%.2f\n",
                    i, eaten_ni, bug->bstate.strength, bug->bstate.speed);
             prey->active = 0;
+        }
+    }
+}
+
+/* ServerAvian -- NORTHSTAR.md §31/§32, "the birds": a live, server-authoritative population for
+ * core/avian_values.h's own coalition. Deliberately a SEPARATE array from g_npcs[], same reason
+ * g_giant_bugs[] is separate -- growing PC_NPC_MAX would change PcNpcState[PC_NPC_MAX]'s own wire
+ * size (papercraft_protocol.h), and the coalition has no wire presence at all yet anyway
+ * (server-side simulation only, matching giant-bug's own "no network broadcast yet, prove it live
+ * in the log" precedent). Stationary in v0, same "logic first, movement later" precedent every
+ * population in this file has used at its own introduction. */
+#define BIGO_AVIAN_MAX 3
+#define BIGO_AVIAN_OBSERVE_RADIUS 25.0f /* matches BIGO_WITNESS_DETECTION_RADIUS -- a bird watching
+    another watcher needs the same real proximity a human witnessing a zombie needs */
+#define BIGO_AVIAN_BEACON_RADIUS 20.0f  /* how far a SIGNALING/MOBBING beacon reaches a zombie */
+typedef struct {
+    int active;
+    float x, y, z;
+    AvianState state;
+} ServerAvian;
+static ServerAvian g_avians[BIGO_AVIAN_MAX];
+
+/* server_spawn_avians -- a small, real flock placed near the existing NPC circle (same world
+ * origin every other v0 population here spawns around) so it has real Citizens/The Men/zombies
+ * within BIGO_AVIAN_OBSERVE_RADIUS to actually observe from tick one, rather than sitting idle
+ * until a player wanders a flock into range. */
+static void server_spawn_avians(unsigned int now_ms) {
+    memset(g_avians, 0, sizeof(g_avians));
+    for (int i = 0; i < BIGO_AVIAN_MAX; i++) {
+        ServerAvian *b = &g_avians[i];
+        b->active = 1;
+        float angle = (float)i * (2.0f * 3.14159265f / (float)BIGO_AVIAN_MAX);
+        b->x = 6.0f * cosf(angle); /* a tighter circle than g_npcs' own 10-unit one -- a roosting
+            flock perched close together, not spread across the whole clearing */
+        b->z = 6.0f * sinf(angle);
+        b->y = 3.0f; /* cosmetic perch height only -- targeting/observation stays flat (x,z), same
+            convention every other system in this file (zombies, pheromones) already uses */
+        avian_state_init(&b->state, now_ms);
+    }
+    printf("S504-BIRDS: spawned %d real avian coalition members near world origin.\n", BIGO_AVIAN_MAX);
+}
+
+/* server_tick_avians -- NORTHSTAR.md §32's own live wiring: each real server tick, every bird
+ * "observes the observers" among the CURRENT live g_npcs[] population within
+ * BIGO_AVIAN_OBSERVE_RADIUS (avian_live.h's own three channels -- an NPC's own effective
+ * vigilance spiking, a human witness_state escalating past DENIAL, a zombie going HUNTING/
+ * FRENZIED), then real flock coordination (avian_tick's own nearby_signaling_peers, counted
+ * live among g_avians[] itself) carries alerted birds toward SIGNALING/MOBBING. Once a bird's own
+ * avian_beacon_strength() crosses a real, live threshold, it closes the actual Act II loop named
+ * in docs/DESIGN_DIGEST.md ("acoustic beacons to pull feral hordes onto you") -- every zombie
+ * within BIGO_AVIAN_BEACON_RADIUS gets a real zombie_get_agitated() call, the same stimulus
+ * bigo_pheromone.h's own player-thrown markers do not otherwise apply. This is the first live
+ * consumer of avian_beacon_strength anywhere in this repo -- NORTHSTAR.md §31/§32 both named it
+ * as a real, tested value with no live consumer yet; this closes that specific gap. */
+#define BIGO_AVIAN_BEACON_FIRE_THRESHOLD 0.5f
+#define BIGO_AVIAN_MOB_SPEED 7.0f /* units/sec, real dive-bomb pace -- faster than
+    PHEROMONE_ZOMBIE_SPEED (5.5), matching the "dive-bombing/harassing" framing NORTHSTAR.md §6
+    names for MOBBING, but well below PC_SPRINT_SPEED so a fleeing player can still outrun it */
+static void server_tick_avians(unsigned int now_ms) {
+    static unsigned int last_avian_tick_ms = 0;
+    float dt_sec = (last_avian_tick_ms == 0) ? 0.0f : (float)(now_ms - last_avian_tick_ms) / 1000.0f;
+    if (dt_sec > 0.5f) dt_sec = 0.5f; /* clamp a stall/hitch, matching server_tick_npcs' own dt clamp */
+    last_avian_tick_ms = now_ms;
+
+    for (int ai = 0; ai < BIGO_AVIAN_MAX; ai++) {
+        ServerAvian *b = &g_avians[ai];
+        if (!b->active) continue;
+
+        for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+            ServerNpc *n = &g_npcs[ni];
+            if (!n->active) continue;
+            if (!bigo_in_range(b->x, b->z, n->x, n->z, BIGO_AVIAN_OBSERVE_RADIUS)) continue;
+
+            if (n->role == PC_NPC_ROLE_ZOMBIE) {
+                bigo_avian_observe_zombie_event(&b->state, n->zombie.mood, now_ms);
+            } else {
+                bigo_avian_observe_npc_vigilance(&b->state, npc_brain_effective_vigilance(&n->brain), now_ms);
+                bigo_avian_observe_witness_state(&b->state, n->witness_state, now_ms);
+            }
+        }
+
+        int nearby_signaling_peers = 0;
+        for (int oi = 0; oi < BIGO_AVIAN_MAX; oi++) {
+            if (oi == ai || !g_avians[oi].active) continue;
+            AvianMood om = g_avians[oi].state.mood;
+            if (om == AVIAN_MOOD_SIGNALING || om == AVIAN_MOOD_MOBBING) nearby_signaling_peers++;
+        }
+        AvianMood prev_mood = b->state.mood;
+        avian_tick(&b->state, now_ms, nearby_signaling_peers);
+        if (b->state.mood != prev_mood) {
+            static const char *AVIAN_MOOD_NAMES[] = {"ROOSTING", "SCOUTING", "SIGNALING", "MOBBING"};
+            printf("S504-BIRDS: avian%d mood %s -> %s\n", ai, AVIAN_MOOD_NAMES[prev_mood], AVIAN_MOOD_NAMES[b->state.mood]);
+        }
+
+        float beacon = avian_beacon_strength(&b->state);
+        if (beacon >= BIGO_AVIAN_BEACON_FIRE_THRESHOLD) {
+            int pulled = 0;
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                ServerNpc *n = &g_npcs[ni];
+                if (!n->active || n->role != PC_NPC_ROLE_ZOMBIE) continue;
+                if (!bigo_in_range(b->x, b->z, n->x, n->z, BIGO_AVIAN_BEACON_RADIUS)) continue;
+                zombie_get_agitated(&n->zombie, now_ms);
+                pulled++;
+            }
+            if (pulled > 0) {
+                printf("S504-BIRDS: avian%d beacon (strength=%.2f) pulled %d zombie(s) toward AGITATED/FRENZIED\n",
+                       ai, beacon, pulled);
+            }
+        }
+
+        /* Real MOBBING movement -- a roosting/scouting/signaling bird stays perched (same
+           "logic first, movement later" precedent every other v0 population here started with);
+           only MOBBING actually dives, closing the "dive-bombing/harassing" framing NORTHSTAR.md
+           §6 names rather than leaving MOBBING a purely cosmetic mood label. Targets the NEAREST
+           witnessable (HUNTING/FRENZIED) zombie within observation range -- a bird mobs the same
+           loud event it's already tracking, not an arbitrary one. A MOBBING bird with no such
+           zombie currently in range holds its perch position rather than idly wandering. */
+        if (b->state.mood == AVIAN_MOOD_MOBBING && dt_sec > 0.0f) {
+            int nearest_zi = -1;
+            float nearest_dist_sq = -1.0f;
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                ServerNpc *n = &g_npcs[ni];
+                if (!n->active || n->role != PC_NPC_ROLE_ZOMBIE) continue;
+                if (!bigo_zombie_is_witnessable_event(n->zombie.mood)) continue;
+                if (!bigo_in_range(b->x, b->z, n->x, n->z, BIGO_AVIAN_OBSERVE_RADIUS)) continue;
+                float dx = n->x - b->x, dz = n->z - b->z;
+                float dist_sq = dx * dx + dz * dz;
+                if (nearest_zi < 0 || dist_sq < nearest_dist_sq) {
+                    nearest_zi = ni;
+                    nearest_dist_sq = dist_sq;
+                }
+            }
+            if (nearest_zi >= 0) {
+                ServerNpc *target = &g_npcs[nearest_zi];
+                pheromone_step_toward(&b->x, &b->z, target->x, target->z, BIGO_AVIAN_MOB_SPEED, dt_sec);
+            }
         }
     }
 }
@@ -2049,6 +2192,7 @@ int main(int argc, char **argv) {
     memset(g_entities, 0, sizeof(g_entities));
     server_spawn_npcs(now_ms());
     server_spawn_giant_bugs(now_ms());
+    server_spawn_avians(now_ms());
     server_init_bug_eggs();
     bigo_lab_seed_starter_samples(&g_lab);
     g_pickup_radius = (float)on_papercraft_pickup_radius_millis() / 1000.0f;
@@ -2769,6 +2913,7 @@ int main(int argc, char **argv) {
             server_tick_bug_eggs(now);
             server_tick_wheelbarrow();
             server_tick_witness();
+            server_tick_avians(now);
             server_tick_dispatch(now);
             server_tick_decorum(sock, now);
             server_tick_regulators(now);

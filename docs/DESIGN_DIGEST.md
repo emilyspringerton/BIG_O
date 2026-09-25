@@ -81,6 +81,15 @@ surface surveillance. Polite society's currency is social credit.
   (crows coordinating via birdsong ciphers, dropping acoustic beacons to pull feral hordes onto you). The corporation is both
   the cause and the only fix, and VALIS is your ally. Countermeasure *(proposed)*: RNA-interference darts that knock a
   leader bird back to normal intelligence. "Glosslighting" dialogue: your supervisor turns your correct lab data against you.
+  **TYLER reconciliation, done (2026-09-25):** the coalition is staffed, in-fiction, by the same watching/archival
+  lineage as `TYLER/README.md`'s Eastwind Owls ("their inability to destroy records is a feature, not a bug") --
+  "Bird Correction" (TYLER's own recurring end-log line) is adopted as the in-fiction name for the coalition's own
+  witness ledger forcing a correction onto the world it watches. `core/avian_values.h`/`.c` gives the coalition a
+  real, tested value vocabulary (vigilance/coordination/exposure, ROOSTING/SCOUTING/SIGNALING/MOBBING, a real
+  `avian_beacon_strength` output) matching zombies' own `core/zombie_values.h` pattern -- see that header's own top
+  doc comment for the full tie-in. Campaign wiring (a playable Act II chapter, `zombie_get_agitated` live
+  consumption of the beacon) stays deferred per NORTHSTAR.md §6; only the coalition's own math is real and tested
+  so far, 8 real tests in `core/avian_values_test.c`.
 - **Endgame choice:** run the corporate script (methylate the population, keep free will under an authoritarian night-society)
   or surrender to the signal (dissolve individuality into one biomass).
 

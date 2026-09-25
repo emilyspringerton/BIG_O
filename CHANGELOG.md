@@ -1,5 +1,56 @@
 # CHANGELOG
 
+## 2026-09-25 (4)
+- feat(day): real MOBBING movement -- birds actually dive (NORTHSTAR.md §34). `server_tick_avians`
+  steps a MOBBING bird toward the nearest witnessable (HUNTING/FRENZIED) zombie in range at
+  `BIGO_AVIAN_MOB_SPEED` (7.0/sec) via `bigo_pheromone.h`'s own `pheromone_step_toward` -- closes
+  NORTHSTAR.md §6's "dive-bombing/harassing" framing, previously a cosmetic mood label only.
+  ROOSTING/SCOUTING/SIGNALING birds still hold their perch on purpose. `scripts/build_day.sh`
+  compiles clean; same real, honest `worldapi`-dependency limitation as §33 for live-log capture.
+
+## 2026-09-25 (3)
+- feat(day): live `ServerAvian` flock -- closes the Act II beacon loop (NORTHSTAR.md §33).
+  `day/apps/server/src/main.c`: new `g_avians[BIGO_AVIAN_MAX]` (3, separate array from `g_npcs[]`,
+  same convention `g_giant_bugs[]` already established), `server_spawn_avians`/`server_tick_avians`
+  wired into the real per-tick loop after `server_tick_witness`. Each bird runs all three
+  `core/avian_live.h` observation channels against the live `g_npcs[]` population, ticks real flock
+  coordination among the other live birds, and -- the first live consumer of `avian_beacon_
+  strength` anywhere in this repo -- calls `zombie_get_agitated()` on every zombie within range
+  once a bird's own beacon fires, closing `docs/DESIGN_DIGEST.md`'s own "acoustic beacons pull
+  feral hordes" mechanic. `scripts/build_day.sh` updated (`core/avian_values.c` added), compiles
+  clean. Real, honest limitation: this server hard-requires a reachable `worldapi` at startup with
+  no bypass flag, unavailable in this sandbox, so the live server log output couldn't be captured
+  this pass -- the underlying functions are the same ones `core/avian_live_test.c`/`core/
+  avian_values_test.c` already prove pass.
+
+## 2026-09-25 (2)
+- feat(core): "observing the observer" -- wire the avian coalition into the other live AI systems
+  (NORTHSTAR.md §32, founder real-time follow-up to §31). New `core/avian_live.h` (pure glue,
+  header-only, matching `core/witness_live.h`'s own convention): the coalition watches OTHER
+  watchers -- a Citizen's/The Men's own effective vigilance spiking (`core/npc_archetype.h`), a
+  human witness_state escalating past DENIAL (`core/witness_rules.h` -- the literal "archive the
+  archivist" mechanic), and the same loud zombie events `core/witness_live.h` already gates on
+  (reused directly, not re-implemented). `bigo_avian_meta_witness_rank()` distills all three into
+  one 0..3 corroboration score. 8 real tests in `core/avian_live_test.c`, all pass (gcc
+  `-DPARENA_NO_GRAPHICS`, SDL2 unavailable in this sandbox). Found and corrected a real mistake
+  along the way: `witness_rules.c`'s own `escalation_rank()` is NOT a total severity order (it's a
+  non-monotonic decorum-penalty grouping where COMPROMISED and UNAWARE share a rank) -- checked
+  against the generated source, not assumed; the raw `WS_*` ordinal is used instead. Still no live
+  `ServerAvian` entity or server tick wiring -- NORTHSTAR.md §32 names what's still deferred.
+
+## 2026-09-25
+- feat(core): "the birds" -- avian coalition value module (NORTHSTAR.md §31, founder real-time
+  "BIG_O add the birds (use TYLER)"). New `core/avian_values.h`/`.c`: vigilance/coordination/
+  exposure vocabulary, ROOSTING/SCOUTING/SIGNALING/MOBBING mood arc, `avian_beacon_strength()`
+  (the Act II "acoustic beacon that pulls feral hordes" from `docs/DESIGN_DIGEST.md`). Closes the
+  TYLER cross-repo canon reconciliation both NORTHSTAR.md §6 and DESIGN_DIGEST.md flagged as open:
+  the coalition is now explicitly the same watching/archival lineage as `TYLER/README.md`'s
+  Eastwind Owls, with TYLER's own recurring "BIRD CORRECTION PENDING" line adopted as the
+  in-fiction name for the coalition's own witness ledger. 8 real tests in
+  `core/avian_values_test.c`, all pass (gcc, `bazel` unavailable in this sandbox). Not yet wired
+  into `core/witness_rules.c`/`core/zombie_values.c` or any live server entity -- see NORTHSTAR.md
+  §31's own integration-boundary note.
+
 ## 2026-09-24 (5)
 - feat(day): giant alien-bug eggs -- disturbing them hatches more Giant Zombie Bugs (EMILY/BACKLOG.md SECTION 536
   follow-up wishlist item 4, BIG_O/NORTHSTAR.md §36). Founder real-time (queued 2026-09-22): "Giant alien-bug eggs,
