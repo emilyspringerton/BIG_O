@@ -2230,3 +2230,72 @@ log couldn't be captured in this sandbox — verified by direct code inspection 
 `pheromone_step_toward` call are the same pattern `server_tick_npcs`' own zombie-pheromone-seeking
 movement already uses, live-verified in an earlier pass per that function's own doc comment) plus
 a clean compile, not a live run.
+
+## §37: closing two named gaps in the live Decorum mechanic — gear conspicuousness + two more zones
+(2026-09-25, "start working on the real BIG_O stealth gameplay")
+
+§18 Phase A shipped live Decorum/costume/zone tracking but named two real, honest gaps rather than
+guessing at them: "gear/token are real, honest 0s ... so only `DA_WRONG_COSTUME` can ever fire ...
+never `DA_CARRY_GEAR`," and "`ZONE_EXEC`/`ZONE_GENERATOR`/`ZONE_VAULT` have no live landmark yet."
+This pass closes the `DA_CARRY_GEAR` gap and two of the three missing zones — the direct, next
+buildable slice of the social-stealth core loop, not a new invented mechanic. `ZONE_VAULT` still
+needs a real "stolen token" mechanic `zone_access` already models but nothing here grants — left
+named, not guessed at, same discipline §18 itself used.
+
+**Gear conspicuousness — real, not new design.** Checked `core/sim.c`'s own `sim_observe` first
+(the already-tested abstract reference this live server's Decorum tracking is a port of): it already
+calls `apply_decorum(s, pl, allowed ? DA_CARRY_GEAR : DA_WRONG_COSTUME, ...)` — the exact action-
+selection rule this pass ports to `server_tick_decorum` verbatim, not invented here. What counts as
+"gear" needed one real, checked decision: `papercraft_protocol.h`'s own doc comment names
+`PC_WPN_KNIFE` "the universal baseline every character always has," so `gear = current_weapon !=
+PC_WPN_KNIFE` — any found arsenal slot (Magnum/AR/Shotgun/Sniper/Katana) reads as conspicuous field
+gear, matching `DESIGN_DIGEST.md` §3's own "carrying a portable sequencer" flavor, while the
+baseline knife never trips it. `current_weapon` already lives server-side on every `PlayerSlot`
+(`s->current_weapon`, never broadcast in `PcSnapshotPacket` per that struct's own wire-budget doc
+comment) — zero new packet, zero new state, a real, small wiring change only. Previously, a
+correctly-costumed player carrying a shotgun through `ZONE_EXEC` was invisible to Decorum; now the
+same `noticed()`/`conspicuousness()` math §18 already wired applies, and a hit is correctly logged
+and scored as `DA_CARRY_GEAR` (−15) rather than misattributed to `DA_WRONG_COSTUME` (−20) when the
+costume was actually fine.
+
+**Two more live zones.** `ZONE_EXEC` (`BIGO_EXEC_ZONE_CX/CZ` = (−30, 0)) and `ZONE_GENERATOR`
+(`BIGO_GENERATOR_ZONE_CX/CZ` = (0, −30)) join `ZONE_PUBLIC`/`ZONE_LAB` in `server_player_zone` —
+the exact same "hardcoded circle, no LevelZone/JSON authoring" precedent `ZONE_LAB`'s own landmark
+already established, radius 6.0, both placed well clear of the NPC spawn circle, the lab-delivery
+circle, and the Regulator dispatch point. Per `B1_WITNESS_RULES.md`'s own costume × zone table:
+`ZONE_EXEC` allows `SUIT` only; `ZONE_GENERATOR` allows `JANITOR` only — both already correct in
+`core/witness_rules.c`, unchanged, just now reachable in the live world. 4 of the rules module's 5
+zones are now live; only `ZONE_VAULT` remains unplaced.
+
+**Verified, not just compiled:** a scratch integration harness (same `#include main.c` precedent
+§18/§19/§20/§21 all used, not committed) drives the real, unmodified `server_player_zone`/
+`server_tick_decorum` end to end under ASan+UBSan: a player standing at each new landmark resolves
+to the correct zone; a player in the *correct* costume for `ZONE_EXEC` (`COS_SUIT`) but carrying a
+`PC_WPN_MAGNUM` still takes a real decorum hit, and the exact delta matches `DA_CARRY_GEAR` (80 →
+65), not `DA_WRONG_COSTUME`; the original §18 behavior is unchanged by regression checks — wrong
+costume with only the baseline knife still applies exactly `DA_WRONG_COSTUME` (80 → 60), and correct
+costume with the baseline knife still causes zero loss (`noticed()` never even rolled, `cons` = 0) —
+8/8 real assertions pass. `scripts/build_day.sh` compiles clean (one pre-existing, unrelated
+`strncpy` truncation warning in `load_mods_manifest`, not touched by this pass). `scripts/build.sh`
+(witness-rules oracle/parity tests + the abstract crew-sim scenario suite, neither of which this
+pass touched) re-run clean: 1,520,403 checks / 4,619 parity vectors, 0 failures; 26 scenarios +
+replay determinism + seed sensitivity + bad-script rejection, all OK — zero regressions. Real,
+honest limitation: `bazel`/`bazelisk` are not installed in this sandbox, so `bazel test //...`
+could not be re-run this pass (the day-server code this pass touches isn't part of that build
+graph regardless — `apps/server/src/main.c` is built only via `scripts/build_day.sh`, same as
+every other live-server change in this file); `scripts/build_client.sh` was not re-run since this
+pass touched no client-facing file, wire struct, or shared header. Also found and fixed a real,
+pre-existing doc-comment misplacement while editing this function: the `server_tick_decorum` doc
+comment had drifted to sit above the neighboring `server_tick_bug_eggs` instead (a stale artifact
+of an earlier reordering), silently describing the wrong function — moved back to the function it
+actually documents, and `server_tick_bug_eggs` given its own short, correct one.
+
+**Real, honest, deliberately NOT built here:** `ZONE_VAULT` (needs the stolen-token mechanic,
+genuinely separate scope, not guessed at); any client-visible indication that a carried weapon is
+conspicuous (no HUD change beyond the existing §35 awareness-ping feedback, which already fires
+generically for any noticed hit, gear or costume); tuning whether `DA_CARRY_GEAR`'s -15 vs.
+`DA_WRONG_COSTUME`'s -20 delta feels right in practice (no live playtest in this sandbox, same
+limit every mechanic in this file names); Act I Mission 1's own remaining gaps
+(`docs/A1M1_PLAN.md` items 2-7 — the Sector-2 level, interactables, the shoulder-surf mechanic
+itself, supervisor/peer NPCs, server-authoritative mission state, bot crew slots) — each is its
+own real, separate, larger scope, not attempted blind in this pass per Principle 19.

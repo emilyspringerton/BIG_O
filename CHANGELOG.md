@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-09-25 (5)
+- feat(day): live Decorum closes two named gaps -- gear conspicuousness + two more zones
+  (NORTHSTAR.md §37). `server_tick_decorum` now computes `gear` from the real, already-live
+  `s->current_weapon` (any slot beyond the universal-baseline `PC_WPN_KNIFE` reads as conspicuous
+  field gear) and selects `DA_CARRY_GEAR` vs. `DA_WRONG_COSTUME` via the exact same rule
+  `core/sim.c`'s own already-tested `sim_observe` already uses (`allowed ? DA_CARRY_GEAR :
+  DA_WRONG_COSTUME`), not invented here. `server_player_zone` gains two more live, hardcoded-circle
+  landmarks -- `ZONE_EXEC` (-30, 0) and `ZONE_GENERATOR` (0, -30) -- joining `ZONE_PUBLIC`/
+  `ZONE_LAB`; 4 of the rules module's 5 zones are now live (only `ZONE_VAULT`, which needs a real
+  stolen-token mechanic, remains unplaced, named not guessed at). Also fixed a real, pre-existing
+  doc-comment misplacement found while editing this function (`server_tick_decorum`'s own doc
+  comment had drifted to sit above `server_tick_bug_eggs` instead). Verified via a scratch
+  ASan+UBSan integration harness (8/8 assertions, ported `#include main.c` precedent, not
+  committed): new zone landmarks resolve correctly; correct costume + carried gear now takes a
+  real `DA_CARRY_GEAR` hit instead of being invisible to Decorum; wrong-costume/baseline-knife and
+  correct-costume/baseline-knife behavior is unchanged (regression-checked). `scripts/build_day.sh`
+  clean; `scripts/build.sh` (witness-rules oracle/parity + crew-sim scenarios, untouched by this
+  pass) re-run clean, zero regressions. `bazel` unavailable in this sandbox (not part of that
+  build graph regardless -- `apps/server/src/main.c` builds only via `scripts/build_day.sh`).
+
 ## 2026-09-25 (4)
 - feat(day): real MOBBING movement -- birds actually dive (NORTHSTAR.md §34). `server_tick_avians`
   steps a MOBBING bird toward the nearest witnessable (HUNTING/FRENZIED) zombie in range at

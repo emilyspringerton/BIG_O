@@ -409,11 +409,19 @@ static int g_lab_deliveries = 0;
 #define BIGO_LAB_ZONE_RADIUS 6.0f
 
 /* Live Decorum tracking -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase
- * A: the QUIET-observation half of the witness system (core/witness_rules.c's own zone_access/
- * conspicuousness/noticed/decorum_*), wired live for the first time. Only ZONE_PUBLIC and
- * ZONE_LAB (reusing the wheelbarrow's own existing lab-delivery circle above -- zero new landmark
- * authoring) are actually placed in this world yet; ZONE_EXEC/ZONE_GENERATOR/ZONE_VAULT have no
- * live landmark, named and deferred in NORTHSTAR.md §18, not guessed at here. */
+ * A (extended §37): the QUIET-observation half of the witness system (core/witness_rules.c's own
+ * zone_access/conspicuousness/noticed/decorum_*), wired live. ZONE_PUBLIC, ZONE_LAB (reusing the
+ * wheelbarrow's own existing lab-delivery circle above), and now ZONE_EXEC/ZONE_GENERATOR (below
+ * -- same "hardcoded circle, no LevelZone/JSON authoring" precedent, well clear of every other
+ * landmark) are live-placed. ZONE_VAULT still has no live landmark -- it needs a real "stolen
+ * token" mechanic zone_access already models but nothing here grants yet, named and deferred in
+ * NORTHSTAR.md §18, not guessed at here. */
+#define BIGO_EXEC_ZONE_CX -30.0f
+#define BIGO_EXEC_ZONE_CZ 0.0f
+#define BIGO_EXEC_ZONE_RADIUS 6.0f
+#define BIGO_GENERATOR_ZONE_CX 0.0f
+#define BIGO_GENERATOR_ZONE_CZ -30.0f
+#define BIGO_GENERATOR_ZONE_RADIUS 6.0f
 #define BIGO_QUIET_OBSERVE_RADIUS 10.0f /* deliberately tighter than BIGO_WITNESS_DETECTION_RADIUS
     (25.0) -- noticing an outfit needs real proximity, hearing a zombie scream doesn't */
 #define BIGO_DECORUM_QUIET_TICK_MS 10000u /* real, own, v1 passive-regen cadence (not spec'd
@@ -455,10 +463,14 @@ static int server_distraction_active(unsigned int now_ms) {
     return now_ms < g_distraction_until_ms;
 }
 
-/* server_player_zone -- real, minimal zone lookup for this world's own two live-placed zones. */
+/* server_player_zone -- real, minimal zone lookup for this world's own live-placed zones. */
 static int server_player_zone(const PlayerSlot *s) {
     float dx = s->state.x - BIGO_LAB_ZONE_CX, dz = s->state.z - BIGO_LAB_ZONE_CZ;
     if (dx * dx + dz * dz <= BIGO_LAB_ZONE_RADIUS * BIGO_LAB_ZONE_RADIUS) return ZONE_LAB;
+    dx = s->state.x - BIGO_EXEC_ZONE_CX; dz = s->state.z - BIGO_EXEC_ZONE_CZ;
+    if (dx * dx + dz * dz <= BIGO_EXEC_ZONE_RADIUS * BIGO_EXEC_ZONE_RADIUS) return ZONE_EXEC;
+    dx = s->state.x - BIGO_GENERATOR_ZONE_CX; dz = s->state.z - BIGO_GENERATOR_ZONE_CZ;
+    if (dx * dx + dz * dz <= BIGO_GENERATOR_ZONE_RADIUS * BIGO_GENERATOR_ZONE_RADIUS) return ZONE_GENERATOR;
     return ZONE_PUBLIC;
 }
 
@@ -1294,14 +1306,8 @@ static int find_player_party(int slot) {
     return -1;
 }
 
-/* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A:
- * the QUIET-observation half of the witness system, live for the first time. Real, deliberate
- * design choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per
- * zone-ENTRY transition (matching core/sim.c's own sim_enter-drives-sim_observe precedent, not a
- * continuous per-tick re-roll, which would crash Decorum in under a second at 20Hz); gear/token
- * are real, honest 0s (no live field-gear-carry flag or vault-token mechanic exists yet, so only
- * DA_WRONG_COSTUME can ever fire from this pass); witnesses are real, active Citizen/The-Men NPCs
- * within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real npc_brain_effective_vigilance. */
+/* server_tick_bug_eggs -- disturbing an egg (a real, active player standing near it) hatches more
+ * Giant Zombie Bugs. See BIG_O/NORTHSTAR.md §36. */
 static void server_tick_bug_eggs(unsigned int now_ms) {
     for (int e = 0; e < BIGO_BUG_EGG_MAX; e++) {
         BugEgg *egg = &g_bug_eggs[e];
@@ -1332,6 +1338,19 @@ static void server_tick_bug_eggs(unsigned int now_ms) {
     }
 }
 
+/* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A
+ * (extended §37): the QUIET-observation half of the witness system, live. Real, deliberate design
+ * choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per zone-ENTRY
+ * transition (matching core/sim.c's own sim_enter-drives-sim_observe precedent, not a continuous
+ * per-tick re-roll, which would crash Decorum in under a second at 20Hz); witnesses are real,
+ * active Citizen/The-Men NPCs within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real
+ * npc_brain_effective_vigilance. §37: gear is now a real, live flag too -- any weapon slot beyond
+ * PC_WPN_KNIFE (the universal baseline every character always has, papercraft_protocol.h's own
+ * doc comment) reads as "carrying field gear," matching DESIGN_DIGEST.md §3's own "carrying a
+ * portable sequencer" flavor. Which DA_* action applies on a noticed hit is the exact real,
+ * already-tested precedent core/sim.c's own sim_observe already establishes (`allowed ?
+ * DA_CARRY_GEAR : DA_WRONG_COSTUME`) -- ported here verbatim, not invented. token stays a real,
+ * honest 0 (no live vault-token mechanic exists yet). */
 static void server_tick_decorum(int sock, unsigned int now_ms) {
     for (int i = 0; i < PC_MAX_PLAYERS; i++) {
         PlayerSlot *s = &g_slots[i];
@@ -1341,7 +1360,8 @@ static void server_tick_decorum(int sock, unsigned int now_ms) {
         if (zone != s->decorum_zone) {
             s->decorum_zone = zone;
             int allowed = zone_access(s->state.costume, zone, 0 /* no live vault-token mechanic yet */);
-            int cons = conspicuousness(allowed, 0 /* no live field-gear-carry flag yet */);
+            int gear = (s->current_weapon != PC_WPN_KNIFE) ? 1 : 0;
+            int cons = conspicuousness(allowed, gear);
             if (cons > 0) {
                 int seen = 0;
                 float nearest_dist2 = -1.0f, nearest_dx = 0.0f, nearest_dz = 0.0f;
@@ -1374,11 +1394,12 @@ static void server_tick_decorum(int sock, unsigned int now_ms) {
                     aw.intensity = (unsigned char)bigo_awareness_intensity(cons, seen);
                     sendto(sock, &aw, sizeof(aw), 0, (struct sockaddr *)&s->addr, s->addr_len);
 
+                    int action = allowed ? DA_CARRY_GEAR : DA_WRONG_COSTUME; /* core/sim.c's sim_observe precedent */
                     int before = s->state.decorum;
-                    s->state.decorum = decorum_after(before, DA_WRONG_COSTUME);
+                    s->state.decorum = decorum_after(before, action);
                     int band = decorum_band(s->state.decorum);
-                    printf("S536-DECORUM: player%d noticed in zone%d (wrong costume, seen_by=%d) decorum %d -> %d (%s)\n",
-                           i, zone, seen, before, s->state.decorum, BAND_NAMES[band]);
+                    printf("S536-DECORUM: player%d noticed in zone%d (%s, seen_by=%d) decorum %d -> %d (%s)\n",
+                           i, zone, allowed ? "carrying field gear" : "wrong costume", seen, before, s->state.decorum, BAND_NAMES[band]);
                     if (band == BAND_CANCELLED && !s->decorum_cancelled_logged) {
                         s->decorum_cancelled_logged = 1;
                         printf("S536-DECORUM: player%d CANCELLED -- dispatching a Regulator (BIG_O/NORTHSTAR.md §18 Phase B)\n", i);

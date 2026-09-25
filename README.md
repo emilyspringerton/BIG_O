@@ -61,9 +61,9 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > never wired until now. See `NORTHSTAR.md` §11/§21 for the full account and what's deferred.
 > The QUIET-observation half of the witness system — costume/zone-based noticing, driving the player's own
 > Decorum meter — is now live too, not just the loud zombie-event path above. Costume (Wardrobe's phone screen)
-> is server-authoritative for the first time; standing in the wrong costume for a zone (2 of the rules module's
-> 5 zones are actually placed so far: public + the lab) where a real nearby Citizen/The Men NPC notices you drops
-> Decorum, using the exact same tested `core/witness_rules.c` math the loud path already uses. Reaching the
+> is server-authoritative for the first time; standing in the wrong costume for a zone where a real nearby
+> Citizen/The Men NPC notices you drops Decorum, using the exact same tested `core/witness_rules.c` math the
+> loud path already uses. Reaching the
 > CANCELLED band now has a real consequence: a Regulator is dispatched, chases the player's live position, and
 > on arrival kills them — respawning them at the real lab zone (the lore's own "the basement prints a new body")
 > with Decorum reset to a clean slate. This is the first real player damage/death mechanic in this repo. Real,
@@ -133,6 +133,13 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > real historical ARPANET's own IMP host numbering. Browse the list, SELECT a node to read it in full
 > (reuses `BP_APP_MESSAGES`'s own list↔detail pattern) — deliberately not live networking like the GFD app,
 > this is archival. See `NORTHSTAR.md` §33.
+> Two more of the rules module's five zones are live: ZONE_EXEC and ZONE_GENERATOR (the same hardcoded-circle
+> landmark pattern ZONE_LAB already used) join public + the lab, so 4 of 5 zones now gate real costume access
+> (only ZONE_VAULT, which needs a real, not-yet-built stolen-token mechanic, is still unplaced). Carrying gear
+> is a real, live conspicuousness signal too now, not just wrong costume: any weapon slot beyond the universal
+> baseline Knife reads as "carrying field gear" and can get you noticed even in the *correct* costume/zone —
+> the same real `DA_CARRY_GEAR` vs. `DA_WRONG_COSTUME` distinction `core/sim.c`'s own offline scenario sim
+> already modeled, ported to the live server for the first time. See `NORTHSTAR.md` §37.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page
