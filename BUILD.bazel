@@ -105,6 +105,21 @@ cc_test(
     copts = COPTS,
 )
 
+# avian_live -- pure glue, "observing the observer" (founder real-time follow-up to §31: "integrate
+# them deeply into the other AI interactions in terms of observing the observer"). Wires
+# :avian_values into the OTHER AI systems already ticking (:npc_archetype's own effective
+# vigilance, :witness_rules' own witness_state machine, :zombie_values' own loud-event mood) as a
+# real, second-order signal -- the coalition watches the other watchers, not the player directly.
+# Header-only, same convention as :witness_live; depends on :witness_live for its own
+# bigo_zombie_is_witnessable_event gate so the two systems can never silently drift on what counts
+# as "loud". See core/avian_live.h's own top doc comment for the full design.
+cc_test(
+    name = "avian_live_test",
+    srcs = ["core/avian_live_test.c", "core/avian_live.h"],
+    deps = [":avian_values", ":witness_rules", ":zombie_values"],
+    copts = COPTS,
+)
+
 # lab_sim -- founder real-time: "build out all of the cloning facility simulation tech we want to
 # simulate real lab equipment as much as possible." Headless equipment pipeline (centrifuge, PCR,
 # sequencer, CRISPR splice bench, repressor/kill-switch install, breeding/genetic drift, embryo

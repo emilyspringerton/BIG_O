@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-09-25 (2)
+- feat(core): "observing the observer" -- wire the avian coalition into the other live AI systems
+  (NORTHSTAR.md §32, founder real-time follow-up to §31). New `core/avian_live.h` (pure glue,
+  header-only, matching `core/witness_live.h`'s own convention): the coalition watches OTHER
+  watchers -- a Citizen's/The Men's own effective vigilance spiking (`core/npc_archetype.h`), a
+  human witness_state escalating past DENIAL (`core/witness_rules.h` -- the literal "archive the
+  archivist" mechanic), and the same loud zombie events `core/witness_live.h` already gates on
+  (reused directly, not re-implemented). `bigo_avian_meta_witness_rank()` distills all three into
+  one 0..3 corroboration score. 8 real tests in `core/avian_live_test.c`, all pass (gcc
+  `-DPARENA_NO_GRAPHICS`, SDL2 unavailable in this sandbox). Found and corrected a real mistake
+  along the way: `witness_rules.c`'s own `escalation_rank()` is NOT a total severity order (it's a
+  non-monotonic decorum-penalty grouping where COMPROMISED and UNAWARE share a rank) -- checked
+  against the generated source, not assumed; the raw `WS_*` ordinal is used instead. Still no live
+  `ServerAvian` entity or server tick wiring -- NORTHSTAR.md §32 names what's still deferred.
+
 ## 2026-09-25
 - feat(core): "the birds" -- avian coalition value module (NORTHSTAR.md §31, founder real-time
   "BIG_O add the birds (use TYLER)"). New `core/avian_values.h`/`.c`: vigilance/coordination/

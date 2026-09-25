@@ -2101,3 +2101,56 @@ rendering, no PC snapshot field). The coalition as a playable Act II chapter —
 client rendering (mannequin-kit precedent from §8a would need a genuinely new bird asset, not the
 shared mannequin rig), the RNA-interference-dart countermeasure, "Glosslighting" dialogue — stays
 real, deferred campaign content, named here rather than silently dropped.
+
+## §32: "Observing the observer" — avian coalition wired into the other AI systems (2026-09-25)
+
+Founder real-time follow-up to §31: "integrate them deeply into the other AI interactions in
+terms of observing the observer." §31 shipped the coalition's own value module in isolation,
+explicitly not wired into anything else yet. This closes that specific gap — not the full Act II
+chapter (server entities, rendering, the RNA-interference countermeasure stay deferred, unchanged
+from §31's own integration-boundary note).
+
+**The real design choice, stated plainly:** the coalition does NOT get its own copy of
+`witness_rules.c`'s `noticed()`/`conspicuousness()` to watch the player directly — that would just
+be a second, redundant witness system wearing bird feathers. Instead, new `core/avian_live.h`
+(pure, header-only glue, same convention as `core/witness_live.h`) wires the coalition to watch
+the OTHER watchers already ticking on this server:
+
+- `bigo_avian_observe_npc_vigilance()` — a Citizen's or The Men's own `npc_brain_effective_
+  vigilance` (`core/npc_archetype.h`) spiking past a real threshold (60/100) is itself a signal
+  worth archiving, independent of whatever caused it.
+- `bigo_avian_observe_witness_state()` — a human's own `witness_state` (`core/witness_rules.h`)
+  escalating past mere `WS_DENIAL` into `WS_COMPROMISED` and beyond is the literal "the coalition
+  archives the archivist" mechanic — the Eastwind Owl doctrine (`TYLER/README.md`) turned into a
+  real trigger.
+- `bigo_avian_observe_zombie_event()` — reuses `core/witness_live.h`'s own `bigo_zombie_is_
+  witnessable_event` HUNTING/FRENZIED gate directly (not re-implemented) so the two systems can
+  never silently drift on what counts as "loud".
+- `bigo_avian_meta_witness_rank()` — a single 0..3 severity rank counting how many of the three
+  channels corroborate at once (an NPC spike alone vs. an NPC spike *and* an active witness *and*
+  a loud zombie event together) — named as the real future input to `avian_beacon_strength`'s own
+  urgency, not yet consumed anywhere.
+
+Each of these is a genuine second-order signal — a signal *about* another AI system's own signal
+— not a restatement of the first-order one; that's the concrete mechanical meaning of "observing
+the observer" here. 8 real tests in `core/avian_live_test.c` (gcc `-std=c99 -Wall -Wextra
+-DPARENA_NO_GRAPHICS`, matching `witness_rules.c`'s own headless-build flag — SDL2 dev headers
+aren't installable in this sandbox, verified directly rather than assumed), including a full,
+real integration test: a bird alerted purely by observing another NPC's own vigilance spike, with
+no direct sighting of anything at all, genuinely reaches SIGNALING once real flock coordination
+supports it — the alert this header produces is not a dead end, it drives the exact same state
+machine `core/avian_values_test.c` already proved.
+
+**One real, found-live correction along the way:** `witness_rules.c`'s own `escalation_rank()`
+looked like the right tool for "has this witness state become a real threat" (a total order over
+`WS_*`), but it isn't one — it's a non-monotonic grouping for decorum-penalty banding where
+`WS_COMPROMISED` and `WS_UNAWARE` share the same rank (0). Checked directly against the generated
+`.c`, not assumed from the header's declaration alone. `avian_live.h` compares the raw `WS_*`
+ordinal instead (which IS declared in real escalation order in `witness_rules.h`'s own enum), with
+the reasoning for the correction left in the header itself so the same mistake isn't made again.
+
+**Integration boundary, unchanged from §31:** still no live `ServerAvian` entity, no wiring into
+an actual server tick loop, no consumption of `bigo_avian_meta_witness_rank` by
+`avian_beacon_strength`. This pass proves the cross-system signal wiring is real and tested;
+spawning/ticking a live coalition population is the next, still-deferred step toward a playable
+Act II slice.
