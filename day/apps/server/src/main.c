@@ -320,6 +320,15 @@ typedef struct {
                                       BIGO_DECORUM_QUIET_TICK_MS's own doc comment below */
     int decorum_cancelled_logged;  /* real, one-time marker so BAND_CANCELLED only logs once per
                                        episode, not every tick while it stays cancelled */
+
+    /* Shoulder-surf -- BIG_O/NORTHSTAR.md §38, DESIGN_DIGEST.md §4. See server_tick_shoulder_surf.
+       shoulder_surf_started_ms is a real, absolute-timestamp sentinel (0 = not currently holding),
+       same idiom pager_buzz_until_ms/last_quiet_tick_ms above already use -- set the instant a
+       CONTINUOUS hold-near-a-valid-target streak begins, reset to 0 the instant either condition
+       breaks (button released, or no valid target in range); must be one unbroken hold. */
+    unsigned int shoulder_surf_started_ms;
+    int has_vault_token;                /* real, live zone_access(...) token input for ZONE_VAULT --
+                                            starts 0 (no token), set by a completed shoulder-surf. */
 } PlayerSlot;
 
 /* Real, "simple but trackable" GTA3-style dropped-item entity -- see packages/common/
@@ -409,19 +418,22 @@ static int g_lab_deliveries = 0;
 #define BIGO_LAB_ZONE_RADIUS 6.0f
 
 /* Live Decorum tracking -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase
- * A (extended §37): the QUIET-observation half of the witness system (core/witness_rules.c's own
- * zone_access/conspicuousness/noticed/decorum_*), wired live. ZONE_PUBLIC, ZONE_LAB (reusing the
- * wheelbarrow's own existing lab-delivery circle above), and now ZONE_EXEC/ZONE_GENERATOR (below
- * -- same "hardcoded circle, no LevelZone/JSON authoring" precedent, well clear of every other
- * landmark) are live-placed. ZONE_VAULT still has no live landmark -- it needs a real "stolen
- * token" mechanic zone_access already models but nothing here grants yet, named and deferred in
- * NORTHSTAR.md §18, not guessed at here. */
+ * A (extended §37, §38): the QUIET-observation half of the witness system (core/witness_rules.c's
+ * own zone_access/conspicuousness/noticed/decorum_*), wired live. All 5 of the rules module's
+ * zones are now live-placed: ZONE_PUBLIC, ZONE_LAB (reusing the wheelbarrow's own existing
+ * lab-delivery circle above), ZONE_EXEC/ZONE_GENERATOR (§37), and ZONE_VAULT (§38, below) -- same
+ * "hardcoded circle, no LevelZone/JSON authoring" precedent throughout, each well clear of every
+ * other landmark. ZONE_VAULT's own real token requirement is granted by a completed shoulder-surf
+ * (server_tick_shoulder_surf, PlayerSlot's own has_vault_token) -- see NORTHSTAR.md §38. */
 #define BIGO_EXEC_ZONE_CX -30.0f
 #define BIGO_EXEC_ZONE_CZ 0.0f
 #define BIGO_EXEC_ZONE_RADIUS 6.0f
 #define BIGO_GENERATOR_ZONE_CX 0.0f
 #define BIGO_GENERATOR_ZONE_CZ -30.0f
 #define BIGO_GENERATOR_ZONE_RADIUS 6.0f
+#define BIGO_VAULT_ZONE_CX 30.0f
+#define BIGO_VAULT_ZONE_CZ 30.0f
+#define BIGO_VAULT_ZONE_RADIUS 6.0f
 #define BIGO_QUIET_OBSERVE_RADIUS 10.0f /* deliberately tighter than BIGO_WITNESS_DETECTION_RADIUS
     (25.0) -- noticing an outfit needs real proximity, hearing a zombie scream doesn't */
 #define BIGO_DECORUM_QUIET_TICK_MS 10000u /* real, own, v1 passive-regen cadence (not spec'd
@@ -471,6 +483,8 @@ static int server_player_zone(const PlayerSlot *s) {
     if (dx * dx + dz * dz <= BIGO_EXEC_ZONE_RADIUS * BIGO_EXEC_ZONE_RADIUS) return ZONE_EXEC;
     dx = s->state.x - BIGO_GENERATOR_ZONE_CX; dz = s->state.z - BIGO_GENERATOR_ZONE_CZ;
     if (dx * dx + dz * dz <= BIGO_GENERATOR_ZONE_RADIUS * BIGO_GENERATOR_ZONE_RADIUS) return ZONE_GENERATOR;
+    dx = s->state.x - BIGO_VAULT_ZONE_CX; dz = s->state.z - BIGO_VAULT_ZONE_CZ;
+    if (dx * dx + dz * dz <= BIGO_VAULT_ZONE_RADIUS * BIGO_VAULT_ZONE_RADIUS) return ZONE_VAULT;
     return ZONE_PUBLIC;
 }
 
@@ -1338,9 +1352,60 @@ static void server_tick_bug_eggs(unsigned int now_ms) {
     }
 }
 
+#define BIGO_SHOULDER_SURF_RADIUS 4.0f /* deliberately tight -- has to actually be standing over the
+    target's shoulder, not just "somewhere in the room" (BIGO_QUIET_OBSERVE_RADIUS's own 10.0) */
+#define BIGO_SHOULDER_SURF_HOLD_MS 3000u /* real, own, v1 hold duration (not spec'd elsewhere) --
+    long enough that it can't be done in a drive-by walk-past, short enough to be a real, usable
+    interaction, not a chore */
+
+/* server_tick_shoulder_surf -- BIG_O/NORTHSTAR.md §38, DESIGN_DIGEST.md §4 "shoulder-surfing codes
+ * and PINs": the real live version of the stolen-token mechanic `zone_access`'s own `token`
+ * parameter already models for ZONE_VAULT (`core/witness_rules.c`, `B1_WITNESS_RULES.md` §4) but
+ * nothing granted until now. No dedicated Supervisor NPC/terminal object exists yet (a real,
+ * honest v1 simplification, named -- see NORTHSTAR.md §38's own deferred list): any live Citizen or
+ * The Men NPC within BIGO_SHOULDER_SURF_RADIUS while the player holds PC_BTN_SHOULDER_SURF is a
+ * valid target. No vision-cone/facing check either, same "Deliberately not here: vision/hearing
+ * geometry" scope B1_WITNESS_RULES.md §8 already holds every other noticing check in this repo to.
+ * Real, deliberate design choice: the hold must be CONTINUOUS -- releasing the button or losing
+ * proximity to every valid target resets progress to 0, so this can't be done by walking through a
+ * room while holding the button the whole time; you have to actually stop and watch one target. */
+static void server_tick_shoulder_surf(unsigned int now_ms) {
+    for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+        PlayerSlot *s = &g_slots[i];
+        if (!s->active || s->has_vault_token) continue; /* already stolen one -- nothing left to do */
+
+        int holding = (s->latest_buttons & PC_BTN_SHOULDER_SURF) != 0;
+        int near_target = 0;
+        if (holding) {
+            for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+                ServerNpc *n = &g_npcs[ni];
+                if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
+                if (bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_SHOULDER_SURF_RADIUS)) {
+                    near_target = 1;
+                    break;
+                }
+            }
+        }
+
+        if (!holding || !near_target) {
+            s->shoulder_surf_started_ms = 0; /* streak broken -- must start over */
+            continue;
+        }
+        if (s->shoulder_surf_started_ms == 0) {
+            s->shoulder_surf_started_ms = now_ms; /* streak just began */
+            continue;
+        }
+        if (now_ms - s->shoulder_surf_started_ms >= BIGO_SHOULDER_SURF_HOLD_MS) {
+            s->has_vault_token = 1;
+            printf("S536-SHOULDERSURF: player%d finished a %ums shoulder-surf -- vault token stolen\n",
+                   i, BIGO_SHOULDER_SURF_HOLD_MS);
+        }
+    }
+}
+
 /* server_tick_decorum -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §18 Phase A
- * (extended §37): the QUIET-observation half of the witness system, live. Real, deliberate design
- * choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per zone-ENTRY
+ * (extended §37, §38): the QUIET-observation half of the witness system, live. Real, deliberate
+ * design choices, all named in NORTHSTAR.md §18: fires the real "observe" check once per zone-ENTRY
  * transition (matching core/sim.c's own sim_enter-drives-sim_observe precedent, not a continuous
  * per-tick re-roll, which would crash Decorum in under a second at 20Hz); witnesses are real,
  * active Citizen/The-Men NPCs within BIGO_QUIET_OBSERVE_RADIUS, using each one's own real
@@ -1349,8 +1414,9 @@ static void server_tick_bug_eggs(unsigned int now_ms) {
  * doc comment) reads as "carrying field gear," matching DESIGN_DIGEST.md §3's own "carrying a
  * portable sequencer" flavor. Which DA_* action applies on a noticed hit is the exact real,
  * already-tested precedent core/sim.c's own sim_observe already establishes (`allowed ?
- * DA_CARRY_GEAR : DA_WRONG_COSTUME`) -- ported here verbatim, not invented. token stays a real,
- * honest 0 (no live vault-token mechanic exists yet). */
+ * DA_CARRY_GEAR : DA_WRONG_COSTUME`) -- ported here verbatim, not invented. §38: token is now a
+ * real, live flag too -- the player's own has_vault_token, set by a completed shoulder-surf
+ * (server_tick_shoulder_surf, called ahead of this function in the main tick loop). */
 static void server_tick_decorum(int sock, unsigned int now_ms) {
     for (int i = 0; i < PC_MAX_PLAYERS; i++) {
         PlayerSlot *s = &g_slots[i];
@@ -1359,7 +1425,7 @@ static void server_tick_decorum(int sock, unsigned int now_ms) {
         int zone = server_player_zone(s);
         if (zone != s->decorum_zone) {
             s->decorum_zone = zone;
-            int allowed = zone_access(s->state.costume, zone, 0 /* no live vault-token mechanic yet */);
+            int allowed = zone_access(s->state.costume, zone, s->has_vault_token);
             int gear = (s->current_weapon != PC_WPN_KNIFE) ? 1 : 0;
             int cons = conspicuousness(allowed, gear);
             if (cons > 0) {
@@ -1761,6 +1827,10 @@ static void spawn_player(PlayerSlot *s) {
     s->decorum_zone = -1; /* no zone yet -- next server_tick_decorum call always counts as an entry */
     s->last_quiet_tick_ms = 0;
     s->decorum_cancelled_logged = 0;
+    s->shoulder_surf_started_ms = 0;
+    s->has_vault_token = 0; /* a fresh spawn/reconnect starts with nothing stolen, same real,
+                                honest "clean slate" convention every other progression field a
+                                fresh spawn resets already uses */
 
     /* Real, live bug found and fixed during TYLER-phone-mechanics live verification (2026-08-30):
        g_slots[] is a static array reused across occupants (a timed-out or gracefully-freed slot
@@ -2936,6 +3006,7 @@ int main(int argc, char **argv) {
             server_tick_witness();
             server_tick_avians(now);
             server_tick_dispatch(now);
+            server_tick_shoulder_surf(now);
             server_tick_decorum(sock, now);
             server_tick_regulators(now);
             server_tick_gfd_bridge(sock);

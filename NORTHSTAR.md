@@ -2299,3 +2299,79 @@ limit every mechanic in this file names); Act I Mission 1's own remaining gaps
 (`docs/A1M1_PLAN.md` items 2-7 — the Sector-2 level, interactables, the shoulder-surf mechanic
 itself, supervisor/peer NPCs, server-authoritative mission state, bot crew slots) — each is its
 own real, separate, larger scope, not attempted blind in this pass per Principle 19.
+
+## §38: the shoulder-surf mechanic — a real, generic stolen-token loop for ZONE_VAULT (2026-09-25,
+continued, "continue")
+
+§37 closed `ZONE_EXEC`/`ZONE_GENERATOR` but left `ZONE_VAULT` deliberately unplaced: it "needs a
+real 'stolen token' mechanic `zone_access` already models but nothing here grants yet." This pass
+closes that gap with `DESIGN_DIGEST.md` §4's own named mechanic — "shoulder-surfing codes and
+PINs" — rather than inventing a different, unrelated way to grant the token, and the same mechanic
+is `docs/A1M1_PLAN.md`'s own gap #4. Built as a real, generic world mechanic (not Act I Mission
+1-specific content), same "the general system before the specific mission" ordering every other
+Decorum-adjacent piece in this file has followed.
+
+**Scope decision, checked first:** `docs/A1M1_PLAN.md`'s own framing ("aim/hold-camera behind the
+supervisor NPC... uses the phone Camera app affordance") describes a *specific mission's* version
+of this mechanic, gated on a dedicated Supervisor NPC and Room 404 terminal object — neither
+exists live yet (no NPC role beyond Citizen/The Men/Zombie, no interactable terminal entities).
+Building either is real, separate, larger scope (the mission's own gap #5/#3). This pass builds the
+generic version instead: any live Citizen or The Men NPC is a valid shoulder-surf target, and
+completing one grants the real `zone_access(...)` token input `ZONE_VAULT` needs — the same real
+simplification precedent `ZONE_EXEC`/`ZONE_GENERATOR`'s own "no dedicated landmark asset, hardcoded
+circle" already used. A1M1's own dedicated Supervisor-only version stays real, deferred, named
+work, not silently conflated with this.
+
+**What shipped:** `PC_BTN_SHOULDER_SURF` (bit 8), the fourth held button in `PcUserCmdPacket`'s own
+`buttons` bitmask, alongside JUMP/CROUCH/SPRINT — bound to **C** on keyboard, **X** on controller
+(both free, checked against every existing binding first). `server_tick_shoulder_surf` (new,
+`day/apps/server/src/main.c`, called each tick ahead of `server_tick_decorum`): while a player holds
+the button AND a live, active Citizen/The-Men NPC (zombies excluded) is within
+`BIGO_SHOULDER_SURF_RADIUS` (4.0 — deliberately tighter than `BIGO_QUIET_OBSERVE_RADIUS`'s 10.0, has
+to actually be standing over the target, not just in the room), a real, absolute-timestamp streak
+(`PlayerSlot.shoulder_surf_started_ms`, same sentinel idiom `pager_buzz_until_ms` already
+established) accumulates; releasing the button OR losing proximity to every valid target resets it
+to 0 — the hold must be one unbroken streak, not a cumulative total, a real, deliberate design
+choice so this can't be done by walking through a room with the button held the whole time.
+Completing `BIGO_SHOULDER_SURF_HOLD_MS` (3000ms, a real, own v1 tuning, not spec'd elsewhere) sets
+`PlayerSlot.has_vault_token`, logged once. `ZONE_VAULT` itself gets the same hardcoded-circle
+landmark treatment as `ZONE_EXEC`/`ZONE_GENERATOR` (`BIGO_VAULT_ZONE_CX/CZ` = (30, 30), radius 6.0,
+checked clear of every other landmark in this world). `server_tick_decorum`'s own `zone_access`
+call now passes `s->has_vault_token` instead of the hardcoded 0 §37 still carried — all 5 of the
+rules module's zones are now live for the first time. No vision-cone/facing requirement on the
+target (matches `B1_WITNESS_RULES.md` §8's own "deliberately not here: vision/hearing geometry"
+scope boundary, the same one every other noticing check in this repo already respects) — named, not
+silently added as new unscoped precision.
+
+**Verified, not just compiled:** a scratch ASan+UBSan integration harness (`#include main.c`
+precedent, not committed) drives the real, unmodified `server_tick_shoulder_surf`/
+`server_player_zone`/`zone_access`/`server_tick_decorum` end to end, 13/13 real assertions: the new
+`ZONE_VAULT` landmark resolves correctly; holding the button with no target in range never starts a
+streak or grants a token; a streak that starts and then has its button released mid-hold resets to
+0, granting nothing; a continuous hold correctly grants no token one ms short of the threshold and
+grants it exactly once the threshold is crossed; the granted token, fed through the real,
+unmodified `zone_access()`, actually unlocks `ZONE_VAULT` for a non-street costume and is still
+correctly denied for `COS_STREET` (matching the B1 table's own "and a non-street costume" clause);
+and a full §37 regression check (correct costume + carried gear still applies `DA_CARRY_GEAR`
+unchanged) confirms this pass didn't disturb the existing gear/zone Decorum path. `scripts/
+build_day.sh` compiles clean. `scripts/build_client.sh` also compiles clean this pass (SDL2/GL dev
+packages were installable in this sandbox this time, unlike some earlier passes) — the new
+`PC_BTN_SHOULDER_SURF` keyboard/controller bindings build without warning, though the actual
+on-screen feel is unverified (no live GL driver / `SDL_CreateWindow` in this sandbox, same limit
+every visual feature in this file already names). `scripts/build.sh` (witness-rules oracle/parity +
+crew-sim scenarios, untouched by this pass) re-run clean: 1,520,403 checks / 4,619 parity vectors, 0
+failures; 26 scenarios OK — zero regressions. `bazel`/`bazelisk` still unavailable in this sandbox
+(the touched files aren't part of that build graph regardless).
+
+**Real, honest, deliberately NOT built here:** any client-side UI/HUD affordance for the
+shoulder-surf hold itself (no progress bar, no "aim/hold-camera" visual — a bare button hold today,
+named as real, separate follow-up); any witness-risk for the act of shoulder-surfing itself (unlike
+carrying gear, there's no `DA_*` action in the rules module for "caught shoulder-surfing" — extending
+`core/witness_rules.c`/its own PARENA `.prn` source to add one is real, separate, out of scope for
+this pass, which deliberately did not touch the generated rules oracle at all); a dedicated
+Supervisor NPC role, Room 404 terminal object, or any other Act I Mission 1-specific content (named
+above, `docs/A1M1_PLAN.md` items 2, 3, 5-7 all still open); token loss/expiry (once stolen, a
+token is permanent for the rest of that life — no cooldown, no re-theft-on-death reset, a real,
+named v1 simplification matching Decorum's own "what a kill resets is undecided design space" cut
+from §18); more than one target-selection nuance (any Citizen/The-Men NPC works today, not
+specifically a "supervisor" — named above as the real, deliberate scope cut, not an oversight).

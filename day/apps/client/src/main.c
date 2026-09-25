@@ -2433,6 +2433,8 @@ int main(int argc, char **argv) {
         if (keys[SDL_SCANCODE_SPACE]) buttons |= PC_BTN_JUMP;
         if (keys[SDL_SCANCODE_LCTRL]) buttons |= PC_BTN_CROUCH;
         if (keys[SDL_SCANCODE_LSHIFT]) buttons |= PC_BTN_SPRINT;
+        if (keys[SDL_SCANCODE_C]) buttons |= PC_BTN_SHOULDER_SURF; /* hold near a Citizen/The Men
+            NPC -- BIG_O/NORTHSTAR.md §38 */
 
         /* Real, basic controller input -- see `pad`'s own doc comment above for the full real
            mapping. Every read here is a real, harmless no-op when `pad` is NULL (no controller
@@ -2459,6 +2461,8 @@ int main(int argc, char **argv) {
             /* Left stick click (L3) = sprint -- the standard console-controller sprint bind,
                mirroring keyboard's own Left Shift (S504-10). */
             if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK)) buttons |= PC_BTN_SPRINT;
+            /* X face button = shoulder-surf hold, mirroring keyboard's own C (§38). */
+            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X)) buttons |= PC_BTN_SHOULDER_SURF;
         }
 
         /* Real, live redesign (2026-09-02, founder real-time first "make movement relative to

@@ -134,12 +134,18 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > (reuses `BP_APP_MESSAGES`'s own list↔detail pattern) — deliberately not live networking like the GFD app,
 > this is archival. See `NORTHSTAR.md` §33.
 > Two more of the rules module's five zones are live: ZONE_EXEC and ZONE_GENERATOR (the same hardcoded-circle
-> landmark pattern ZONE_LAB already used) join public + the lab, so 4 of 5 zones now gate real costume access
-> (only ZONE_VAULT, which needs a real, not-yet-built stolen-token mechanic, is still unplaced). Carrying gear
-> is a real, live conspicuousness signal too now, not just wrong costume: any weapon slot beyond the universal
-> baseline Knife reads as "carrying field gear" and can get you noticed even in the *correct* costume/zone —
-> the same real `DA_CARRY_GEAR` vs. `DA_WRONG_COSTUME` distinction `core/sim.c`'s own offline scenario sim
-> already modeled, ported to the live server for the first time. See `NORTHSTAR.md` §37.
+> landmark pattern ZONE_LAB already used) join public + the lab. Carrying gear is a real, live conspicuousness
+> signal too now, not just wrong costume: any weapon slot beyond the universal baseline Knife reads as
+> "carrying field gear" and can get you noticed even in the *correct* costume/zone — the same real
+> `DA_CARRY_GEAR` vs. `DA_WRONG_COSTUME` distinction `core/sim.c`'s own offline scenario sim already modeled,
+> ported to the live server for the first time. See `NORTHSTAR.md` §37.
+> The last of the five zones, ZONE_VAULT, is live too, unlocked by a new mechanic: hold **C** (or the
+> controller's X button) near any Citizen/The Men NPC for 3 continuous seconds — release early or lose
+> proximity and the hold resets to 0 — to shoulder-surf a real, stolen vault token (`DESIGN_DIGEST.md` §4).
+> Built as a generic world mechanic rather than tied to a specific mission, since no dedicated Supervisor NPC
+> or terminal object exists yet — Act I Mission 1's own more specific version of this same idea
+> (`docs/A1M1_PLAN.md` gap #4) is still real, separate, deferred work. Shoulder-surfing itself carries no
+> witness risk of its own yet. See `NORTHSTAR.md` §38.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page
