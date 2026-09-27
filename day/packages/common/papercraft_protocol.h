@@ -100,6 +100,10 @@
     normalized 2D direction vector (player -> NPC, this server's own x/z world axes) plus a real
     0..100 intensity derived from conspicuousness/witness-count (bigo_awareness.h), not a
     placeholder. See PcAwarenessPingPacket below. */
+#define PC_PACKET_SHOULDER_SURF    27 /* server -> the one surfing player only: BIG_O/NORTHSTAR.md §39.
+    Event-driven, sent on each real shoulder-surf transition (lean-in started, streak broken, token
+    stolen, caught by a bystander) -- never per tick; the client animates its own progress bar
+    locally from the LEANING event's hold_ms. See PcShoulderSurfPacket below. */
 
 /* Connect-ticket auth -- direct port of racer_protocol.h's own RC_TICKET_* wire format. Minted
  * by IDUNA's PapercraftTicketHandler (internal/http/handlers/papercraft_ticket.go) from a real
@@ -432,6 +436,19 @@ typedef struct {
     float dir_x, dir_z;
     unsigned char intensity;
 } PcAwarenessPingPacket;
+
+/* PcShoulderSurfPacket -- BIG_O/NORTHSTAR.md §39. state is one of PC_SURF_* below; hold_ms is the
+ * server's own real BIGO_SHOULDER_SURF_HOLD_MS (sent, not duplicated client-side, so a retune can
+ * never drift the bar out of sync with what the server actually requires). */
+#define PC_SURF_IDLE    0 /* streak broken (button released / target lost) -- hide the bar */
+#define PC_SURF_LEANING 1 /* a continuous hold just began -- start the bar at 0 */
+#define PC_SURF_STOLEN  2 /* hold completed -- vault token granted */
+#define PC_SURF_CAUGHT  3 /* a bystander noticed the lean-in -- DA_CAUGHT_SNOOPING applied, streak void */
+typedef struct {
+    PcHeader hdr;
+    unsigned char state;
+    unsigned int hold_ms;
+} PcShoulderSurfPacket;
 
 /* PcChatSayPacket/PcChatRecvPacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md
  * §24. Deliberate departure from PcPhoneMessagePacket's own fixed-id-table convention: chat is

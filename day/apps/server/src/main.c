@@ -327,6 +327,8 @@ typedef struct {
        CONTINUOUS hold-near-a-valid-target streak begins, reset to 0 the instant either condition
        breaks (button released, or no valid target in range); must be one unbroken hold. */
     unsigned int shoulder_surf_started_ms;
+    int shoulder_surf_needs_release;    /* §39: set after a caught/refused lean-in -- the button must
+                                            be let go before the next lean-in can roll again */
     int has_vault_token;                /* real, live zone_access(...) token input for ZONE_VAULT --
                                             starts 0 (no token), set by a completed shoulder-surf. */
 } PlayerSlot;
@@ -1358,45 +1360,132 @@ static void server_tick_bug_eggs(unsigned int now_ms) {
     long enough that it can't be done in a drive-by walk-past, short enough to be a real, usable
     interaction, not a chore */
 
-/* server_tick_shoulder_surf -- BIG_O/NORTHSTAR.md §38, DESIGN_DIGEST.md §4 "shoulder-surfing codes
- * and PINs": the real live version of the stolen-token mechanic `zone_access`'s own `token`
- * parameter already models for ZONE_VAULT (`core/witness_rules.c`, `B1_WITNESS_RULES.md` §4) but
- * nothing granted until now. No dedicated Supervisor NPC/terminal object exists yet (a real,
- * honest v1 simplification, named -- see NORTHSTAR.md §38's own deferred list): any live Citizen or
- * The Men NPC within BIGO_SHOULDER_SURF_RADIUS while the player holds PC_BTN_SHOULDER_SURF is a
- * valid target. No vision-cone/facing check either, same "Deliberately not here: vision/hearing
- * geometry" scope B1_WITNESS_RULES.md §8 already holds every other noticing check in this repo to.
- * Real, deliberate design choice: the hold must be CONTINUOUS -- releasing the button or losing
- * proximity to every valid target resets progress to 0, so this can't be done by walking through a
- * room while holding the button the whole time; you have to actually stop and watch one target. */
-static void server_tick_shoulder_surf(unsigned int now_ms) {
+/* server_apply_noticed -- the one shared "a live NPC just noticed player i doing something" path
+ * (NORTHSTAR.md §39 extraction; previously inline in server_tick_decorum, behavior unchanged):
+ * the §35 awareness ping toward the nearest noticing NPC, the Decorum penalty for `action`, the
+ * log line, and the §18 Phase B one-time CANCELLED -> Regulator dispatch. `seen` must be > 0. */
+static void server_apply_noticed(int sock, int i, int action, const char *why, int zone,
+                                 int cons, int seen, float nearest_dx, float nearest_dz) {
+    PlayerSlot *s = &g_slots[i];
+    PcAwarenessPingPacket aw; memset(&aw, 0, sizeof(aw));
+    aw.hdr.type = PC_PACKET_AWARENESS_PING;
+    bigo_awareness_direction(nearest_dx, nearest_dz, &aw.dir_x, &aw.dir_z);
+    aw.intensity = (unsigned char)bigo_awareness_intensity(cons, seen);
+    sendto(sock, &aw, sizeof(aw), 0, (struct sockaddr *)&s->addr, s->addr_len);
+
+    int before = s->state.decorum;
+    s->state.decorum = decorum_after(before, action);
+    int band = decorum_band(s->state.decorum);
+    printf("S536-DECORUM: player%d noticed in zone%d (%s, seen_by=%d) decorum %d -> %d (%s)\n",
+           i, zone, why, seen, before, s->state.decorum, BAND_NAMES[band]);
+    if (band == BAND_CANCELLED && !s->decorum_cancelled_logged) {
+        s->decorum_cancelled_logged = 1;
+        printf("S536-DECORUM: player%d CANCELLED -- dispatching a Regulator (BIG_O/NORTHSTAR.md §18 Phase B)\n", i);
+        server_dispatch_regulator(i);
+    } else if (band != BAND_CANCELLED) {
+        s->decorum_cancelled_logged = 0;
+    }
+}
+
+/* server_roll_bystanders -- rolls noticed(vig, cons, roll) for every live, active Citizen/The-Men
+ * NPC within BIGO_QUIET_OBSERVE_RADIUS of player s, skipping `exclude` (an npc index, or -1).
+ * Cake-smash halves vigilance (server_smash_cake). Returns how many noticed; *out_dx/dz get the
+ * nearest noticer's offset (for the §35 awareness ping). Shared by Decorum and the §39 snoop check. */
+static int server_roll_bystanders(const PlayerSlot *s, int exclude, int cons, unsigned int now_ms,
+                                  float *out_dx, float *out_dz) {
+    int seen = 0;
+    float nearest_dist2 = -1.0f;
+    *out_dx = 0.0f; *out_dz = 0.0f;
+    for (int ni = 0; ni < PC_NPC_MAX; ni++) {
+        ServerNpc *n = &g_npcs[ni];
+        if (ni == exclude || !n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
+        if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_QUIET_OBSERVE_RADIUS)) continue;
+        int vig = npc_brain_effective_vigilance(&n->brain);
+        if (server_distraction_active(now_ms)) vig /= 2; /* cake-smash, see server_smash_cake's own doc comment */
+        if (noticed(vig, cons, server_roll100())) {
+            seen++;
+            float dx = n->x - s->state.x, dz = n->z - s->state.z;
+            float dist2 = dx * dx + dz * dz;
+            if (nearest_dist2 < 0.0f || dist2 < nearest_dist2) {
+                nearest_dist2 = dist2; *out_dx = dx; *out_dz = dz;
+            }
+        }
+    }
+    return seen;
+}
+
+static void server_send_surf_state(int sock, const PlayerSlot *s, unsigned char state) {
+    PcShoulderSurfPacket sp; memset(&sp, 0, sizeof(sp));
+    sp.hdr.type = PC_PACKET_SHOULDER_SURF;
+    sp.state = state;
+    sp.hold_ms = BIGO_SHOULDER_SURF_HOLD_MS;
+    sendto(sock, &sp, sizeof(sp), 0, (struct sockaddr *)&s->addr, s->addr_len);
+}
+
+/* server_tick_shoulder_surf -- BIG_O/NORTHSTAR.md §38/§39, DESIGN_DIGEST.md §4 "shoulder-surfing
+ * codes and PINs": the real live version of the stolen-token mechanic `zone_access`'s own `token`
+ * parameter already models for ZONE_VAULT. No dedicated Supervisor NPC/terminal object exists yet
+ * (named v1 simplification): the NEAREST live Citizen or The Men NPC within
+ * BIGO_SHOULDER_SURF_RADIUS while the player holds PC_BTN_SHOULDER_SURF is the target. The hold must
+ * be CONTINUOUS -- releasing the button or losing every valid target resets progress to 0.
+ *
+ * §39 -- the risk: the instant a hold begins (the "lean-in"), every OTHER human NPC within
+ * BIGO_QUIET_OBSERVE_RADIUS rolls noticed() against snoop_conspicuousness(allowed, gear) -- the
+ * target itself is absorbed in its own screen and never rolls. One roll per lean-in, not per tick
+ * (20Hz rolls would make any bystander a certain catch), mirroring Decorum's own once-per-entry
+ * discipline. Caught -> DA_CAUGHT_SNOOPING through the shared noticed path, the streak is void, and
+ * the button must be RELEASED before another lean-in can start (otherwise a held button would
+ * re-roll and re-penalize every tick). A player already HYSTERIC can't lean in at all -- the same
+ * "too suspicious to loiter" rule core/mission.c's own mission_surf enforces headlessly. */
+static void server_tick_shoulder_surf(int sock, unsigned int now_ms) {
     for (int i = 0; i < PC_MAX_PLAYERS; i++) {
         PlayerSlot *s = &g_slots[i];
         if (!s->active || s->has_vault_token) continue; /* already stolen one -- nothing left to do */
 
         int holding = (s->latest_buttons & PC_BTN_SHOULDER_SURF) != 0;
-        int near_target = 0;
-        if (holding) {
+        if (!holding) s->shoulder_surf_needs_release = 0;
+        int target = -1;
+        if (holding && !s->shoulder_surf_needs_release) {
+            float best = -1.0f;
             for (int ni = 0; ni < PC_NPC_MAX; ni++) {
                 ServerNpc *n = &g_npcs[ni];
                 if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
-                if (bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_SHOULDER_SURF_RADIUS)) {
-                    near_target = 1;
-                    break;
-                }
+                if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_SHOULDER_SURF_RADIUS)) continue;
+                float dx = n->x - s->state.x, dz = n->z - s->state.z, d2 = dx * dx + dz * dz;
+                if (best < 0.0f || d2 < best) { best = d2; target = ni; }
             }
         }
 
-        if (!holding || !near_target) {
+        if (target < 0) {
+            if (s->shoulder_surf_started_ms != 0) server_send_surf_state(sock, s, PC_SURF_IDLE);
             s->shoulder_surf_started_ms = 0; /* streak broken -- must start over */
             continue;
         }
         if (s->shoulder_surf_started_ms == 0) {
-            s->shoulder_surf_started_ms = now_ms; /* streak just began */
+            if (decorum_band(s->state.decorum) >= BAND_HYSTERIC) {
+                s->shoulder_surf_needs_release = 1; /* refused; don't re-check every tick */
+                continue;
+            }
+            int zone = server_player_zone(s);
+            int allowed = zone_access(s->state.costume, zone, s->has_vault_token);
+            int gear = (s->current_weapon != PC_WPN_KNIFE) ? 1 : 0;
+            int cons = snoop_conspicuousness(allowed, gear);
+            float ndx, ndz;
+            int seen = server_roll_bystanders(s, target, cons, now_ms, &ndx, &ndz);
+            if (seen > 0) {
+                s->shoulder_surf_needs_release = 1;
+                server_send_surf_state(sock, s, PC_SURF_CAUGHT);
+                server_apply_noticed(sock, i, DA_CAUGHT_SNOOPING, "caught shoulder-surfing", zone, cons, seen, ndx, ndz);
+                continue;
+            }
+            s->shoulder_surf_started_ms = now_ms ? now_ms : 1; /* lean-in unseen -- streak begins (0 is the sentinel) */
+            server_send_surf_state(sock, s, PC_SURF_LEANING);
             continue;
         }
         if (now_ms - s->shoulder_surf_started_ms >= BIGO_SHOULDER_SURF_HOLD_MS) {
             s->has_vault_token = 1;
+            s->shoulder_surf_started_ms = 0;
+            server_send_surf_state(sock, s, PC_SURF_STOLEN);
             printf("S536-SHOULDERSURF: player%d finished a %ums shoulder-surf -- vault token stolen\n",
                    i, BIGO_SHOULDER_SURF_HOLD_MS);
         }
@@ -1429,50 +1518,12 @@ static void server_tick_decorum(int sock, unsigned int now_ms) {
             int gear = (s->current_weapon != PC_WPN_KNIFE) ? 1 : 0;
             int cons = conspicuousness(allowed, gear);
             if (cons > 0) {
-                int seen = 0;
-                float nearest_dist2 = -1.0f, nearest_dx = 0.0f, nearest_dz = 0.0f;
-                for (int ni = 0; ni < PC_NPC_MAX; ni++) {
-                    ServerNpc *n = &g_npcs[ni];
-                    if (!n->active || n->role == PC_NPC_ROLE_ZOMBIE) continue;
-                    if (!bigo_in_range(n->x, n->z, s->state.x, s->state.z, BIGO_QUIET_OBSERVE_RADIUS)) continue;
-                    int vig = npc_brain_effective_vigilance(&n->brain);
-                    if (server_distraction_active(now_ms)) vig /= 2; /* cake-smash, see server_smash_cake's own doc comment */
-                    if (noticed(vig, cons, server_roll100())) {
-                        seen++;
-                        /* EMILY/BACKLOG.md SECTION 536 follow-up queued item 4, BIG_O/NORTHSTAR.md
-                           §35: track the NEAREST real noticing NPC -- the single most legible
-                           signal to point a player's "you're being watched" feedback at, same
-                           judgment BP_FX_ITEM_USE's own "one real, narrow slice" precedent used. */
-                        float dx = n->x - s->state.x, dz = n->z - s->state.z;
-                        float dist2 = dx * dx + dz * dz;
-                        if (nearest_dist2 < 0.0f || dist2 < nearest_dist2) {
-                            nearest_dist2 = dist2; nearest_dx = dx; nearest_dz = dz;
-                        }
-                    }
-                }
+                float ndx, ndz;
+                int seen = server_roll_bystanders(s, -1, cons, now_ms, &ndx, &ndz);
                 if (seen > 0) {
-                    /* Real "you were just noticed" feedback -- BIG_O/NORTHSTAR.md §35. Sent once,
-                       on this same zone-entry-driven observe transition the decorum penalty below
-                       already fires on, not a continuous per-tick spam. */
-                    PcAwarenessPingPacket aw; memset(&aw, 0, sizeof(aw));
-                    aw.hdr.type = PC_PACKET_AWARENESS_PING;
-                    bigo_awareness_direction(nearest_dx, nearest_dz, &aw.dir_x, &aw.dir_z);
-                    aw.intensity = (unsigned char)bigo_awareness_intensity(cons, seen);
-                    sendto(sock, &aw, sizeof(aw), 0, (struct sockaddr *)&s->addr, s->addr_len);
-
                     int action = allowed ? DA_CARRY_GEAR : DA_WRONG_COSTUME; /* core/sim.c's sim_observe precedent */
-                    int before = s->state.decorum;
-                    s->state.decorum = decorum_after(before, action);
-                    int band = decorum_band(s->state.decorum);
-                    printf("S536-DECORUM: player%d noticed in zone%d (%s, seen_by=%d) decorum %d -> %d (%s)\n",
-                           i, zone, allowed ? "carrying field gear" : "wrong costume", seen, before, s->state.decorum, BAND_NAMES[band]);
-                    if (band == BAND_CANCELLED && !s->decorum_cancelled_logged) {
-                        s->decorum_cancelled_logged = 1;
-                        printf("S536-DECORUM: player%d CANCELLED -- dispatching a Regulator (BIG_O/NORTHSTAR.md §18 Phase B)\n", i);
-                        server_dispatch_regulator(i);
-                    } else if (band != BAND_CANCELLED) {
-                        s->decorum_cancelled_logged = 0;
-                    }
+                    server_apply_noticed(sock, i, action, allowed ? "carrying field gear" : "wrong costume",
+                                         zone, cons, seen, ndx, ndz);
                 }
             }
         }
@@ -1828,6 +1879,7 @@ static void spawn_player(PlayerSlot *s) {
     s->last_quiet_tick_ms = 0;
     s->decorum_cancelled_logged = 0;
     s->shoulder_surf_started_ms = 0;
+    s->shoulder_surf_needs_release = 0;
     s->has_vault_token = 0; /* a fresh spawn/reconnect starts with nothing stolen, same real,
                                 honest "clean slate" convention every other progression field a
                                 fresh spawn resets already uses */
@@ -3006,7 +3058,7 @@ int main(int argc, char **argv) {
             server_tick_witness();
             server_tick_avians(now);
             server_tick_dispatch(now);
-            server_tick_shoulder_surf(now);
+            server_tick_shoulder_surf(sock, now);
             server_tick_decorum(sock, now);
             server_tick_regulators(now);
             server_tick_gfd_bridge(sock);

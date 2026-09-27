@@ -82,6 +82,19 @@ int sim_observe(Sim *s, int pl) {
     return seen;
 }
 
+/* NORTHSTAR.md §39: reading someone's screen over their shoulder. The watched target is absorbed in their own screen, so
+ * only BYSTANDERS in the zone roll -- against snoop_conspicuousness (always > 0, even in the right costume). Same rule the
+ * live day server's server_tick_shoulder_surf applies once per lean-in. Returns how many bystanders caught it. */
+int sim_snoop(Sim *s, int pl) {
+    if (!valid_player(s, pl)) return -1;
+    SimPlayer *p = &s->p[pl];
+    int allowed = zone_access(p->costume, p->zone, p->token);
+    int seen = anyone_notices(s, p->zone, snoop_conspicuousness(allowed, p->gear));
+    fprintf(s->out, "  snoop p%d allowed=%d gear=%d noticed_by=%d\n", pl, allowed, p->gear, seen);
+    if (seen > 0) apply_decorum(s, pl, DA_CAUGHT_SNOOPING, "caught reading over a shoulder");
+    return seen;
+}
+
 int sim_set_costume(Sim *s, int pl, int c) { if (!valid_player(s, pl) || c < 0 || c > 3) return -1; s->p[pl].costume = c; return 0; }
 int sim_set_gear(Sim *s, int pl, int g) { if (!valid_player(s, pl)) return -1; s->p[pl].gear = g ? 1 : 0; return 0; }
 int sim_set_token(Sim *s, int pl, int t) { if (!valid_player(s, pl)) return -1; s->p[pl].token = t ? 1 : 0; return 0; }

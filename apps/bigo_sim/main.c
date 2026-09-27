@@ -87,6 +87,7 @@ static int run_line(Ctx *c, char *line, int lineno, int echo_state) {
     } else if (ieq(cmd, "gear") && nt >= 3) { sim_set_gear(s, atoi(tok[1]), atoi(tok[2]));
     } else if (ieq(cmd, "token") && nt >= 3) { sim_set_token(s, atoi(tok[1]), atoi(tok[2]));
     } else if (ieq(cmd, "observe") && nt >= 2) { sim_observe(s, atoi(tok[1]));
+    } else if (ieq(cmd, "snoop") && nt >= 2) { sim_snoop(s, atoi(tok[1]));
     } else if (ieq(cmd, "say") && nt >= 2) { sim_say_apocalypse(s, atoi(tok[1]));
     } else if (ieq(cmd, "talk") && nt >= 2) { sim_talk(s, atoi(tok[1]));
     } else if (ieq(cmd, "release") && nt >= 3) {

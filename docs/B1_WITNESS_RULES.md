@@ -59,6 +59,7 @@ Start 80. `decorum-after(d, action)` clamps to [0, 100]. Deltas:
 | WRONG_COSTUME_NOTICED | 3 | −20 | trespass noticed |
 | ATTRIBUTED_EVENT | 4 | −40 | you were the attributed subject of a witnessed zombie event |
 | QUIET_TICK | 5 | +1 | recovery |
+| CAUGHT_SNOOPING | 6 | −30 | a bystander saw you reading over someone's shoulder (NORTHSTAR.md §39) [M] |
 
 Bands (`decorum-band`): OK ≥ 60, SUSPICION 30-59, HYSTERIC 1-29, **CANCELLED ≤ 0** [T: Suspicion→Hysteric→canceled].
 
@@ -81,6 +82,10 @@ Vault needs a stolen token (keycard/PIN, host flag) **and** a non-street costume
 `conspicuousness(allowed, gear)` = (0 if allowed else 40) + (20 if carrying gear) [M].
 `noticed(vigilance, conspicuous, roll)` = `roll < min(100, vigilance + conspicuous)` with the host's pre-rolled `roll` 0..99.
 Vigilance is per-NPC 0..100 (veteran guard high, tired contractor low) [T concept, M values].
+
+`snoop-conspicuousness(allowed, gear)` = `snoop-penalty` (15) + `conspicuousness(allowed, gear)` [M, NORTHSTAR.md §39]:
+leaning over a shoulder is conspicuous even in the right costume with no gear. Rolled once per lean-in by
+**bystanders only** (the watched target is absorbed in their own screen); noticed → `CAUGHT_SNOOPING`.
 
 ## 6. Terrain and zombie movement [T unless marked]
 

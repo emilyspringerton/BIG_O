@@ -3,7 +3,8 @@
 #ifndef BIGO_WITNESS_RULES_H
 #define BIGO_WITNESS_RULES_H
 enum { WS_UNAWARE = 0, WS_DENIAL, WS_COMPROMISED, WS_SILENCING, WS_PANIC, WS_ENGAGE };
-enum { DA_SMALL_TALK = 0, DA_SAY_APOCALYPSE, DA_CARRY_GEAR, DA_WRONG_COSTUME, DA_ATTRIBUTED_EVENT, DA_QUIET_TICK };
+enum { DA_SMALL_TALK = 0, DA_SAY_APOCALYPSE, DA_CARRY_GEAR, DA_WRONG_COSTUME, DA_ATTRIBUTED_EVENT, DA_QUIET_TICK,
+       DA_CAUGHT_SNOOPING /* NORTHSTAR.md §39: a bystander saw you reading someone's screen */ };
 enum { BAND_OK = 0, BAND_SUSPICION, BAND_HYSTERIC, BAND_CANCELLED };
 enum { COS_SUIT = 0, COS_LAB_SMOCK, COS_JANITOR, COS_STREET };
 enum { ZONE_PUBLIC = 0, ZONE_LAB, ZONE_EXEC, ZONE_GENERATOR, ZONE_VAULT };
@@ -18,6 +19,7 @@ int suspicion_below(void);
 int hysteric_below(void);
 int wall_hp_concrete(void);
 int breach_dps_super(void);
+int snoop_penalty(void);
 int effective_witnesses(int, int);
 int witness_state(int, int, int, int);
 int escalation_rank(int);
@@ -31,6 +33,7 @@ int decorum_after(int, int);
 int decorum_band(int);
 int zone_access(int, int, int);
 int conspicuousness(int, int);
+int snoop_conspicuousness(int, int);
 int noticed(int, int, int);
 int move_speed_pct(int);
 int wall_max_hp(int);

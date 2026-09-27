@@ -81,7 +81,8 @@ int mission_surf(Mission *m, Sim *s, int pl) {
     if (!at(s, pl, ZONE_LAB) || !m->in_sector2) return reject(m, s, "surf", "must be at the Room 404 terminal");
     if (!m->supervisor_present) return reject(m, s, "surf", "supervisor is not logged in; nothing to watch");
     if (decorum_band(s->p[pl].decorum) >= BAND_HYSTERIC) return reject(m, s, "surf", "too suspicious to loiter behind the station");
-    sim_observe(s, pl);   /* hovering behind a terminal is conspicuous; may cost decorum */
+    /* NORTHSTAR.md §39: bystanders may catch the lean-in. Caught = decorum hit and no PIN; straighten up and retry. */
+    if (sim_snoop(s, pl) > 0) return reject(m, s, "surf", "a bystander saw you reading over the supervisor's shoulder");
     m->pin_known = 1;
     fprintf(s->out, "MISSION captured the 8-digit Master PIN\n");
     return 0;

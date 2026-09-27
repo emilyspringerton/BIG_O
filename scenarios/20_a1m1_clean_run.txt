@@ -2,7 +2,8 @@
 # supervisor's break, copy the file, swap, mop + service elevator out, upload in the basement.
 seed 1
 crew 1
-npc lab 60 50
+# the only Sector-2 bystander is a tired night-shift tech (vigilance 10): a quiet lean-in is a 25% catch risk, not 75% (NORTHSTAR.md §39)
+npc lab 10 50
 npc generator 30 50
 player 0 costume janitor zone generator
 mission start
