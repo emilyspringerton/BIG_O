@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-09-27
+- feat(stealth): getting made while snooping -- shoulder-surfing becomes a real stealth risk (NORTHSTAR.md §39,
+  closes §38's own named "no witness-risk for the act itself" gap). New rules action `DA_CAUGHT_SNOOPING` (-30) and
+  `snoop_conspicuousness` (15 + costume/gear) in `PARENA/stdlib/big_o/witness_rules.prn`, regenerated into
+  `core/witness_rules.c` (unchanged-source regeneration first confirmed byte-identical); oracle + properties
+  extended, parity vectors 4,619 -> 4,726. Live server: each lean-in (hold start) rolls every OTHER human NPC within
+  10 units, never the target itself; caught -> awareness ping, Decorum hit, CANCELLED -> Regulator via a new shared
+  `server_apply_noticed`/`server_roll_bystanders` path (extracted from `server_tick_decorum`, behavior unchanged),
+  streak void, button must be released to retry; no lean-in from HYSTERIC. Headless: `sim_snoop` + `snoop` scenario
+  command; `mission_surf` now withholds the PIN when caught -- scenarios 20/21 re-scoped to a tired night-shift
+  bystander, new scenario 24 asserts the alert-peer catch. Client: new `PC_PACKET_SHOULDER_SURF` (27) +
+  bottom-left hold bar / "VAULT CODE LIFTED" / "MADE!" HUD. Verified: build.sh clean (1,621,040 checks, 27
+  scenarios), day server + client compile clean, scratch ASan+UBSan loopback-socket harness 37/37. README updated
+  (the "no witness risk yet" claim was now false). Bar not seen on a real display (no GL in sandbox).
+
 ## 2026-09-25 (6)
 - feat(day): the shoulder-surf mechanic -- a real, generic stolen-token loop for ZONE_VAULT
   (NORTHSTAR.md §38, DESIGN_DIGEST.md §4, closes docs/A1M1_PLAN.md gap #4). New `PC_BTN_SHOULDER_

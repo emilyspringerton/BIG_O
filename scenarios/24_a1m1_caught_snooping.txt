@@ -1,0 +1,18 @@
+# NORTHSTAR.md §39: an alert Senior Peer (vigilance 60) is standing in Sector-2 when you lean over the supervisor's shoulder.
+# Snooping is conspicuous even in the right costume (snoop_conspicuousness = 15 + costume/gear): 75% catch odds. Caught ->
+# DA_CAUGHT_SNOOPING (-30), Decorum 80 -> 50 (SUSPICION), no PIN. A second lean-in from SUSPICION is still allowed; from
+# HYSTERIC it's refused outright.
+seed 1
+crew 1
+npc lab 60 50
+player 0 costume janitor zone generator
+mission start
+m smock 0
+m sector2 0
+expect decorum 0 == 80
+m! surf 0
+expect decorum 0 == 50
+expect player 0 band SUSPICION
+expect mission pin 0
+m! insert 0
+expect mission state ACTIVE

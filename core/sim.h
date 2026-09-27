@@ -28,6 +28,7 @@ int sim_set_costume(Sim *s, int pl, int costume);
 int sim_set_gear(Sim *s, int pl, int gear);
 int sim_set_token(Sim *s, int pl, int token);
 int sim_observe(Sim *s, int pl);                                       /* noticing check for the current costume/zone/gear */
+int sim_snoop(Sim *s, int pl);                                         /* lean over a shoulder: bystanders roll snoop_conspicuousness (§39) */
 int sim_say_apocalypse(Sim *s, int pl);
 int sim_talk(Sim *s, int pl);
 int sim_release(Sim *s, int pl, int tier);                             /* loud zombie event, attributed to pl or the crew */

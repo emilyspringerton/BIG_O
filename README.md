@@ -11,7 +11,7 @@ your basement lab, weaponize the local fauna, and use tactical pheromone arrays 
 custom-spliced vectors to wage an algorithmic shadow war.
 
 > **Status: early code, not yet a playable game.** Working and tested: the witness/decorum rules core (PARENA -> C),
-> a headless co-op crew sim with scenario tests, the Act I Mission 1 rulebook (`core/mission.c`, scenarios 20-23), and the world sim (day/night clock, weather, day zombies + harvest; PARENA rules, REFLUX hooks for mods, scenarios 30-35, [`docs/B2_WORLD.md`](docs/B2_WORLD.md)).
+> a headless co-op crew sim with scenario tests, the Act I Mission 1 rulebook (`core/mission.c`, scenarios 20-24), and the world sim (day/night clock, weather, day zombies + harvest; PARENA rules, REFLUX hooks for mods, scenarios 30-35, [`docs/B2_WORLD.md`](docs/B2_WORLD.md)).
 > A `day/` fork of PAPERCRAFT's SDL2 client + server builds (Linux/Windows, CI-bundled) with an in-game phone holding every
 > menu. The client can now load a NOCK-authored SHANKPIT level (`--level-id`, `day/packages/common/level_loader.h`) as an
 > alternative to the PAPERCRAFT city — verified live against IDUNA's `nextown` (80 walls, 1 spawner, 1 exit) — but it
@@ -144,8 +144,15 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > proximity and the hold resets to 0 — to shoulder-surf a real, stolen vault token (`DESIGN_DIGEST.md` §4).
 > Built as a generic world mechanic rather than tied to a specific mission, since no dedicated Supervisor NPC
 > or terminal object exists yet — Act I Mission 1's own more specific version of this same idea
-> (`docs/A1M1_PLAN.md` gap #4) is still real, separate, deferred work. Shoulder-surfing itself carries no
-> witness risk of its own yet. See `NORTHSTAR.md` §38.
+> (`docs/A1M1_PLAN.md` gap #4) is still real, separate, deferred work. See `NORTHSTAR.md` §38.
+> Shoulder-surfing is now a real risk, not a free action: the moment you lean in, every *other* Citizen/The Men
+> NPC within 10 units rolls to notice (a new rules action, `DA_CAUGHT_SNOOPING`, −30 Decorum, conspicuous even in
+> the right costume). Caught means the hold is void and you must let go before trying again; from HYSTERIC you
+> can't lean in at all. The cake-smash distraction halves bystander vigilance, so the intended play is: pick a
+> quiet moment, or make one. A HUD bar now shows the hold filling, then "VAULT CODE LIFTED" or "MADE!". The
+> offline A1M1 rulebook (`bigo_sim`) uses the same rule. Verified by the rules oracle/parity suite, the scenario
+> suite and a scratch server harness; the bar itself compiles but hasn't been seen on screen (no GL display in
+> the build sandbox). See `NORTHSTAR.md` §39.
 > Plan: [`NORTHSTAR.md`](NORTHSTAR.md), [`docs/A1M1_PLAN.md`](docs/A1M1_PLAN.md); design sources in [`docs/`](docs/).
 
 ## The game in one page

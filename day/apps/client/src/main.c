@@ -1143,6 +1143,48 @@ static void draw_awareness_indicator(int win_w, int win_h, float dir_x, float di
     pc_draw_string(line, 20.0f, 60.0f, 8);
 }
 
+/* draw_shoulder_surf_hud -- BIG_O/NORTHSTAR.md §39: the §38 shoulder-surf hold finally has an
+   on-screen affordance. Bottom-left, stacked just above draw_awareness_indicator's own line so a
+   CAUGHT result and its "! NOTICED" ping read together. LEANING draws a bar filling over the
+   server-sent hold_ms (animated locally from the event's arrival -- no per-tick packets);
+   STOLEN/CAUGHT flash a one-line result for BIGO_SURF_RESULT_HUD_MS; IDLE draws nothing. */
+#define BIGO_SURF_RESULT_HUD_MS 2500
+static void draw_shoulder_surf_hud(int win_w, int win_h, unsigned char state, unsigned int since_ms,
+                                   unsigned int hold_ms, unsigned int now_ms) {
+    if (since_ms == 0 || state == PC_SURF_IDLE) return;
+    unsigned int age = now_ms - since_ms;
+    if (state != PC_SURF_LEANING && age >= BIGO_SURF_RESULT_HUD_MS) return;
+
+    glDisable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, win_w, 0, win_h, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    const float x = 20.0f, y = 90.0f, w = 180.0f, h = 10.0f;
+    if (state == PC_SURF_LEANING) {
+        float t = hold_ms ? (float)age / (float)hold_ms : 1.0f;
+        if (t > 1.0f) t = 1.0f;
+        glColor3f(0.15f, 0.15f, 0.18f);
+        glBegin(GL_QUADS);
+        glVertex2f(x, y); glVertex2f(x + w, y); glVertex2f(x + w, y + h); glVertex2f(x, y + h);
+        glEnd();
+        glColor3f(0.45f, 0.85f, 0.95f);
+        glBegin(GL_QUADS);
+        glVertex2f(x, y); glVertex2f(x + w * t, y); glVertex2f(x + w * t, y + h); glVertex2f(x, y + h);
+        glEnd();
+        glColor3f(0.9f, 0.9f, 0.9f);
+        pc_draw_string("READING OVER A SHOULDER...", x, y + h + 6.0f, 8);
+    } else if (state == PC_SURF_STOLEN) {
+        glColor3f(0.45f, 0.95f, 0.5f);
+        pc_draw_string("VAULT CODE LIFTED", x, y, 8);
+    } else if (state == PC_SURF_CAUGHT) {
+        glColor3f(0.95f, 0.35f, 0.3f);
+        pc_draw_string("MADE! LET GO AND STRAIGHTEN UP", x, y, 8);
+    }
+}
+
 /* PC_PHONE_MESSAGE_TABLE -- real, hardcoded handle+text lookup keyed by message_id, must match
    packages/common/papercraft_protocol.h's own PC_PHONE_MESSAGE_* values byte-for-byte (see
    PcPhoneMessagePacket's own doc comment for why this is a shared table instead of the source
@@ -1886,6 +1928,10 @@ int main(int argc, char **argv) {
     float g_awareness_dir_x = 0.0f, g_awareness_dir_z = 1.0f;
     int g_awareness_intensity = 0;
     unsigned int g_awareness_since_ms = 0;
+    /* §39 shoulder-surf HUD state -- set per PC_PACKET_SHOULDER_SURF event, drawn by
+       draw_shoulder_surf_hud. */
+    unsigned char g_surf_state = PC_SURF_IDLE;
+    unsigned int g_surf_since_ms = 0, g_surf_hold_ms = 0;
 
     /* Real, basic SDL_GameController support (founder real-time, repeated for emphasis: "so we
        also support controller and support controller") -- opens the first real, currently
@@ -2369,6 +2415,11 @@ int main(int argc, char **argv) {
                 g_awareness_dir_x = aw.dir_x; g_awareness_dir_z = aw.dir_z;
                 g_awareness_intensity = aw.intensity;
                 g_awareness_since_ms = now;
+            } else if (hdr.type == PC_PACKET_SHOULDER_SURF && (size_t)n >= sizeof(PcShoulderSurfPacket)) {
+                PcShoulderSurfPacket sp; memcpy(&sp, buf, sizeof(sp));
+                g_surf_state = sp.state;
+                g_surf_hold_ms = sp.hold_ms;
+                g_surf_since_ms = now ? now : 1;
             }
         }
 
@@ -2754,6 +2805,7 @@ int main(int argc, char **argv) {
             }
             draw_weapon_hud(win_w, win_h, g_current_weapon, g_weapons_owned);
             draw_awareness_indicator(win_w, win_h, g_awareness_dir_x, g_awareness_dir_z, g_awareness_intensity, g_awareness_since_ms, now);
+            draw_shoulder_surf_hud(win_w, win_h, g_surf_state, g_surf_since_ms, g_surf_hold_ms, now);
         }
         /* Sticky warning: appears only after weak_ms of silence, then stays until snapshots clearly resume (gap < 1.5s) and it
            has been up at least 4s, so bursty mobile links can't make it flash on and off. */

@@ -20,7 +20,7 @@ static void oracle(void) {
     /* constants */
     EQ(silence_threshold(), 5); EQ(panic_arrogance_max(), 15); EQ(engage_arrogance_min(), 70);
     EQ(decorum_start(), 80); EQ(decorum_cap(), 100); EQ(suspicion_below(), 60); EQ(hysteric_below(), 30);
-    EQ(wall_hp_concrete(), 500); EQ(breach_dps_super(), 50);
+    EQ(wall_hp_concrete(), 500); EQ(breach_dps_super(), 50); EQ(snoop_penalty(), 15);
     /* witness reactions: transcript rules */
     EQ(witness_state(0, 50, 0, 1), WS_UNAWARE);
     EQ(witness_state(1, 50, 0, 1), WS_DENIAL);           /* 1 witness -> catatonic denial */
@@ -70,6 +70,8 @@ static void oracle(void) {
     /* decorum */
     EQ(decorum_delta(DA_SMALL_TALK), 5); EQ(decorum_delta(DA_SAY_APOCALYPSE), -25); EQ(decorum_delta(DA_CARRY_GEAR), -15);
     EQ(decorum_delta(DA_WRONG_COSTUME), -20); EQ(decorum_delta(DA_ATTRIBUTED_EVENT), -40); EQ(decorum_delta(DA_QUIET_TICK), 1);
+    EQ(decorum_delta(DA_CAUGHT_SNOOPING), -30); EQ(decorum_after(80, DA_CAUGHT_SNOOPING), 50); EQ(decorum_after(20, DA_CAUGHT_SNOOPING), 0);
+    EQ(decorum_delta(DA_CAUGHT_SNOOPING + 1), 0);  /* unknown actions stay a no-op */
     EQ(decorum_after(80, DA_SAY_APOCALYPSE), 55); EQ(decorum_after(98, DA_SMALL_TALK), 100); EQ(decorum_after(10, DA_ATTRIBUTED_EVENT), 0);
     EQ(decorum_band(100), BAND_OK); EQ(decorum_band(60), BAND_OK); EQ(decorum_band(59), BAND_SUSPICION);
     EQ(decorum_band(30), BAND_SUSPICION); EQ(decorum_band(29), BAND_HYSTERIC); EQ(decorum_band(1), BAND_HYSTERIC);
@@ -84,6 +86,8 @@ static void oracle(void) {
     EQ(zone_access(COS_STREET, ZONE_VAULT, 0), 0);    EQ(zone_access(COS_STREET, ZONE_VAULT, 1), 0);
     /* noticing */
     EQ(conspicuousness(1, 0), 0); EQ(conspicuousness(0, 0), 40); EQ(conspicuousness(1, 1), 20); EQ(conspicuousness(0, 1), 60);
+    /* snooping: always conspicuous to bystanders, even in the right costume with no gear (§39) */
+    EQ(snoop_conspicuousness(1, 0), 15); EQ(snoop_conspicuousness(0, 0), 55); EQ(snoop_conspicuousness(1, 1), 35); EQ(snoop_conspicuousness(0, 1), 75);
     OK(noticed(50, 0, 49)); OK(!noticed(50, 0, 50)); OK(noticed(50, 40, 89)); OK(!noticed(50, 40, 90));
     OK(noticed(100, 60, 99)); OK(!noticed(0, 0, 0));
     /* terrain */
@@ -119,7 +123,7 @@ static void properties(void) {
         if ((prev == WS_SILENCING || prev == WS_ENGAGE) && rz == 1 && !k) OK(nx == WS_DENIAL);
         if ((prev == WS_SILENCING || prev == WS_ENGAGE) && rz == 2 && !k) OK(nx == WS_UNAWARE);
         /* decorum stays in [0, cap] and band is consistent */
-        int d = rr(-50, 150), act = rr(0, 5);
+        int d = rr(-50, 150), act = rr(0, 6);
         int a2 = decorum_after(clamp_decorum(d), act);
         OK(a2 >= 0 && a2 <= decorum_cap());
         int b = decorum_band(a2);
@@ -138,6 +142,9 @@ static void properties(void) {
         int vg = rr(0, 100), cn = rr(0, 60), roll = rr(0, 99);
         if (noticed(vg, cn, roll)) OK(noticed(vg + 1, cn, roll));
         if (noticed(vg, cn, roll)) OK(noticed(vg, cn + 1, roll));
+        /* snooping is strictly more conspicuous than just standing there, for any costume/gear */
+        int al = rr(0, 1), gr = rr(0, 1);
+        OK(snoop_conspicuousness(al, gr) > conspicuousness(al, gr));
         /* wall hp never negative or increased */
         int hp = rr(0, 500), dps = rr(0, 60), s = rr(0, 20);
         int h2 = wall_hp_after(hp, dps, s);
@@ -164,7 +171,8 @@ static const struct { const char *n; int arity; void *f; } TAB[] = {
     {"escalation_rank", 1, escalation_rank}, {"npc_next_state", 6, npc_next_state}, {"is_legal_transition", 2, is_legal_transition},
     {"engage_outcome", 2, engage_outcome}, {"silence_target_mask", 3, silence_target_mask}, {"clamp_decorum", 1, clamp_decorum},
     {"decorum_delta", 1, decorum_delta}, {"decorum_after", 2, decorum_after}, {"decorum_band", 1, decorum_band},
-    {"zone_access", 3, zone_access}, {"conspicuousness", 2, conspicuousness}, {"noticed", 3, noticed},
+    {"zone_access", 3, zone_access}, {"conspicuousness", 2, conspicuousness}, {"snoop_conspicuousness", 2, snoop_conspicuousness},
+    {"snoop_penalty", 0, snoop_penalty}, {"noticed", 3, noticed},
     {"move_speed_pct", 1, move_speed_pct}, {"wall_max_hp", 1, wall_max_hp}, {"breach_dps", 2, breach_dps},
     {"wall_hp_after", 3, wall_hp_after}, {"zombie_next_state", 6, zombie_next_state},
 };

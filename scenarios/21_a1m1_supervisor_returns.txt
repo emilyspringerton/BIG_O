@@ -1,7 +1,8 @@
 # Fail path: the supervisor comes back before the copy finishes -- a foreign drive in the terminal ends the mission.
 seed 1
 crew 1
-npc lab 60 50
+# the only Sector-2 bystander is a tired night-shift tech (vigilance 10): a quiet lean-in is a 25% catch risk, not 75% (NORTHSTAR.md §39)
+npc lab 10 50
 player 0 costume janitor zone generator
 mission start
 m smock 0

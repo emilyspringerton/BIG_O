@@ -2375,3 +2375,72 @@ token is permanent for the rest of that life — no cooldown, no re-theft-on-dea
 named v1 simplification matching Decorum's own "what a kill resets is undecided design space" cut
 from §18); more than one target-selection nuance (any Citizen/The-Men NPC works today, not
 specifically a "supervisor" — named above as the real, deliberate scope cut, not an oversight).
+
+## §39: getting made while snooping — shoulder-surfing becomes a real stealth risk (2026-09-27, "continue BIG_O
+stealth gameplay")
+
+§38 shipped the shoulder-surf hold as a free action and named the gap directly: "no witness-risk for the act of
+shoulder-surfing itself ... there's no `DA_*` action in the rules module for 'caught shoulder-surfing'." A stealth
+verb with no way to fail isn't stealth. This pass adds the risk at every layer: the PARENA rules source, the
+headless A1M1 rulebook, the live server, and a client HUD.
+
+**Rules (PARENA source → regenerated C, not hand-edited).** `PARENA/stdlib/big_o/witness_rules.prn` gains
+decorum action 6 `CAUGHT_SNOOPING` (−30: worse than a wrong costume, −20, but less than being attributed a zombie
+event, −40), a `snoop-penalty` constant (15) and `snoop-conspicuousness(allowed, gear)` = 15 + `conspicuousness`.
+Leaning over someone is conspicuous even in the right costume with no gear. Both tunings are invented v1 values,
+marked [M] in `docs/B1_WITNESS_RULES.md`. `core/witness_rules.c` was regenerated with a freshly built `parena`
+(first confirming that regenerating the *unchanged* `.prn` reproduced the checked-in C byte for byte). The hand-typed
+oracle gains the new deltas/values plus a property (snooping is always strictly more conspicuous than standing
+there). Parity vectors were regenerated: 4,619 → 4,726. The old vector file failed on exactly one line
+(`decorum_delta 6`: 0 → −30), which shows the parity check catches this kind of change.
+
+**Who rolls, and when.** Rolls happen once per lean-in, when a continuous hold begins, and never per tick: 20Hz
+re-rolls would make any bystander a certain catch. This is the same once-per-transition discipline Decorum's
+zone-entry check already uses. Only **bystanders** roll, meaning every *other* live Citizen/The Men NPC within
+`BIGO_QUIET_OBSERVE_RADIUS` (10.0). The watched target is absorbed in their own screen and never rolls. The target
+is now the *nearest* human NPC within 4.0 (§38 took the first one found). When a bystander notices:
+`DA_CAUGHT_SNOOPING` goes through the same noticed path Decorum uses (§35 awareness ping toward the nearest
+noticer, Decorum drop, §18 Phase B CANCELLED → Regulator), the streak is void, and the button must be **released**
+before another lean-in can roll (`PlayerSlot.shoulder_surf_needs_release`). Without that, a held button would
+re-roll and re-penalize every tick. A player already HYSTERIC can't lean in at all, which is the same "too suspicious
+to loiter" rule `core/mission.c`'s `mission_surf` already enforced headlessly. Cake-smash halves bystander vigilance,
+so the counterplay already exists in the world: wait for the room to clear, or make a distraction. Resulting odds:
+a Citizen bystander (base vigilance 35) catches a correct-costume lean-in about 50% of the time (about 32% during
+cake-smash). A The Men bystander (85) is a near-certain catch.
+
+**Refactor, behavior-preserving.** The inline "noticed" block in `server_tick_decorum` became
+`server_roll_bystanders` + `server_apply_noticed`, now shared with the snoop check. Rolls happen in the same
+order and log lines keep the same wording. Regression checks confirm Decorum's wrong-costume (−20) and carry-gear
+(−15) paths are unchanged.
+
+**Headless rulebook parity.** `core/sim.c` gains `sim_snoop()` (same rule: bystanders in the zone roll
+`snoop_conspicuousness`), exposed as a `snoop` scenario command. `mission_surf` now uses it in place of
+`sim_observe`. If a bystander catches you, you take the Decorum hit and get **no PIN**, and you can straighten up and
+retry. That changed the A1M1 "clean run" for real: its Sector-2 bystander (vigilance 60) now catches the lean-in
+(75% odds; seed 1 rolls a catch). Scenarios 20/21 now use a tired night-shift tech (vigilance 10, 25% odds) as the
+only bystander, with a comment explaining why. The new scenario `24_a1m1_caught_snooping.txt` keeps the alert peer
+and asserts the catch (80 → 50, SUSPICION, no PIN, terminal still locked). This is a design consequence worth
+reviewing, not just a test fix: the brief's "vigilant Senior Peer" (`docs/A1M1_PLAN.md`) now really threatens the
+surf.
+
+**Client.** New `PC_PACKET_SHOULDER_SURF` (27, server → surfing player only, event-driven: LEANING / IDLE /
+STOLEN / CAUGHT, carrying the server's real `hold_ms` so a retune can't drift the bar). `draw_shoulder_surf_hud`
+sits bottom-left, just above the §35 "! NOTICED" line. While LEANING it draws a bar filling locally over `hold_ms`.
+Afterwards it flashes "VAULT CODE LIFTED" or "MADE! LET GO AND STRAIGHTEN UP" for 2.5s.
+
+**Verified.** `scripts/build.sh`: 1,621,040 rules checks / 4,726 parity vectors, 0 failures; 27 scenarios + replay
+determinism + seed sensitivity + bad-script rejection OK. `scripts/build_day.sh` and `scripts/build_client.sh`
+both compile clean; the only warning is the existing `strncpy` one. A scratch ASan+UBSan harness (`#include
+main.c` precedent, not committed) drives the unmodified `server_tick_shoulder_surf`/`server_tick_decorum` with a
+real loopback UDP socket standing in for the client and decodes the packets actually sent: 37/37 assertions. It
+covers the clean lean-in (target at vigilance 100 never rolls) → LEANING → no token at 2999ms → token + STOLEN at
+3000ms; an alert bystander → CAUGHT + awareness ping + 80→50; holding on after a catch → no re-roll, no packets,
+no penalty for 4s of ticks; release + re-lean → 50→20 HYSTERIC; HYSTERIC lean-in refused with no roll; a bystander
+outside 10 units never rolls; release mid-hold → IDLE; a zombie is never a target; a catch at 30 → 0 → CANCELLED →
+a Regulator actually dispatched; and the three Decorum regressions.
+
+**Deliberately NOT built here:** the bar has never been seen on screen (no GL display in this sandbox). There is
+no facing/vision cone for bystanders (same B1 §8 scope line as every other noticing check). Catches don't make the
+bystander a witness in the `witness_state` sense: it's a Decorum hit, not a hunt, and whether a catch should also
+escalate the bystander (say, to DENIAL) is open design. There is no dedicated Supervisor NPC or Room 404 terminal
+(A1M1 gaps 2/3/5 still open). There is no live playtest of whether 15/−30 feel right.
