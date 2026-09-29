@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-09-29
+- docs: opening scene (`docs/OPENING_SCENE.md`) -- founder real-time, pasted verbatim (screenplay
+  formatting normalized only). A TYLER crossover cold open told from the outside: a documentary
+  crew filming Tyler and Hana without understanding what they're actually documenting, ending on
+  The Contractor's "DO NOT CHECK" card and the crew's own dailies footage editing itself. Continues
+  the TYLER/HANA crossover thread `docs/transcript/04-espionage-the-men-tyler-crossover-hana.md`
+  already scoped, but as a polished narrative scene rather than a raw design chat capture -- filed
+  alongside it, not appended into it, since the two are different kinds of document (source
+  transcript vs. actual scene). Narrative/flavor content, not an architecture doc -- not added to
+  `EMILY/context/golden-docs-index.md`, matching how TYLER's own episode scripts aren't golden docs
+  either. (sess-20260923-1030-4a526255)
+
 ## 2026-09-27
 - feat(stealth): getting made while snooping -- shoulder-surfing becomes a real stealth risk (NORTHSTAR.md §39,
   closes §38's own named "no witness-risk for the act itself" gap). New rules action `DA_CAUGHT_SNOOPING` (-30) and
