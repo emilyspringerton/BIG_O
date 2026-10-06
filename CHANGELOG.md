@@ -257,3 +257,6 @@
 
 ## 2026-10-06 (3)
 - Extended the ARPANET terminal from 12 to 13 nodes: added a condensed Custody Trial Book 2 Chapters 5-8 node (the 1623 transfer, the no-author commit, "clean builds first, then custody, then everything else"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
+
+## 2026-10-06 (4)
+- Extended the ARPANET terminal from 13 to 14 nodes: added `/custody/WHAT_COMES_NEXT.md` condensed (the subscriber's `custody_chain_complete` notify, the 380-year wait, "the warthog was the easy case"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
