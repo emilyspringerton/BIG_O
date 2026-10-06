@@ -248,3 +248,6 @@
 - Replaced the pasted README with a real one (pitch, game loop, witness mechanic, doc index). (S504)
 - NORTHSTAR §6: reconciled the scoping pass with what the design conversation actually specifies (five-witness rule,
   terrain flags, costumes, terminal UI, story spine); multiplayer remains the open decision. (S504)
+
+## 2026-10-06
+- Extended the phone's ARPANET terminal (`BP_APP_ARPANET`) from 5 to 11 nodes: added six new archive nodes condensed from founder-supplied Eastwind Owl/Custody Trial/Tides of Paradox lore (1616 archive, 1978 archive, The Custody Trial books 1-2, "Building the Plane Through Stillness", Tides of Paradox bk1). `day/packages/common/bigo_phone.h` (`BP_ARPANET_NODES`, `BP_ARPANET_TITLES`/`BP_ARPANET_BODIES`). Not build/run-verified this session (token-pressure oneshot per founder direction).
