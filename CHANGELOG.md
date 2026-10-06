@@ -260,3 +260,6 @@
 
 ## 2026-10-06 (4)
 - Extended the ARPANET terminal from 13 to 14 nodes: added `/custody/WHAT_COMES_NEXT.md` condensed (the subscriber's `custody_chain_complete` notify, the 380-year wait, "the warthog was the easy case"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
+
+## 2026-10-06 (5)
+- Extended the ARPANET terminal from 14 to 15 nodes: added Field Activation #47 condensed (Zagan/Saturn, the alchemical Riemann Hypothesis monologue, "base metal screams when it remembers it was gold with the wrong address"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
