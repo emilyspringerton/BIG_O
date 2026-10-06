@@ -254,3 +254,6 @@
 
 ## 2026-10-06 (2)
 - Extended the ARPANET terminal from 11 to 12 nodes: added a condensed 1993 archive node (web/Mosaic first access, Oslo Accord sealed paper, Waco absence, Moscow shelling, Doom/Emily OS "30 years" tile). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
+
+## 2026-10-06 (3)
+- Extended the ARPANET terminal from 12 to 13 nodes: added a condensed Custody Trial Book 2 Chapters 5-8 node (the 1623 transfer, the no-author commit, "clean builds first, then custody, then everything else"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
