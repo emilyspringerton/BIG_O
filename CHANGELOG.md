@@ -266,3 +266,6 @@
 
 ## 2026-10-06 (6)
 - Extended the ARPANET terminal from 15 to 16 nodes: added Stillness Parts VI-VII condensed (session mapping, backward measurement, load-bearing sessions, the thirty-year question, "build clean, let the thirty years run"). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
+
+## 2026-10-06 (7)
+- Extended the ARPANET terminal from 16 to 17 nodes: added the Camera Op Sealed Log condensed (the 1901/1623 coin, publishing the footage to break the Jiangshi binding, the 64% FAREWELL ratio, Cordoba's 412-foot reading, Ahmad ibn Yusuf's unanswered question, the Camera Op staying as second practitioner). `day/packages/common/bigo_phone.h`. Not build/run-verified (token-pressure oneshot).
