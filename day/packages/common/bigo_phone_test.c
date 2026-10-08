@@ -65,6 +65,19 @@ int main(void) {
     bigo_phone_input(&p, BP_BACK, 0); CHECK(!p.detail && p.app == BP_APP_MESSAGES);   /* first back closes the detail */
     bigo_phone_input(&p, BP_BACK, 0); CHECK(p.app == -1);
     go(&p, BP_APP_CONTACTS); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.trust[1] == 1);   /* Thorne replies work */
+    /* TECHTREE (kanban #577): read-only, host-fed list; empty feed still gives one row, SELECT is a no-op */
+    CHECK(strcmp(BP_APP_NAMES[BP_APP_TECHTREE], "TECHTREE") == 0);
+    bigo_phone_init(&p); go(&p, BP_APP_TECHTREE);
+    CHECK(bp_rows(&p) == 1 && bigo_phone_input(&p, BP_SELECT, 0).kind == BP_FX_NONE);
+    {
+        const char *names[3] = { "BASIC", "DRONE", "PACK" }; const int unl[3] = { 1, 0, 0 };
+        bigo_phone_set_tech(&p, names, unl, 3);
+    }
+    CHECK(bp_rows(&p) == 3 && p.tech_unlocked[0] == 1 && strcmp(p.tech_names[2], "PACK") == 0);
+    bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0); bigo_phone_input(&p, BP_DOWN, 0);
+    CHECK(p.cursor == 0);   /* wraps like every other list */
+    { const char *many[BP_TECH_NODES]; for (int i = 0; i < BP_TECH_NODES; i++) many[i] = "N"; bigo_phone_set_tech(&p, many, NULL, 999); }
+    CHECK(p.tech_count == BP_TECH_NODES);   /* clamped, not overflowed */
     /* ARPANET: same list<->detail pattern as MESSAGES, static content, no live network state */
     go(&p, BP_APP_ARPANET); CHECK(!p.detail && p.cursor == 0);
     bigo_phone_input(&p, BP_SELECT, 0); CHECK(p.detail);

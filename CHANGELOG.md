@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-10-08
+- Phone app TECHTREE (kanban #577, EMPIRE NORTHSTAR §3.2 "BURNER UI"): the tech-tree screen as a
+  phone app on the existing BigoPhone shell, same home grid and D-pad model as LAB/CARGO/SKILLS.
+  Read-only list fed by `bigo_phone_set_tech()` (capped at BP_TECH_NODES, NULL feed = empty). With no
+  feed it shows "no tech data feed yet": the tree's content is not designed yet, so the shell ships
+  without invented nodes. `bigo_phone_test` passes headlessly. The client render case is not compiled
+  here (no SDL/GL in this sandbox).
+
 ## 2026-09-29
 - docs: opening scene (`docs/OPENING_SCENE.md`) -- founder real-time, pasted verbatim (screenplay
   formatting normalized only). A TYLER crossover cold open told from the outside: a documentary

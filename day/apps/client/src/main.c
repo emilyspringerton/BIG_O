@@ -1553,6 +1553,19 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         for (int i = 0; i < BP_ARPANET_NODES; i++) bp_line(x, y - step * (float)i, BP_ARPANET_TITLES[i], i == p->cursor, 1.0f);
         glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("read-only -- SELECT to open a node", x, y - step * (float)(BP_ARPANET_NODES + 1), 4);
         break;
+    case BP_APP_TECHTREE:
+        /* Read-only tech-tree list (kanban #577, EMPIRE NORTHSTAR §3.2). The tree's content is not
+           designed yet, so with no host feed this says so instead of showing an empty screen. */
+        if (p->tech_count == 0) {
+            glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("no tech data feed yet", x, y, 5);
+            break;
+        }
+        for (int i = 0; i < p->tech_count; i++) {
+            snprintf(line, sizeof(line), "%s %s", p->tech_names[i], p->tech_unlocked[i] ? "[X]" : "[ ]");
+            bp_line(x, y - step * (float)i, line, i == p->cursor, p->tech_unlocked[i] ? 1.0f : 0.6f);
+        }
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("read-only", x, y - step * (float)(p->tech_count + 1), 4);
+        break;
     default: break;
     }
     glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("esc: back", px + 10, py + 12, 4);

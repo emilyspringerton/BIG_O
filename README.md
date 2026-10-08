@@ -133,6 +133,11 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > real historical ARPANET's own IMP host numbering. Browse the list, SELECT a node to read it in full
 > (reuses `BP_APP_MESSAGES`'s own list↔detail pattern) — deliberately not live networking like the GFD app,
 > this is archival. See `NORTHSTAR.md` §33.
+> The phone has a fourteenth app, TECHTREE (kanban #577, EMPIRE `NORTHSTAR` §3.2 "BURNER UI") — the tech-tree
+> screen's shell only: a read-only list fed by `bigo_phone_set_tech()`. **Honest status: no tech content exists yet**
+> (the tree itself is not designed), so the app shows "no tech data feed yet" until a host feeds nodes. Input,
+> rendering and the list logic are covered headlessly (`bigo_phone_test`); the client render path is not built here
+> (no SDL/GL in this sandbox).
 > Two more of the rules module's five zones are live: ZONE_EXEC and ZONE_GENERATOR (the same hardcoded-circle
 > landmark pattern ZONE_LAB already used) join public + the lab. Carrying gear is a real, live conspicuousness
 > signal too now, not just wrong costume: any weapon slot beyond the universal baseline Knife reads as

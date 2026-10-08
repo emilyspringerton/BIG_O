@@ -36,6 +36,11 @@ typedef enum {
                         BP_APP_MESSAGES already established (reused via the same p->detail flag),
                         deliberately NOT the free-text live networking BP_APP_GFD already does --
                         this is archival, not a chat. */
+    BP_APP_TECHTREE, /* kanban #577, EMPIRE NORTHSTAR §3.2 ("BURNER UI"): BIG_O's tech-tree /
+                        resource-management screen as a phone app on this same shell, same home grid,
+                        same input model as LAB/CARGO/SKILLS. Read-only list fed by the host through
+                        bigo_phone_set_tech(). v0 is the shell only: the tree's CONTENT is not designed
+                        yet (NORTHSTAR §5 q3), so no host feeds nodes today and the app says so. */
     BP_APP_COUNT
 } BpApp;
 
@@ -116,7 +121,7 @@ static const char *const BP_WEATHER_NAMES[4] = { "CLEAR", "OVERCAST", "RAIN", "S
 #define BP_MSG_THORNE_BRIEF 6   /* client message table id: Dr. Thorne's A1M1 reprimand; unlocks him in Contacts */
 
 static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
-    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD", "IDUNA", "ARPANET"
+    "MESSAGES", "CONTACTS", "MAP", "CAMERA", "NOTES", "LAB", "CARGO", "SKILLS", "LOADOUT", "WARDROBE", "STATUS", "GFD", "IDUNA", "ARPANET", "TECHTREE"
 };
 
 /* BP_IDUNA_*: real device-auth flow stages (BIG_O/NORTHSTAR.md §31) -- IDLE (nothing started
@@ -131,6 +136,11 @@ static const char *const BP_APP_NAMES[BP_APP_COUNT] = {
 #define BP_IDUNA_URL_LEN 96
 #define BP_IDUNA_HANDLE_LEN 64
 #define BP_IDUNA_ERR_LEN 80
+
+/* Tech tree (BP_APP_TECHTREE, kanban #577): host-fed node list. Capacity only -- the real node
+   content is not designed yet, see BP_APP_TECHTREE's own comment in BpApp. */
+#define BP_TECH_NODES 12
+#define BP_TECH_NAME_LEN 32
 
 /* Contacts: trust ladder observer -> witness -> bound -> documented (spec). Preset replies advance it. */
 static const char *const BP_TRUST_NAMES[4] = { "observer", "witness", "bound", "documented" };
@@ -218,6 +228,11 @@ typedef struct {
     char iduna_handle[BP_IDUNA_HANDLE_LEN];
     char iduna_error[BP_IDUNA_ERR_LEN];
 
+    /* Tech tree (BP_APP_TECHTREE, kanban #577) -- host-fed via bigo_phone_set_tech(), read-only here. */
+    int tech_count;
+    char tech_names[BP_TECH_NODES][BP_TECH_NAME_LEN];
+    int tech_unlocked[BP_TECH_NODES];
+
     /* notifications */
     int queue[BP_MAX_QUEUED]; int queue_len;
     unsigned int shown_at[BP_SPAM_MAX]; int shown_n;    /* recent banner times inside the spam window */
@@ -259,6 +274,7 @@ static inline int bp_rows(const BigoPhone *p) {
     case BP_APP_GFD: return p->term_line_count > 0 ? p->term_line_count : 1;
     case BP_APP_IDUNA: return 1;   /* a status screen, not a list */
     case BP_APP_ARPANET: return BP_ARPANET_NODES;
+    case BP_APP_TECHTREE: return p->tech_count > 0 ? p->tech_count : 1;
     default: return 1;
     }
 }
@@ -327,6 +343,18 @@ static inline void bigo_phone_iduna_set_linked(BigoPhone *p, const char *handle)
 static inline void bigo_phone_iduna_set_error(BigoPhone *p, const char *msg) {
     p->iduna_stage = BP_IDUNA_ERROR;
     snprintf(p->iduna_error, sizeof(p->iduna_error), "%s", msg);
+}
+
+/* bigo_phone_set_tech -- the host feeds the tech-tree node list (BP_APP_TECHTREE, kanban #577).
+ * Clamps to BP_TECH_NODES rather than overflowing; names are truncated by snprintf, not rejected. */
+static inline void bigo_phone_set_tech(BigoPhone *p, const char *const *names, const int *unlocked, int n) {
+    if (!names || n < 0) n = 0;   /* a NULL feed is an empty feed, not a crash */
+    if (n > BP_TECH_NODES) n = BP_TECH_NODES;
+    p->tech_count = n;
+    for (int i = 0; i < n; i++) {
+        snprintf(p->tech_names[i], sizeof(p->tech_names[i]), "%s", names[i]);
+        p->tech_unlocked[i] = unlocked ? unlocked[i] : 0;
+    }
 }
 
 /* Notification with the spec's anti-spam rule: <= 2 banners per 30s, extras queued and later shown as a summary. */
