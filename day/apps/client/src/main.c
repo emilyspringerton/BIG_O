@@ -1442,13 +1442,25 @@ static void draw_bigo_phone(int win_w, int win_h, const BigoPhone *p, const PcPl
         if (p->lab_sample_count == 0) {
             glColor3f(0.9f, 0.6f, 0.4f); pc_draw_string("no samples in the crew lab", x, y, 5);
         }
-        for (int i = 0; i < p->lab_sample_count && i < BP_LAB_SAMPLES; i++) {
-            snprintf(line, sizeof(line), "sample %d  gen %d", i, p->lab_generation[i]);
-            bp_line(x, y - step * (float)(i * 2), line, i == p->cursor, 1.0f);
-            snprintf(line, sizeof(line), "  purity %.0f%%  contam %.0f%%  integ %.0f%%", p->lab_purity[i], p->lab_contamination[i], p->lab_integrity[i]);
-            glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string(line, x, y - step * (float)(i * 2 + 1), 4);
+        {
+            static const char *const st_nm[BP_LAB_STATIONS] = { "CENTRIFUGE", "PCR", "SEQUENCER", "CRISPR SPLICE", "REPRESSOR", "BREED (with next)", "INCUBATE" };
+            static const char *const splice_nm[5] = { "ok", "OFF-TARGET", "NMD dead-end", "cryptic-site fail", "UNSTABLE" };
+            snprintf(line, sizeof(line), "< %s >", st_nm[p->lab_station % BP_LAB_STATIONS]);
+            glColor3f(0.95f, 0.95f, 0.6f); pc_draw_string(line, x, y + step, 5);
+            for (int i = 0; i < p->lab_sample_count && i < BP_LAB_SAMPLES; i++) {
+                snprintf(line, sizeof(line), "sample %d  gen %d  drift %.2f", i, p->lab_generation[i], p->lab_genetic_drift[i]);
+                bp_line(x, y - step * (float)(i * 3), line, i == p->cursor, 1.0f);
+                snprintf(line, sizeof(line), "  purity %.0f%%  contam %.0f%%  integ %.0f%%  depth %.0f", p->lab_purity[i], p->lab_contamination[i], p->lab_integrity[i], p->lab_read_depth[i]);
+                glColor3f(0.75f, 0.8f, 0.85f); pc_draw_string(line, x, y - step * (float)(i * 3 + 1), 4);
+                char ex[96]; ex[0] = 0; size_t o = 0;
+                if (p->lab_sequenced[i]) o += (size_t)snprintf(ex + o, sizeof(ex) - o, "seq contam~%.0f%% align %.0f%%  ", p->lab_measured_contam[i], p->lab_alignment[i]);
+                if (p->lab_spliced[i]) o += (size_t)snprintf(ex + o, sizeof(ex) - o, "splice:%s  ", splice_nm[p->lab_splice_outcome[i] % 5]);
+                if (p->lab_repressor[i]) o += (size_t)snprintf(ex + o, sizeof(ex) - o, "switch %.0f%%  ", p->lab_repressor_rel[i] * 100.0f);
+                if (p->lab_incubated[i]) o += (size_t)snprintf(ex + o, sizeof(ex) - o, "%s %.0f%%", p->lab_viable[i] ? "VIABLE" : "NOT VIABLE", p->lab_viability[i]);
+                if (o) { glColor3f(0.6f, 0.85f, 0.7f); pc_draw_string(ex, x, y - step * (float)(i * 3 + 2), 4); }
+            }
         }
-        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("SELECT to centrifuge (standard spin)", x, py + 12, 4);
+        glColor3f(0.45f, 0.5f, 0.55f); pc_draw_string("LEFT/RIGHT station  SELECT run (fixed presets)", x, py + 12, 4);
         break;
     case BP_APP_CARGO:
         for (int i = 0; i < BP_INV_SLOTS && i < PC_INVENTORY_SLOTS; i++) {
@@ -1919,6 +1931,11 @@ int main(int argc, char **argv) {
             net_job_start(3, iduna_host, iduna_port); } \
         else if (fx_.kind == BP_FX_IDUNA_POLL) { \
             net_job_start_with_code(4, iduna_host, iduna_port, g_iduna_device_code); } \
+        else if (fx_.kind == BP_FX_LAB_STATION) { PcLabStationPacket rq; memset(&rq, 0, sizeof(rq)); \
+            rq.hdr.type = PC_PACKET_LAB_STATION; rq.hdr.sequence = ++allocate_seq; \
+            rq.station = (unsigned char)(fx_.arg & 0xF); rq.sample_index = (unsigned char)((fx_.arg >> 4) & 0xF); \
+            rq.aux_index = (unsigned char)((fx_.arg >> 8) & 0xF); \
+            sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
         else if (fx_.kind == BP_FX_LAB_CENTRIFUGE) { PcLabCentrifugePacket rq; memset(&rq, 0, sizeof(rq)); \
             rq.hdr.type = PC_PACKET_LAB_CENTRIFUGE; rq.hdr.sequence = ++allocate_seq; rq.sample_index = (unsigned char)fx_.arg; \
             sendto(sock, (const char *)&rq, sizeof(rq), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)); } \
@@ -2422,6 +2439,16 @@ int main(int argc, char **argv) {
                     phone.lab_read_depth[i] = lu.samples[i].read_depth;
                     phone.lab_generation[i] = lu.samples[i].generation;
                     phone.lab_genetic_drift[i] = lu.samples[i].genetic_drift;
+                    phone.lab_sequenced[i] = lu.samples[i].sequenced;
+                    phone.lab_measured_contam[i] = lu.samples[i].measured_contamination_pct;
+                    phone.lab_alignment[i] = lu.samples[i].alignment_pct;
+                    phone.lab_spliced[i] = lu.samples[i].spliced;
+                    phone.lab_splice_outcome[i] = lu.samples[i].last_splice_outcome;
+                    phone.lab_repressor[i] = lu.samples[i].repressor_installed;
+                    phone.lab_repressor_rel[i] = lu.samples[i].repressor_reliability;
+                    phone.lab_incubated[i] = lu.samples[i].incubated;
+                    phone.lab_viable[i] = lu.samples[i].viable;
+                    phone.lab_viability[i] = lu.samples[i].viability_pct;
                 }
             } else if (hdr.type == PC_PACKET_AWARENESS_PING && (size_t)n >= sizeof(PcAwarenessPingPacket)) {
                 PcAwarenessPingPacket aw; memcpy(&aw, buf, sizeof(aw));

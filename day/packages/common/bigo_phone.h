@@ -79,6 +79,10 @@ typedef enum {
     BP_FX_IDUNA_POLL,       /* SELECT on the pending IDUNA screen -- host runs one real
                                 /auth/device/poll call by hand (no automatic timed polling in this
                                 v0). arg unused. */
+    BP_FX_LAB_STATION,      /* S504-LAB: SELECT on a lab row with a non-centrifuge station chosen
+                                (LEFT/RIGHT cycles p->lab_station). arg packs
+                                station | sample_index << 4 | aux_index << 8 (aux = the next row,
+                                wrapping -- breeding's second parent) -> PC_PACKET_LAB_STATION. */
     BP_FX_LAB_CENTRIFUGE    /* SELECT on a real, host-fed lab sample row (BIG_O/NORTHSTAR.md §30
                                 follow-up: real client wiring for the server-authoritative lab).
                                 arg = sample index -> PC_PACKET_LAB_CENTRIFUGE. Fired unconditionally
@@ -109,6 +113,7 @@ typedef struct { BpEffectKind kind; int arg; } BpEffect;
 #define BP_TERM_LINES 6
 #define BP_TERM_LINE_LEN 80
 #define BP_ARPANET_NODES 17
+#define BP_LAB_STATIONS 7 /* mirrors bigo_lab.h's BIGO_LAB_ST_COUNT (centrifuge, PCR, sequence, splice, repressor, breed, incubate) */
 #define BP_LAB_SAMPLES 6 /* mirrors papercraft_protocol.h's own BIGO_LAB_SAMPLE_MAX_WIRE -- kept as
     an independent, header-owned constant rather than #including papercraft_protocol.h from this
     file, matching this file's own top-of-file "pure C99, no network" discipline (the same
@@ -209,6 +214,18 @@ typedef struct {
     float lab_read_depth[BP_LAB_SAMPLES];
     int lab_generation[BP_LAB_SAMPLES];
     float lab_genetic_drift[BP_LAB_SAMPLES];
+    /* S504-LAB station results (mirror of PcLabSampleWire's meta fields) + chosen station */
+    int lab_station;           /* 0..BP_LAB_STATIONS-1, LEFT/RIGHT cycles; 0 = centrifuge */
+    int lab_sequenced[BP_LAB_SAMPLES];
+    float lab_measured_contam[BP_LAB_SAMPLES];
+    float lab_alignment[BP_LAB_SAMPLES];
+    int lab_spliced[BP_LAB_SAMPLES];
+    int lab_splice_outcome[BP_LAB_SAMPLES];
+    int lab_repressor[BP_LAB_SAMPLES];
+    float lab_repressor_rel[BP_LAB_SAMPLES];
+    int lab_incubated[BP_LAB_SAMPLES];
+    int lab_viable[BP_LAB_SAMPLES];
+    float lab_viability[BP_LAB_SAMPLES];
 
     int costume;             /* worn costume index */
     int weapons_owned;       /* bitmask, mirrored from server */
@@ -447,8 +464,16 @@ static inline BpEffect bigo_phone_input(BigoPhone *p, BpAction a, int unspent_po
            sample. Fired unconditionally once the cursor is on a real row (lab_sample_count already
            bounds it via bp_rows), same "server is the only real validator" convention BP_FX_ITEM_USE
            established -- no local purity/contamination gate here, the server owns that call. */
-        if (a == BP_SELECT && p->lab_sample_count > 0 && p->cursor < p->lab_sample_count) {
-            fx.kind = BP_FX_LAB_CENTRIFUGE; fx.arg = p->cursor;
+        if (a == BP_LEFT || a == BP_RIGHT) {
+            p->lab_station = bp_wrap(p->lab_station + (a == BP_RIGHT ? 1 : -1), BP_LAB_STATIONS);
+        } else if (a == BP_SELECT && p->lab_sample_count > 0 && p->cursor < p->lab_sample_count) {
+            if (p->lab_station == 0) {
+                fx.kind = BP_FX_LAB_CENTRIFUGE; fx.arg = p->cursor;
+            } else {
+                int aux = (p->cursor + 1) % p->lab_sample_count;
+                fx.kind = BP_FX_LAB_STATION;
+                fx.arg = p->lab_station | (p->cursor << 4) | (aux << 8);
+            }
         }
         break;
     case BP_APP_SKILLS:

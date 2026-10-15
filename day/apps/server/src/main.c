@@ -2056,6 +2056,18 @@ static void send_lab_update_to(int sock, struct sockaddr_in *addr, socklen_t add
         dst->read_depth = src->read_depth;
         dst->generation = src->generation;
         dst->genetic_drift = src->genetic_drift;
+        const LabSampleMeta *mt = &g_lab.meta[i];
+        dst->sequenced = mt->sequenced;
+        dst->measured_contamination_pct = mt->measured_contamination_pct;
+        dst->alignment_pct = mt->alignment_pct;
+        dst->spliced = mt->spliced;
+        dst->last_splice_outcome = mt->last_splice_outcome;
+        dst->retrotransposon_jump = mt->retrotransposon_jump;
+        dst->repressor_installed = mt->repressor_installed;
+        dst->repressor_reliability = mt->repressor_reliability;
+        dst->incubated = mt->incubated;
+        dst->viable = mt->viable;
+        dst->viability_pct = mt->viability_pct;
     }
     sendto(sock, &lu, sizeof(lu), 0, (struct sockaddr *)addr, addr_len);
 }
@@ -2652,6 +2664,27 @@ int main(int argc, char **argv) {
                     } else {
                         printf("S536-LAB: player%d centrifuge request for invalid sample %d rejected\n",
                                i, req.sample_index);
+                    }
+                    break;
+                }
+            } else if (hdr.type == PC_PACKET_LAB_STATION && (size_t)n >= sizeof(PcLabStationPacket)) {
+                /* S504-LAB: generic lab-station call -- same crew-shared, connected-sender-only
+                   model as PC_PACKET_LAB_CENTRIFUGE above, for every other lab_sim.c station. */
+                for (int i = 0; i < PC_MAX_PLAYERS; i++) {
+                    PlayerSlot *s = &g_slots[i];
+                    if (!s->active || s->addr.sin_addr.s_addr != from.sin_addr.s_addr ||
+                        s->addr.sin_port != from.sin_port) {
+                        continue;
+                    }
+                    PcLabStationPacket req;
+                    memcpy(&req, buf, sizeof(req));
+                    if (bigo_lab_station(&g_lab, req.station, req.sample_index, req.aux_index)) {
+                        printf("S504-LAB: player%d ran station %d on sample %d (aux %d), lab now %d samples\n",
+                               i, req.station, req.sample_index, req.aux_index, g_lab.sample_count);
+                        broadcast_lab_update(sock);
+                    } else {
+                        printf("S504-LAB: player%d station %d request (sample %d, aux %d) rejected\n",
+                               i, req.station, req.sample_index, req.aux_index);
                     }
                     break;
                 }

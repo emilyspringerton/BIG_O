@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-10-15
+- S504-LAB (kanban #417): the lab's remaining stations are live server-side + on the phone. New
+  `bigo_lab_station()` (bigo_lab.h) drives PCR / sequencer / CRISPR splice / repressor install /
+  breeding (appends a child, rejects self-pairing and a full lab) / incubation through the real
+  `core/lab_sim.c` primitives, recording results in a per-sample `LabSampleMeta`. New
+  `PC_PACKET_LAB_STATION` (28, `PcLabStationPacket`); `PcLabSampleWire` gains the meta fields
+  (appended after the original six). Phone `BP_APP_LAB`: LEFT/RIGHT cycles the station, SELECT fires
+  `BP_FX_LAB_STATION`; render shows sequencer readout, splice outcome, switch reliability, viability.
+  Tests: `bigo_lab_test` +8 checks (ASan/UBSan), `bigo_phone_test` +4, server wire round-trip harness;
+  `build_day.sh` clean, client syntax-checked (no SDL link on this box). Still open: day-harvest
+  bridge, persistence, crew ownership, REFLUX lab events. (session: unknown)
+
 ## 2026-10-08
 - Phone app TECHTREE (kanban #577, EMPIRE NORTHSTAR §3.2 "BURNER UI"): the tech-tree screen as a
   phone app on the existing BigoPhone shell, same home grid and D-pad model as LAB/CARGO/SKILLS.

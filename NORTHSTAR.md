@@ -2444,3 +2444,21 @@ no facing/vision cone for bystanders (same B1 §8 scope line as every other noti
 bystander a witness in the `witness_state` sense: it's a Decorum hit, not a hunt, and whether a catch should also
 escalate the bystander (say, to DENIAL) is open design. There is no dedicated Supervisor NPC or Room 404 terminal
 (A1M1 gaps 2/3/5 still open). There is no live playtest of whether 15/−30 feel right.
+
+
+## S504-LAB addendum (2026-10-15, kanban #417): every lab station is live
+
+Closes §30's "only the centrifuge" and §34's "no PCR/sequencer/splice UI" gaps. `bigo_lab_station()`
+(`day/packages/common/bigo_lab.h`) dispatches the real, unmodified `core/lab_sim.c` primitives; per-sample
+results that aren't `LabSample` fields live in `LabSampleMeta`. Wire: `PC_PACKET_LAB_STATION` (28,
+`station`/`sample_index`/`aux_index`), results ride `PcLabUpdatePacket` (`PcLabSampleWire` extended).
+Fixed presets only (PCR 10 cycles, guide specificity 0.8, operator skill 0.5 -- the future
+micromanipulation mini-game plugs into the skill parameter). Breeding pairs the highlighted row with the
+next row and appends the child (rejects self-pairing and a full 6-slot lab). Failures (NMD, off-target,
+non-viable) are recorded outcomes, not errors.
+
+Verified: `bigo_lab_test` (ASan/UBSan, 8 new checks), `bigo_phone_test`, `build_day.sh`, client
+`-fsyntax-only`, and a harness that includes the real server `main.c` and round-trips the real
+`send_lab_update_to` over a UDP socket pair. NOT verified: a full client-to-server session (the server
+refuses to boot without a reachable worldapi, none reachable from the build sandbox), a GL screenshot.
+Still deferred: day-harvest bridge, persistence, crew/IDUNA ownership, REFLUX lab events, a preset menu.

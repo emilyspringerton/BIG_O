@@ -40,11 +40,15 @@ custom-spliced vectors to wage an algorithmic shadow war.
 > The centrifuge station is now live on the real day server: a crew-shared sample inventory (`g_lab`, 3 real
 > starter samples seeded at boot — a real day-harvest bridge doesn't exist yet) mutates over a real UDP packet
 > (`PC_PACKET_LAB_CENTRIFUGE`) and syncs back to every connected player (`PC_PACKET_LAB_UPDATE`). PCR/sequencer/
-> CRISPR-splice/repressor/breed/incubate are still real, tested, server-side-only primitives with no packet of
-> their own yet. The phone's `BP_APP_LAB` screen is now the real thing, not a mockup: it lists the crew's actual
+> CRISPR-splice/repressor/breed/incubate are now live too (S504-LAB): one generic `PC_PACKET_LAB_STATION`
+> call (fixed presets; breeding pairs the highlighted sample with the next row and appends a child), results
+> recorded per sample and synced in `PC_PACKET_LAB_UPDATE`; the phone's **LEFT/RIGHT** picks the station.
+> Verified headlessly (`bigo_lab_test`, `bigo_phone_test`, a real UDP wire round-trip of the server's
+> update packet); not yet exercised through a full client↔server session (no worldapi reachable from the
+> build sandbox) or a GL screenshot. The phone's `BP_APP_LAB` screen is now the real thing, not a mockup: it lists the crew's actual
 > shared samples (contamination/purity/integrity, generation) fed live from `PC_PACKET_LAB_UPDATE`, and **SELECT**
 > on a sample sends the real `PC_PACKET_LAB_CENTRIFUGE` request — the earlier client-only "base/trait/clone" model
-> is gone. See `NORTHSTAR.md` §30/§34 for what's deferred (no PCR/sequencer/splice UI yet, no day-harvest bridge,
+> is gone. See `NORTHSTAR.md` §30/§34 for what's deferred (no day-harvest bridge,
 > no persistence, no live GL screenshot in this sandbox).
 > Zombies can now be commanded: press **G** to throw a pheromone marker (`PC_PACKET_PHEROMONE_THROW`), and any
 > zombie within range locks on (`has_target` is no longer hardcoded 0) and steers toward it, escalating mood toward

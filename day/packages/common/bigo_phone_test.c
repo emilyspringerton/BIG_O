@@ -55,6 +55,16 @@ int main(void) {
     fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_CENTRIFUGE && fx.arg == 0);
     bigo_phone_input(&p, BP_DOWN, 0); fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_CENTRIFUGE && fx.arg == 1);
     CHECK(BP_LAB_SAMPLES == BIGO_LAB_SAMPLE_MAX_WIRE);
+    /* S504-LAB: LEFT/RIGHT cycles the station; non-centrifuge stations fire BP_FX_LAB_STATION
+       packing station | sample<<4 | aux<<8 (aux = next row, wrapping). */
+    p.cursor = 0; p.lab_sample_count = 3; p.lab_station = 0;
+    fx = bigo_phone_input(&p, BP_RIGHT, 0); CHECK(fx.kind == BP_FX_NONE && p.lab_station == 1);
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_STATION && fx.arg == (1 | (0 << 4) | (1 << 8)));
+    p.lab_station = 5; p.cursor = 2;
+    fx = bigo_phone_input(&p, BP_SELECT, 0); CHECK(fx.kind == BP_FX_LAB_STATION && fx.arg == (5 | (2 << 4) | (0 << 8)));
+    p.lab_station = 0;
+    fx = bigo_phone_input(&p, BP_LEFT, 0); CHECK(p.lab_station == BP_LAB_STATIONS - 1);
+    p.lab_station = 0;
     /* world feed + Thorne unlock + message detail */
     bigo_phone_init(&p); CHECK(!p.wf_valid && p.contacts_met == 1);
     int zc[BP_ZONES] = { 12, 4, 0, 2, 0 }; bigo_phone_set_world(&p, 450, 1, 1, 2, zc, 75);

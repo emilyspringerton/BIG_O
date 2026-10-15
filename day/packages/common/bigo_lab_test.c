@@ -71,6 +71,54 @@ int main(void) {
         printf("PASS: out-of-bounds centrifuge requests are honest no-ops -- no crash, real sample data untouched\n");
     }
 
+    /* --- S504-LAB: every remaining station, via the real, unmodified lab_sim.c primitives. */
+    {
+        LabCrewState lab;
+        bigo_lab_seed_starter_samples(&lab);
+
+        float d0 = lab.samples[0].read_depth;
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_PCR, 0, 0) == 1);
+        assert(lab.samples[0].read_depth > d0);
+        printf("PASS: PCR station raises read depth on the real sample\n");
+
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_SEQUENCE, 0, 0) == 1);
+        assert(lab.meta[0].sequenced == 1 && lab.meta[0].alignment_pct >= 0.0f && lab.meta[0].alignment_pct <= 100.0f);
+        assert(lab.meta[1].sequenced == 0);
+        printf("PASS: sequencer records a real readout on that sample only\n");
+
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_SPLICE, 1, 0) == 1);
+        assert(lab.meta[1].spliced == 1 && lab.meta[1].last_splice_outcome >= SPLICE_SUCCESS &&
+               lab.meta[1].last_splice_outcome <= SPLICE_UNSTABLE_LINE);
+        printf("PASS: CRISPR splice records its outcome\n");
+
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_REPRESSOR, 1, 0) == 1);
+        assert(lab.meta[1].repressor_reliability >= 0.0f && lab.meta[1].repressor_reliability <= 1.0f);
+        printf("PASS: repressor install records installed/reliability\n");
+
+        int before = lab.sample_count;
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_BREED, 0, 1) == 1);
+        assert(lab.sample_count == before + 1);
+        assert(lab.samples[before].generation == 1 && lab.samples[before].genetic_drift > 0.0f);
+        assert(lab.meta[before].sequenced == 0 && lab.meta[before].spliced == 0);
+        printf("PASS: breeding appends a generation-1 child with drift and a clean meta\n");
+
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_BREED, 0, 0) == 0);      /* with itself */
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_BREED, 0, 99) == 0);     /* bad parent */
+        while (lab.sample_count < BIGO_LAB_SAMPLE_MAX) assert(bigo_lab_station(&lab, BIGO_LAB_ST_BREED, 0, 1) == 1);
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_BREED, 0, 1) == 0);      /* full lab */
+        printf("PASS: breed rejects self-pairing, bad parent and a full lab\n");
+
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_INCUBATE, 0, 0) == 1);
+        assert(lab.meta[0].incubated == 1 && lab.meta[0].viability_pct >= 0.0f && lab.meta[0].viability_pct <= 100.0f);
+        printf("PASS: incubation records viability\n");
+
+        assert(bigo_lab_station(&lab, -1, 0, 0) == 0);
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_COUNT, 0, 0) == 0);
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_PCR, -1, 0) == 0);
+        assert(bigo_lab_station(&lab, BIGO_LAB_ST_PCR, lab.sample_count, 0) == 0);
+        printf("PASS: bad station / sample index are honest no-ops\n");
+    }
+
     printf("\nALL PASS\n");
     return 0;
 }

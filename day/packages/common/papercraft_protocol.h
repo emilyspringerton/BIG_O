@@ -90,6 +90,10 @@
     one basement" lab is real, shared crew state, not per-player): the whole real sample list,
     sent on connect (catch-up, same convention send_inventory_update's own WELCOME-time call
     already establishes) and after every real mutation. See PcLabUpdatePacket below. */
+#define PC_PACKET_LAB_STATION      28 /* client -> server: S504-LAB -- the generic lab-station call
+    (PCR/sequencer/splice/repressor/breed/incubate, plus centrifuge). station = bigo_lab.h's
+    BigoLabStation, sample_index/aux_index select real crew samples (aux used by breeding only).
+    Server mutates the shared lab and answers with PC_PACKET_LAB_UPDATE. See PcLabStationPacket. */
 #define PC_CAP_LZ4                 1  /* capability bit: one extra byte AFTER PcConnectPacket in CONNECT (absent = old client, gets plain snapshots) */
 #define PC_PACKET_WEAPON_OWNED     12 /* server -> owning client only: real, whole owned-weapons bitmask, resent on every change */
 #define PC_PACKET_AWARENESS_PING   26 /* server -> the one noticed player only: EMILY/BACKLOG.md
@@ -391,6 +395,15 @@ typedef struct {
     unsigned char sample_index;
 } PcLabCentrifugePacket;
 
+/* PcLabStationPacket -- S504-LAB. Same sender-resolution convention as every client->server
+ * packet here; the server is the only validator (bad indexes are honest no-ops). */
+typedef struct {
+    PcHeader hdr;
+    unsigned char station;
+    unsigned char sample_index;
+    unsigned char aux_index;
+} PcLabStationPacket;
+
 #define BIGO_LAB_SAMPLE_MAX_WIRE 6 /* mirrors bigo_lab.h's own BIGO_LAB_SAMPLE_MAX -- kept as an
     independent, protocol-owned constant rather than #including core/lab_sim.h from this file,
     matching this file's own existing self-contained-wire-format discipline (it includes only
@@ -412,6 +425,19 @@ typedef struct {
     float read_depth;
     int generation;
     float genetic_drift;
+    /* S504-LAB: the LabSampleMeta mirror (bigo_lab.h) -- station results that aren't LabSample
+       fields. Appended after the original six so those offsets are unchanged. */
+    int sequenced;
+    float measured_contamination_pct;
+    float alignment_pct;
+    int spliced;
+    int last_splice_outcome;
+    int retrotransposon_jump;
+    int repressor_installed;
+    float repressor_reliability;
+    int incubated;
+    int viable;
+    float viability_pct;
 } PcLabSampleWire;
 
 /* PcLabUpdatePacket -- EMILY/BACKLOG.md SECTION 536 follow-up, BIG_O/NORTHSTAR.md §30. Real,
